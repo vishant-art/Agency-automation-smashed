@@ -1,0 +1,660 @@
+{
+  "name": "UGC Client Onboarding — Smashed Agency",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## 1. TRIGGER\nWebhook receives JotForm POST at /ugc-onboarding\nJotForm sends data in inconsistent formats — the Code node handles all parsing.",
+        "height": 180,
+        "width": 320,
+        "color": 4
+      },
+      "id": "sticky-trigger",
+      "name": "Sticky Note - Trigger",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [240, 80]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ugc-onboarding",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "node-webhook",
+      "name": "Webhook — JotForm",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [280, 320],
+      "webhookId": "ugc-onboarding-webhook"
+    },
+    {
+      "parameters": {
+        "content": "## 2. PARSE & GENERATE CLIENT CODE\nHandles 3 JotForm data formats:\n1. body.rawRequest (JSON string)\n2. Numbered q-fields (q1_whatIs, etc.)\n3. Direct field names\n\nAlso generates client code: ABC-MMDD",
+        "height": 220,
+        "width": 340,
+        "color": 6
+      },
+      "id": "sticky-parse",
+      "name": "Sticky Note - Parse",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [640, 80]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Parse JotForm & Generate Client Code\n// Handles multiple JotForm data formats\n// ============================================================\n\nconst body = $input.first().json.body || $input.first().json;\n\n// --- STRATEGY 1: rawRequest JSON string ---\nlet parsed = null;\ntry {\n  if (body.rawRequest && typeof body.rawRequest === 'string') {\n    parsed = JSON.parse(body.rawRequest);\n  } else if (body.rawRequest && typeof body.rawRequest === 'object') {\n    parsed = body.rawRequest;\n  }\n} catch (e) {\n  parsed = null;\n}\n\n// --- STRATEGY 2: q-prefixed fields (q1_whatIs, q2_email, etc.) ---\nfunction fromQFields(b) {\n  const qMap = {};\n  for (const key of Object.keys(b)) {\n    if (/^q\\d+/.test(key)) {\n      qMap[key] = b[key];\n    }\n  }\n  if (Object.keys(qMap).length === 0) return null;\n\n  // Sort by question number\n  const sorted = Object.entries(qMap).sort((a, b) => {\n    const numA = parseInt(a[0].match(/^q(\\d+)/)[1]);\n    const numB = parseInt(b[0].match(/^q(\\d+)/)[1]);\n    return numA - numB;\n  });\n\n  // Map by order (best-effort mapping based on form field order)\n  const fieldOrder = [\n    'client_name', 'client_email', 'whatsapp_number', 'brand_name', 'website_url',\n    'product_feature', 'differentiator', 'competitors', 'competitor_strengths',\n    'target_user', 'biggest_problem', 'main_hesitation',\n    'social_proof', 'selling_proposition', 'brand_personality', 'credibility_point', 'transformation',\n    'best_concepts', 'compliance', 'reference_ads', 'available_assets', 'do_not_say', 'additional_notes'\n  ];\n\n  const result = {};\n  sorted.forEach(([key, val], i) => {\n    if (i < fieldOrder.length) {\n      result[fieldOrder[i]] = val;\n    }\n  });\n  return result;\n}\n\n// --- STRATEGY 3: Direct field names ---\nfunction fromDirectFields(b) {\n  const directFields = [\n    'client_name', 'client_email', 'whatsapp_number', 'brand_name', 'website_url',\n    'product_feature', 'differentiator', 'competitors', 'competitor_strengths',\n    'target_user', 'biggest_problem', 'main_hesitation',\n    'social_proof', 'selling_proposition', 'brand_personality', 'credibility_point', 'transformation',\n    'best_concepts', 'compliance', 'reference_ads', 'available_assets', 'do_not_say', 'additional_notes'\n  ];\n  const found = {};\n  let count = 0;\n  for (const f of directFields) {\n    if (b[f] !== undefined) {\n      found[f] = b[f];\n      count++;\n    }\n  }\n  return count > 0 ? found : null;\n}\n\n// Resolve data source\nlet data = parsed || fromQFields(body) || fromDirectFields(body) || body;\n\n// --- HELPER: Clean a field value ---\nfunction clean(val) {\n  if (val === undefined || val === null) return '';\n  if (Array.isArray(val)) return val.map(v => String(v).trim()).filter(Boolean).join(', ');\n  if (typeof val === 'object') {\n    // Handle name object: { first, last } or { prefix, first, middle, last }\n    if (val.first || val.last) {\n      return [val.prefix, val.first, val.middle, val.last].filter(Boolean).map(s => String(s).trim()).join(' ');\n    }\n    // Handle phone object: { area, phone } or { countryCode, area, phone }\n    if (val.phone !== undefined) {\n      const parts = [val.countryCode, val.area, val.phone].filter(Boolean).map(s => String(s).replace(/[\\s\\-()]/g, ''));\n      return parts.join('');\n    }\n    return JSON.stringify(val);\n  }\n  return String(val).trim();\n}\n\n// --- Extract and clean all 23 fields ---\nconst client_name = clean(data.client_name || data.clientName || data.name);\nconst client_email = clean(data.client_email || data.clientEmail || data.email);\nconst whatsapp_number = clean(data.whatsapp_number || data.whatsappNumber || data.whatsapp || data.phone);\nconst brand_name = clean(data.brand_name || data.brandName || data.brand);\nconst website_url = clean(data.website_url || data.websiteUrl || data.website);\nconst product_feature = clean(data.product_feature || data.productFeature);\nconst differentiator = clean(data.differentiator);\nconst competitors = clean(data.competitors);\nconst competitor_strengths = clean(data.competitor_strengths || data.competitorStrengths);\nconst target_user = clean(data.target_user || data.targetUser);\nconst biggest_problem = clean(data.biggest_problem || data.biggestProblem);\nconst main_hesitation = clean(data.main_hesitation || data.mainHesitation);\nconst social_proof = clean(data.social_proof || data.socialProof);\nconst selling_proposition = clean(data.selling_proposition || data.sellingProposition);\nconst brand_personality = clean(data.brand_personality || data.brandPersonality);\nconst credibility_point = clean(data.credibility_point || data.credibilityPoint);\nconst transformation = clean(data.transformation);\nconst best_concepts = clean(data.best_concepts || data.bestConcepts);\nconst compliance = clean(data.compliance);\nconst reference_ads = clean(data.reference_ads || data.referenceAds);\nconst available_assets = clean(data.available_assets || data.availableAssets);\nconst do_not_say = clean(data.do_not_say || data.doNotSay);\nconst additional_notes = clean(data.additional_notes || data.additionalNotes);\n\n// --- Generate Client Code ---\n// Rules: first 3 chars of brand name (uppercase), skip \"The\" prefix, strip special chars\nfunction generateClientCode(brandName) {\n  let name = brandName.trim();\n  // Remove leading \"The \" (case-insensitive)\n  name = name.replace(/^the\\s+/i, '');\n  // Remove special characters, keep letters and spaces\n  name = name.replace(/[^a-zA-Z\\s]/g, '');\n  // Get initials or first 3 chars\n  const words = name.trim().split(/\\s+/).filter(Boolean);\n  let code;\n  if (words.length >= 3) {\n    // Multi-word: take first letter of first 3 words\n    code = words.slice(0, 3).map(w => w[0]).join('');\n  } else if (words.length === 2) {\n    // Two words: first letter of each + first letter of second again, OR first 2 + first of second\n    code = words[0][0] + words[1][0] + words[1][1];\n  } else {\n    // Single word: first 3 letters\n    code = (words[0] || 'XXX').substring(0, 3);\n  }\n  code = code.toUpperCase();\n\n  // Add date: MMDD\n  const now = new Date();\n  const mm = String(now.getMonth() + 1).padStart(2, '0');\n  const dd = String(now.getDate()).padStart(2, '0');\n  return `${code}-${mm}${dd}`;\n}\n\nconst client_code = generateClientCode(brand_name);\n\n// Start date: today in DD/MM/YYYY\nconst now = new Date();\nconst start_date = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;\n\nreturn [{\n  json: {\n    client_code,\n    brand_name,\n    client_name,\n    client_email,\n    whatsapp_number,\n    website_url,\n    product_feature,\n    differentiator,\n    competitors,\n    competitor_strengths,\n    target_user,\n    biggest_problem,\n    main_hesitation,\n    social_proof,\n    selling_proposition,\n    brand_personality,\n    credibility_point,\n    transformation,\n    best_concepts,\n    compliance,\n    reference_ads,\n    available_assets,\n    do_not_say,\n    additional_notes,\n    status: 'Onboarding',\n    start_date,\n    folder_name: `${brand_name} - UGC`,\n    list_name: `${brand_name} - UGC Pipeline`\n  }\n}];"
+      },
+      "id": "node-parse",
+      "name": "Parse JotForm & Generate Client Code",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 320]
+    },
+    {
+      "parameters": {
+        "content": "## 3. GOOGLE SHEETS — Client Database\nAppends a row with all 27 columns (A–AA) to the main client database sheet.\nPlaceholder document ID — replace with your actual Google Sheet ID.",
+        "height": 180,
+        "width": 340,
+        "color": 3
+      },
+      "id": "sticky-sheets-db",
+      "name": "Sticky Note - Client DB",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [1060, 80]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Client Database",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "A": "={{ $json.client_code }}",
+            "B": "={{ $json.brand_name }}",
+            "C": "={{ $json.client_name }}",
+            "D": "={{ $json.client_email }}",
+            "E": "={{ $json.whatsapp_number }}",
+            "F": "={{ $json.website_url }}",
+            "G": "={{ $json.product_feature }}",
+            "H": "={{ $json.differentiator }}",
+            "I": "={{ $json.competitors }}",
+            "J": "={{ $json.competitor_strengths }}",
+            "K": "={{ $json.target_user }}",
+            "L": "={{ $json.biggest_problem }}",
+            "M": "={{ $json.main_hesitation }}",
+            "N": "={{ $json.social_proof }}",
+            "O": "={{ $json.selling_proposition }}",
+            "P": "={{ $json.brand_personality }}",
+            "Q": "={{ $json.credibility_point }}",
+            "R": "={{ $json.transformation }}",
+            "S": "={{ $json.best_concepts }}",
+            "T": "={{ $json.compliance }}",
+            "U": "={{ $json.reference_ads }}",
+            "V": "={{ $json.do_not_say }}",
+            "W": "={{ $json.additional_notes }}",
+            "X": "Onboarding",
+            "Y": "={{ $json.start_date }}",
+            "Z": "",
+            "AA": "No"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-sheets-db",
+      "name": "Add to Client Database",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [1100, 320],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_GOOGLE_SHEETS_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "onError": "stopWorkflow"
+    },
+    {
+      "parameters": {
+        "content": "## 4. CLICKUP — Create Folder\nCreates \"[Brand] - UGC\" folder in Space 90165772240.\nThis is the top-level organizational unit for the client.",
+        "height": 180,
+        "width": 340,
+        "color": 5
+      },
+      "id": "sticky-clickup-folder",
+      "name": "Sticky Note - ClickUp Folder",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [1480, 80]
+    },
+    {
+      "parameters": {
+        "resource": "folder",
+        "operation": "create",
+        "spaceId": "90165772240",
+        "name": "={{ $('Parse JotForm & Generate Client Code').item.json.folder_name }}"
+      },
+      "id": "node-clickup-folder",
+      "name": "Create Client Folder",
+      "type": "n8n-nodes-base.clickUp",
+      "typeVersion": 1,
+      "position": [1520, 320],
+      "credentials": {
+        "clickUpApi": {
+          "id": "YOUR_CLICKUP_CREDENTIAL_ID",
+          "name": "ClickUp account"
+        }
+      },
+      "onError": "stopWorkflow"
+    },
+    {
+      "parameters": {
+        "content": "## 5. CLICKUP — Create List\nCreates \"[Brand] - UGC Pipeline\" list inside the new folder.\nAll 10 onboarding tasks will go into this list.",
+        "height": 180,
+        "width": 340,
+        "color": 5
+      },
+      "id": "sticky-clickup-list",
+      "name": "Sticky Note - ClickUp List",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [1900, 80]
+    },
+    {
+      "parameters": {
+        "resource": "list",
+        "operation": "create",
+        "folderId": "={{ $json.id }}",
+        "name": "={{ $('Parse JotForm & Generate Client Code').item.json.list_name }}"
+      },
+      "id": "node-clickup-list",
+      "name": "Create Pipeline List in Folder",
+      "type": "n8n-nodes-base.clickUp",
+      "typeVersion": 1,
+      "position": [1940, 320],
+      "credentials": {
+        "clickUpApi": {
+          "id": "YOUR_CLICKUP_CREDENTIAL_ID",
+          "name": "ClickUp account"
+        }
+      },
+      "onError": "stopWorkflow"
+    },
+    {
+      "parameters": {
+        "content": "## 6. GENERATE TASKS\nCode node builds an array of 10 onboarding tasks with:\n- Due dates (today + N days as Unix ms)\n- Priorities (1=urgent → 4=low)\n- Rich descriptions with client context",
+        "height": 200,
+        "width": 340,
+        "color": 6
+      },
+      "id": "sticky-tasks-gen",
+      "name": "Sticky Note - Task Generation",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [2320, 80]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Generate 10 Onboarding Tasks for ClickUp\n// ============================================================\n\nconst d = $('Parse JotForm & Generate Client Code').first().json;\nconst listId = $('Create Pipeline List in Folder').first().json.id;\n\nfunction dueDate(daysFromNow) {\n  const dt = new Date();\n  dt.setDate(dt.getDate() + daysFromNow);\n  dt.setHours(18, 0, 0, 0); // 6 PM deadline\n  return dt.getTime();\n}\n\nconst tasks = [\n  {\n    name: 'Review onboarding brief & flag gaps',\n    due_date: dueDate(1),\n    priority: 1,\n    description: `Read ${d.brand_name} brief. Flag items marked 'discuss on call' or blank.\\n\\nProduct: ${d.product_feature}\\nDifferentiator: ${d.differentiator}\\nCompliance: ${d.compliance || 'None specified'}\\nDo NOT say: ${d.do_not_say || 'None specified'}`,\n    listId\n  },\n  {\n    name: 'Schedule kickoff call with client',\n    due_date: dueDate(1),\n    priority: 1,\n    description: `Contact ${d.client_name} via WhatsApp (${d.whatsapp_number}) or email (${d.client_email}).\\nSchedule call to discuss flagged items + creative direction.`,\n    listId\n  },\n  {\n    name: 'Competitor ad research & analysis',\n    due_date: dueDate(3),\n    priority: 2,\n    description: `Research: ${d.competitors}\\nWhat they do better: ${d.competitor_strengths}\\nPull current ads from Meta Ad Library.\\nReference ads client likes: ${d.reference_ads || 'None provided'}`,\n    listId\n  },\n  {\n    name: 'Define creative angles & concepts',\n    due_date: dueDate(3),\n    priority: 2,\n    description: `Based on brief:\\nDifferentiator: ${d.differentiator}\\nTarget: ${d.target_user}\\nProblem solved: ${d.biggest_problem}\\nHesitation: ${d.main_hesitation}\\nBrand personality: ${d.brand_personality}\\nRef ads: ${d.reference_ads || 'None'}\\n\\nPropose 3-5 creative angles.`,\n    listId\n  },\n  {\n    name: 'Write first batch of UGC scripts',\n    due_date: dueDate(5),\n    priority: 2,\n    description: `Write 3-5 UGC scripts for ${d.product_feature}\\nSelling proposition: ${d.selling_proposition}\\nTransformation: ${d.transformation}\\nBest concepts: ${d.best_concepts || 'None specified'}\\n\\n⚠️ COMPLIANCE: ${d.compliance || 'None'}\\n🚫 DO NOT: ${d.do_not_say || 'None'}`,\n    listId\n  },\n  {\n    name: 'Source & match UGC creators',\n    due_date: dueDate(5),\n    priority: 3,\n    description: `Find creators matching:\\nBrand personality: ${d.brand_personality}\\nTarget audience: ${d.target_user}\\nContent style and tone requirements`,\n    listId\n  },\n  {\n    name: 'Internal creative review',\n    due_date: dueDate(7),\n    priority: 3,\n    description: `Review scripts before sharing with ${d.client_name}.\\nCheck against: ${d.compliance || 'No compliance notes'}\\nEnsure nothing in do-not list: ${d.do_not_say || 'None'}`,\n    listId\n  },\n  {\n    name: 'Client script approval',\n    due_date: dueDate(8),\n    priority: 2,\n    description: `Share scripts with ${d.client_name} (${d.client_email} / WhatsApp ${d.whatsapp_number}) for feedback.`,\n    listId\n  },\n  {\n    name: 'UGC shoot coordination',\n    due_date: dueDate(12),\n    priority: 3,\n    description: `Brief creators, coordinate shoots.\\nAvailable client assets: ${d.available_assets || 'None specified'}`,\n    listId\n  },\n  {\n    name: 'First draft delivery to client',\n    due_date: dueDate(15),\n    priority: 1,\n    description: `Deliver first round of edited UGC videos to ${d.client_name} for review.`,\n    listId\n  }\n];\n\nreturn tasks.map(t => ({ json: t }));"
+      },
+      "id": "node-generate-tasks",
+      "name": "Generate Task Array",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2360, 320]
+    },
+    {
+      "parameters": {
+        "content": "## 7. SPLIT & CREATE TASKS\nLoops through 10 tasks one at a time (batch size 1)\nto avoid ClickUp rate limits.\nEach task gets name, description, due date, and priority.",
+        "height": 200,
+        "width": 540,
+        "color": 5
+      },
+      "id": "sticky-split",
+      "name": "Sticky Note - Split & Create",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [2740, 80]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "node-split",
+      "name": "Loop Over Tasks",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [2780, 320]
+    },
+    {
+      "parameters": {
+        "resource": "task",
+        "operation": "create",
+        "listId": "={{ $json.listId }}",
+        "name": "={{ $json.name }}",
+        "additionalFields": {
+          "content": "={{ $json.description }}",
+          "dueDate": "={{ $json.due_date }}",
+          "priority": "={{ $json.priority }}"
+        }
+      },
+      "id": "node-create-task",
+      "name": "Create ClickUp Task",
+      "type": "n8n-nodes-base.clickUp",
+      "typeVersion": 1,
+      "position": [3040, 320],
+      "credentials": {
+        "clickUpApi": {
+          "id": "YOUR_CLICKUP_CREDENTIAL_ID",
+          "name": "ClickUp account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "content": "## 8. SLACK NOTIFICATION\nPosts to #channel C07MN9QA1R7 with a summary of the new client.\nNon-critical — continues on fail so it doesn't block the workflow.",
+        "height": 180,
+        "width": 340,
+        "color": 2
+      },
+      "id": "sticky-slack",
+      "name": "Sticky Note - Slack",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [3420, 80]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C07MN9QA1R7",
+          "mode": "id"
+        },
+        "text": "={{ (() => {\nconst d = $('Parse JotForm & Generate Client Code').first().json;\nconst product = (d.product_feature || '').substring(0, 100);\nconst target = (d.target_user || '').substring(0, 100);\nconst diff = (d.differentiator || '').substring(0, 100);\nconst comp = d.compliance || 'None';\nconst dontSay = d.do_not_say || 'None';\nconst personality = d.brand_personality || 'Not specified';\nreturn `🎬 *New UGC Client Onboarded!*\\n\\n*${d.client_code} — ${d.brand_name}*\\nProduct: ${product}\\nTarget: ${target}\\nDifferentiator: ${diff}\\nBrand: ${personality}\\n\\n⚠️ Compliance: ${comp}\\n🚫 Do not: ${dontSay}\\n\\n📋 ClickUp: ${d.folder_name} created with 10 tasks (15-day timeline)\\nAM: TBD\\n\\n_Let's make some fire ads!_ 🔥`;\n})() }}",
+        "otherOptions": {}
+      },
+      "id": "node-slack",
+      "name": "Notify Team on Slack",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [3460, 320],
+      "credentials": {
+        "slackOAuth2Api": {
+          "id": "YOUR_SLACK_CREDENTIAL_ID",
+          "name": "Slack account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "content": "## 9. ONBOARDING LOG\nAppends a success record to the Onboarding Log sheet.\nTracks which steps ran and any errors.",
+        "height": 180,
+        "width": 340,
+        "color": 3
+      },
+      "id": "sticky-log",
+      "name": "Sticky Note - Onboarding Log",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [3840, 80]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "365190339",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Onboarding Log",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "A": "={{ new Date().toISOString() }}",
+            "B": "={{ $('Parse JotForm & Generate Client Code').first().json.client_code }}",
+            "C": "={{ $('Parse JotForm & Generate Client Code').first().json.brand_name }}",
+            "D": "Success",
+            "E": "Yes",
+            "F": "Yes",
+            "G": "Skipped",
+            "H": "Skipped",
+            "I": "Yes",
+            "J": ""
+          }
+        },
+        "options": {}
+      },
+      "id": "node-sheets-log",
+      "name": "Log to Onboarding Log",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [3880, 320],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_GOOGLE_SHEETS_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "content": "## 10. RESPOND TO WEBHOOK\nReturns JSON to JotForm with status, client code, and brand name.\nThis is the \"Last Node\" response for the webhook.",
+        "height": 180,
+        "width": 340,
+        "color": 4
+      },
+      "id": "sticky-respond",
+      "name": "Sticky Note - Respond",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [4260, 80]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'success', client_code: $('Parse JotForm & Generate Client Code').first().json.client_code, brand: $('Parse JotForm & Generate Client Code').first().json.brand_name }) }}",
+        "options": {}
+      },
+      "id": "node-respond",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [4300, 320]
+    },
+    {
+      "parameters": {
+        "content": "## ERROR HANDLING\nIf any node in the main flow fails, this error branch:\n1. Sends a Slack DM to U06P9F49BJT\n2. Logs the failure to the Onboarding Log sheet\n3. Returns 200 to prevent JotForm retry loops",
+        "height": 200,
+        "width": 380,
+        "color": 1
+      },
+      "id": "sticky-error",
+      "name": "Sticky Note - Error Handling",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [1060, 600]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Error Handler — Capture error details\n// ============================================================\n\nconst errorData = $input.first().json;\n\n// Try to get brand name from the parse node if it ran\nlet brand_name = 'Unknown';\nlet client_code = 'N/A';\ntry {\n  const parseData = $('Parse JotForm & Generate Client Code').first().json;\n  brand_name = parseData.brand_name || 'Unknown';\n  client_code = parseData.client_code || 'N/A';\n} catch (e) {\n  // Parse node may not have run\n}\n\nconst errorMessage = errorData.error?.message || errorData.message || 'Unknown error';\nconst errorNode = errorData.error?.node?.name || errorData.node || 'Unknown node';\n\nreturn [{\n  json: {\n    brand_name,\n    client_code,\n    error_message: errorMessage,\n    error_node: errorNode,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "node-error-handler",
+      "name": "Handle Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 820]
+    },
+    {
+      "parameters": {
+        "select": "user",
+        "user": {
+          "__rl": true,
+          "value": "U06P9F49BJT",
+          "mode": "id"
+        },
+        "text": "={{ `❌ Onboarding failed for ${$json.brand_name}. Error: ${$json.error_message}. Node: ${$json.error_node}` }}",
+        "otherOptions": {}
+      },
+      "id": "node-error-slack",
+      "name": "Slack DM — Error Alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [1520, 820],
+      "credentials": {
+        "slackOAuth2Api": {
+          "id": "YOUR_SLACK_CREDENTIAL_ID",
+          "name": "Slack account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "365190339",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Onboarding Log",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "A": "={{ $json.timestamp }}",
+            "B": "={{ $json.client_code }}",
+            "C": "={{ $json.brand_name }}",
+            "D": "Failed",
+            "E": "Unknown",
+            "F": "Unknown",
+            "G": "Skipped",
+            "H": "Skipped",
+            "I": "Error",
+            "J": "={{ $json.error_node }}: {{ $json.error_message }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-error-log",
+      "name": "Log Error to Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [1940, 820],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_GOOGLE_SHEETS_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'error', message: $json.error_message, client_code: $json.client_code }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "node-error-respond",
+      "name": "Respond 200 on Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2360, 820]
+    }
+  ],
+  "connections": {
+    "Webhook — JotForm": {
+      "main": [
+        [
+          {
+            "node": "Parse JotForm & Generate Client Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse JotForm & Generate Client Code": {
+      "main": [
+        [
+          {
+            "node": "Add to Client Database",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add to Client Database": {
+      "main": [
+        [
+          {
+            "node": "Create Client Folder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Client Folder": {
+      "main": [
+        [
+          {
+            "node": "Create Pipeline List in Folder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Pipeline List in Folder": {
+      "main": [
+        [
+          {
+            "node": "Generate Task Array",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Task Array": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Tasks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Tasks": {
+      "main": [
+        [
+          {
+            "node": "Create ClickUp Task",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notify Team on Slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create ClickUp Task": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Tasks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Team on Slack": {
+      "main": [
+        [
+          {
+            "node": "Log to Onboarding Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log to Onboarding Log": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Error": {
+      "main": [
+        [
+          {
+            "node": "Slack DM — Error Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack DM — Error Alert": {
+      "main": [
+        [
+          {
+            "node": "Log Error to Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Error to Sheet": {
+      "main": [
+        [
+          {
+            "node": "Respond 200 on Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "Onboarding",
+      "id": "1"
+    },
+    {
+      "name": "UGC",
+      "id": "2"
+    },
+    {
+      "name": "Client Ops",
+      "id": "3"
+    }
+  ],
+  "triggerCount": 1,
+  "pinData": {}
+}
