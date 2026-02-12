@@ -672,7 +672,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "=https://www.googleapis.com/drive/v3/files?fields=files(id%2Cname)&q=name%3D%27{{ $('Parse JotForm & Generate Client Code').first().json.brand_name.charAt(0).toUpperCase() }}%27%20and%20%271tsbdVo92ECUyUCaCwvq1yGCRpA4uCDxT%27%20in%20parents%20and%20mimeType%3D%27application%2Fvnd.google-apps.folder%27%20and%20trashed%3Dfalse",
+        "url": "=https://www.googleapis.com/drive/v3/files?supportsAllDrives=true&includeItemsFromAllDrives=true&fields=files(id%2Cname)&q=name%3D%27{{ $('Parse JotForm & Generate Client Code').first().json.brand_name.charAt(0).toUpperCase() }}%27%20and%20%271tsbdVo92ECUyUCaCwvq1yGCRpA4uCDxT%27%20in%20parents%20and%20mimeType%3D%27application%2Fvnd.google-apps.folder%27%20and%20trashed%3Dfalse",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "googleDriveOAuth2Api",
         "options": {}
@@ -696,7 +696,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://www.googleapis.com/drive/v3/files",
+        "url": "https://www.googleapis.com/drive/v3/files?supportsAllDrives=true",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "googleDriveOAuth2Api",
         "sendBody": true,
@@ -723,7 +723,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://www.googleapis.com/drive/v3/files",
+        "url": "https://www.googleapis.com/drive/v3/files?supportsAllDrives=true",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "googleDriveOAuth2Api",
         "sendBody": true,
@@ -750,7 +750,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://www.googleapis.com/drive/v3/files",
+        "url": "https://www.googleapis.com/drive/v3/files?supportsAllDrives=true",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "googleDriveOAuth2Api",
         "sendBody": true,
@@ -820,7 +820,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://www.googleapis.com/drive/v3/files",
+        "url": "https://www.googleapis.com/drive/v3/files?supportsAllDrives=true",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "googleDriveOAuth2Api",
         "sendBody": true,
@@ -843,6 +843,19 @@
         }
       },
       "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Collapse loop output into a single item for Drive operations\nreturn [{ json: { ready: true } }];"
+      },
+      "id": "node-drive-prepare",
+      "name": "Prepare Drive Step",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3260,
+        320
+      ]
     }
   ],
   "connections": {
@@ -963,7 +976,7 @@
       "main": [
         [
           {
-            "node": "Find Letter Folder in Drive",
+            "node": "Prepare Drive Step",
             "type": "main",
             "index": 0
           }
@@ -1142,6 +1155,17 @@
         [
           {
             "node": "Loop Over Script Docs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Drive Step": {
+      "main": [
+        [
+          {
+            "node": "Find Letter Folder in Drive",
             "type": "main",
             "index": 0
           }
