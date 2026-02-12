@@ -655,7 +655,7 @@
     },
     {
       "parameters": {
-        "content": "## 8. GOOGLE DRIVE — Client Folder Setup\nFinds the alphabet folder (A-Z) in shared Clients drive,\ncreates Brand folder + References & Scripts subfolders.\nThen creates N Google Docs (one per UGC script) in Scripts.\n\n⚠️ Replace YOUR_CLIENTS_FOLDER_ID with the actual\nClients shared drive folder ID from the URL.",
+        "content": "## 8. GOOGLE DRIVE — Client Folder Setup\nFinds the alphabet folder (A-Z) in shared Clients drive,\ncreates Brand folder + References & Scripts subfolders.\nThen creates N Google Docs (one per UGC script) in Scripts.\n\nClients folder ID: 1tsbdVo92ECUyUCaCwvq1yGCRpA4uCDxT",
         "height": 260,
         "width": 420,
         "color": 3
@@ -672,7 +672,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "=https://www.googleapis.com/drive/v3/files?fields=files(id%2Cname)&q=name%3D%27{{ $('Parse JotForm & Generate Client Code').first().json.brand_name.charAt(0).toUpperCase() }}%27%20and%20%27YOUR_CLIENTS_FOLDER_ID%27%20in%20parents%20and%20mimeType%3D%27application%2Fvnd.google-apps.folder%27%20and%20trashed%3Dfalse",
+        "url": "=https://www.googleapis.com/drive/v3/files?fields=files(id%2Cname)&q=name%3D%27{{ $('Parse JotForm & Generate Client Code').first().json.brand_name.charAt(0).toUpperCase() }}%27%20and%20%271tsbdVo92ECUyUCaCwvq1yGCRpA4uCDxT%27%20in%20parents%20and%20mimeType%3D%27application%2Fvnd.google-apps.folder%27%20and%20trashed%3Dfalse",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "googleDriveOAuth2Api",
         "options": {}
