@@ -121,7 +121,7 @@
           "name": "Google Sheets account"
         }
       },
-      "onError": "continueErrorOutput"
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -525,7 +525,7 @@
           "name": "ClickUp account"
         }
       },
-      "onError": "continueErrorOutput"
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -612,13 +612,6 @@
             "type": "main",
             "index": 0
           }
-        ],
-        [
-          {
-            "node": "Handle Error",
-            "type": "main",
-            "index": 0
-          }
         ]
       ]
     },
@@ -663,13 +656,6 @@
         [
           {
             "node": "Generate Task Array",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Handle Error",
             "type": "main",
             "index": 0
           }
