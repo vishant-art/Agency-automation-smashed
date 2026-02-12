@@ -69,7 +69,7 @@
         "operation": "append",
         "documentId": {
           "__rl": true,
-          "value": "YOUR_GOOGLE_SHEET_ID",
+          "value": "18OKKaVxEIMDEuClFxxDXd5QFCqeq7090",
           "mode": "id"
         },
         "sheetName": {
@@ -80,34 +80,32 @@
         "columns": {
           "mappingMode": "defineBelow",
           "value": {
-            "A": "={{ $json.client_code }}",
-            "B": "={{ $json.brand_name }}",
-            "C": "={{ $json.client_name }}",
-            "D": "={{ $json.client_email }}",
-            "E": "={{ $json.whatsapp_number }}",
-            "F": "={{ $json.website_url }}",
-            "G": "={{ $json.product_feature }}",
-            "H": "={{ $json.differentiator }}",
-            "I": "={{ $json.competitors }}",
-            "J": "={{ $json.competitor_strengths }}",
-            "K": "={{ $json.target_user }}",
-            "L": "={{ $json.biggest_problem }}",
-            "M": "={{ $json.main_hesitation }}",
-            "N": "={{ $json.social_proof }}",
-            "O": "={{ $json.selling_proposition }}",
-            "P": "={{ $json.brand_personality }}",
-            "Q": "={{ $json.credibility_point }}",
-            "R": "={{ $json.transformation }}",
-            "S": "={{ $json.best_concepts }}",
-            "T": "={{ $json.compliance }}",
-            "U": "={{ $json.reference_ads }}",
-            "V": "={{ $json.available_assets }}",
-            "W": "={{ $json.do_not_say }}",
-            "X": "={{ $json.additional_notes }}",
-            "Y": "Onboarding",
-            "Z": "={{ $json.start_date }}",
-            "AA": "",
-            "AB": "No"
+            "client_code": "={{ $json.client_code }}",
+            "brand_name": "={{ $json.brand_name }}",
+            "client_name": "={{ $json.client_name }}",
+            "client_email": "={{ $json.client_email }}",
+            "whatsapp_number": "={{ $json.whatsapp_number }}",
+            "website_url": "={{ $json.website_url }}",
+            "product_feature": "={{ $json.product_feature }}",
+            "differentiator": "={{ $json.differentiator }}",
+            "competitors": "={{ $json.competitors }}",
+            "competitor_strengths": "={{ $json.competitor_strengths }}",
+            "target_user": "={{ $json.target_user }}",
+            "biggest_problem": "={{ $json.biggest_problem }}",
+            "main_hesitation": "={{ $json.main_hesitation }}",
+            "social_proof": "={{ $json.social_proof }}",
+            "selling_proposition": "={{ $json.selling_proposition }}",
+            "brand_personality": "={{ $json.brand_personality }}",
+            "credibility_point": "={{ $json.credibility_point }}",
+            "transformation": "={{ $json.transformation }}",
+            "best_concepts": "={{ $json.best_concepts }}",
+            "compliance": "={{ $json.compliance }}",
+            "reference_ads": "={{ $json.reference_ads }}",
+            "available_assets": "={{ $json.available_assets }}",
+            "do_not_say": "={{ $json.do_not_say }}",
+            "additional_notes": "={{ $json.additional_notes }}",
+            "status": "Onboarding",
+            "start_date": "={{ $json.start_date }}"
           }
         },
         "options": {}
@@ -325,7 +323,7 @@
         "operation": "append",
         "documentId": {
           "__rl": true,
-          "value": "365190339",
+          "value": "18OKKaVxEIMDEuClFxxDXd5QFCqeq7090",
           "mode": "id"
         },
         "sheetName": {
@@ -440,7 +438,7 @@
         "operation": "append",
         "documentId": {
           "__rl": true,
-          "value": "365190339",
+          "value": "18OKKaVxEIMDEuClFxxDXd5QFCqeq7090",
           "mode": "id"
         },
         "sheetName": {
