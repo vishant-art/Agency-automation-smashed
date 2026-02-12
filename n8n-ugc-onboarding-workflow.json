@@ -507,8 +507,8 @@
       "parameters": {
         "method": "POST",
         "url": "https://api.clickup.com/api/v3/workspaces/90161381822/chat/channels",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "clickUpApi",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ name: $('Parse JotForm & Generate Client Code').first().json.channel_name }) }}",
@@ -520,9 +520,9 @@
       "typeVersion": 4.2,
       "position": [2150, 320],
       "credentials": {
-        "httpHeaderAuth": {
-          "id": "YOUR_CLICKUP_HEADER_AUTH_ID",
-          "name": "ClickUp API Token"
+        "clickUpApi": {
+          "id": "YOUR_CLICKUP_API_CREDENTIAL_ID",
+          "name": "ClickUp API"
         }
       },
       "onError": "continueRegularOutput"
