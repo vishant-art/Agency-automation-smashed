@@ -492,7 +492,7 @@
     },
     {
       "parameters": {
-        "content": "## 5b. CLICKUP — Create Chat Channel (HTTP Request)\nPOST /api/v3/workspaces/{id}/chat/channels\nCreates a \"[Brand] - UGC\" Chat Channel so the team can communicate about this client.\nRequires workspace_id — replace YOUR_CLICKUP_WORKSPACE_ID with your actual ClickUp workspace ID.",
+        "content": "## 5b. CLICKUP — Create Chat Channel (HTTP Request)\nPOST /api/v3/workspaces/90161381822/chat/channels\nCreates a \"[Brand] - UGC\" Chat Channel so the team can communicate about this client.",
         "height": 200,
         "width": 380,
         "color": 5
@@ -506,7 +506,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://api.clickup.com/api/v3/workspaces/YOUR_CLICKUP_WORKSPACE_ID/chat/channels",
+        "url": "https://api.clickup.com/api/v3/workspaces/90161381822/chat/channels",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "clickUpApi",
         "sendBody": true,
@@ -526,6 +526,37 @@
         }
       },
       "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "content": "## TEST TRIGGER\nClick \"Test workflow\" to run the entire flow with demo data.\nNo webhook needed — uses a Manual Trigger + hardcoded sample brand.\nDisable this path in production by deactivating the Manual Trigger node.",
+        "height": 200,
+        "width": 380,
+        "color": 7
+      },
+      "id": "sticky-test-trigger",
+      "name": "Sticky Note - Test Trigger",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [240, -360]
+    },
+    {
+      "parameters": {},
+      "id": "node-manual-trigger",
+      "name": "Manual Trigger — Test",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [280, -140]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// TEST DATA — Simulates a parsed JotForm submission\n// Edit these values to test with different brands\n// ============================================================\n\nconst brand_name = 'TestBrand';\n\nfunction generateClientCode(brandName) {\n  let name = brandName.trim().replace(/^the\\s+/i, '').replace(/[^a-zA-Z\\s]/g, '');\n  const concat = name.replace(/\\s+/g, '');\n  const code = (concat.substring(0, 3) || 'XXX').toUpperCase();\n  const now = new Date();\n  const mm = String(now.getMonth() + 1).padStart(2, '0');\n  const dd = String(now.getDate()).padStart(2, '0');\n  return `${code}-${mm}${dd}`;\n}\n\nconst now = new Date();\nconst start_date = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;\n\nreturn [{\n  json: {\n    client_code: generateClientCode(brand_name),\n    brand_name,\n    client_name: 'Test User',\n    client_email: 'test@example.com',\n    whatsapp_number: '+919999999999',\n    website_url: 'https://testbrand.com',\n    product_feature: 'Premium organic skincare serum with Vitamin C',\n    differentiator: 'Only brand using high-altitude Himalayan botanicals',\n    competitors: 'Mamaearth, Plum, Minimalist',\n    competitor_strengths: 'Mamaearth has strong distribution, Minimalist has science-forward branding',\n    target_user: 'Women 22-35, urban, ingredient-conscious, mid-premium budget',\n    biggest_problem: 'Dull skin, dark spots, want visible results in 2 weeks',\n    main_hesitation: 'Too many serums in the market — why is this different?',\n    social_proof: '15K+ 5-star reviews, featured in Vogue India',\n    selling_proposition: 'Visible glow in 14 days or money back',\n    brand_personality: 'Clean, confident, earthy-luxe, approachable expert',\n    credibility_point: 'Dermatologist-tested, certified organic ingredients',\n    transformation: 'From dull tired skin to lit-from-within glow',\n    best_concepts: 'Before/after, ingredient hero, routine integration',\n    compliance: 'No medical claims, no before/after showing skin disease',\n    reference_ads: 'Minimalist serum ads, Drunk Elephant UGC style',\n    available_assets: 'Product photos, ingredient cards, customer testimonials',\n    do_not_say: 'Do not say anti-aging, do not compare directly to competitors by name',\n    additional_notes: 'Client prefers warm lighting in all UGC. Launch date is March 15.',\n    status: 'Onboarding',\n    start_date,\n    folder_name: `${brand_name} - UGC`,\n    list_name: `${brand_name} - UGC Pipeline`,\n    channel_name: `${brand_name} - UGC`\n  }\n}];"
+      },
+      "id": "node-test-data",
+      "name": "Set Test Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, -140]
     }
   ],
   "connections": {
@@ -534,6 +565,28 @@
         [
           {
             "node": "Parse JotForm & Generate Client Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger — Test": {
+      "main": [
+        [
+          {
+            "node": "Set Test Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Test Data": {
+      "main": [
+        [
+          {
+            "node": "Add to Client Database",
             "type": "main",
             "index": 0
           }
