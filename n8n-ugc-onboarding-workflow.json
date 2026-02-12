@@ -127,7 +127,7 @@
     },
     {
       "parameters": {
-        "content": "## 4. CLICKUP — Create Folder\nCreates \"[Brand] - UGC\" folder in Space 90165772240.\nThis is the top-level organizational unit for the client.",
+        "content": "## 4. CLICKUP — Create Folder (HTTP Request)\nPOST /api/v2/space/90165772240/folder\nCreates \"[Brand] - UGC\" folder. Uses HTTP Request to bypass n8n ClickUp node dropdown issues.",
         "height": 180,
         "width": 340,
         "color": 5
@@ -140,15 +140,19 @@
     },
     {
       "parameters": {
-        "resource": "folder",
-        "operation": "create",
-        "spaceId": "90165772240",
-        "name": "={{ $('Parse JotForm & Generate Client Code').item.json.folder_name }}"
+        "method": "POST",
+        "url": "https://api.clickup.com/api/v2/space/90165772240/folder",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "clickUpApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ name: $('Parse JotForm & Generate Client Code').item.json.folder_name }) }}",
+        "options": {}
       },
       "id": "node-clickup-folder",
       "name": "Create Client Folder",
-      "type": "n8n-nodes-base.clickUp",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [1520, 320],
       "credentials": {
         "clickUpApi": {
@@ -160,7 +164,7 @@
     },
     {
       "parameters": {
-        "content": "## 5. CLICKUP — Create List\nCreates \"[Brand] - UGC Pipeline\" list inside the new folder.\nAll 10 onboarding tasks will go into this list.",
+        "content": "## 5. CLICKUP — Create List (HTTP Request)\nPOST /api/v2/folder/{id}/list\nCreates pipeline list inside new folder. Uses HTTP Request to bypass dropdown issues.",
         "height": 180,
         "width": 340,
         "color": 5
@@ -173,15 +177,19 @@
     },
     {
       "parameters": {
-        "resource": "list",
-        "operation": "create",
-        "folderId": "={{ $json.id }}",
-        "name": "={{ $('Parse JotForm & Generate Client Code').item.json.list_name }}"
+        "method": "POST",
+        "url": "=https://api.clickup.com/api/v2/folder/{{ $json.id }}/list",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "clickUpApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ name: $('Parse JotForm & Generate Client Code').item.json.list_name }) }}",
+        "options": {}
       },
       "id": "node-clickup-list",
       "name": "Create Pipeline List in Folder",
-      "type": "n8n-nodes-base.clickUp",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [1940, 320],
       "credentials": {
         "clickUpApi": {
@@ -216,7 +224,7 @@
     },
     {
       "parameters": {
-        "content": "## 7. SPLIT & CREATE TASKS\nLoops through 10 tasks one at a time (batch size 1)\nto avoid ClickUp rate limits.\nEach task gets name, description, due date, and priority.",
+        "content": "## 7. SPLIT & CREATE TASKS (HTTP Request)\nLoops through 10 tasks one at a time (batch size 1)\nto avoid ClickUp rate limits.\nPOST /api/v2/list/{id}/task — uses HTTP Request node.",
         "height": 200,
         "width": 540,
         "color": 5
@@ -240,20 +248,19 @@
     },
     {
       "parameters": {
-        "resource": "task",
-        "operation": "create",
-        "listId": "={{ $json.listId }}",
-        "name": "={{ $json.name }}",
-        "additionalFields": {
-          "content": "={{ $json.description }}",
-          "dueDate": "={{ $json.due_date }}",
-          "priority": "={{ $json.priority }}"
-        }
+        "method": "POST",
+        "url": "=https://api.clickup.com/api/v2/list/{{ $json.listId }}/task",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "clickUpApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ name: $json.name, description: $json.description, due_date: $json.due_date, priority: $json.priority }) }}",
+        "options": {}
       },
       "id": "node-create-task",
       "name": "Create ClickUp Task",
-      "type": "n8n-nodes-base.clickUp",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [3040, 320],
       "credentials": {
         "clickUpApi": {
