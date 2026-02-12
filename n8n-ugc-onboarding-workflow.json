@@ -572,7 +572,7 @@
     },
     {
       "parameters": {
-        "content": "## 5b. CLICKUP — Create Chat Channel (HTTP Request)\nPOST /api/v3/workspaces/90161381822/chat/channels\nCreates a \"[Brand] - UGC\" Chat Channel so the team can communicate about this client.",
+        "content": "## 5b. CLICKUP — Create Chat Channel in Space\nPOST /api/v3/workspaces/90161381822/chat/channels/location\nCreates channel inside Space 90165772240 (not at workspace level).\nIf a channel already exists on the space, returns it.",
         "height": 200,
         "width": 380,
         "color": 5
@@ -589,12 +589,12 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://api.clickup.com/api/v3/workspaces/90161381822/chat/channels",
+        "url": "https://api.clickup.com/api/v3/workspaces/90161381822/chat/channels/location",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "clickUpApi",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ name: $('Parse JotForm & Generate Client Code').first().json.channel_name }) }}",
+        "jsonBody": "={{ JSON.stringify({ name: $(\"Parse JotForm & Generate Client Code\").first().json.channel_name, parent_id: \"90165772240\", parent_type: \"space\" }) }}",
         "options": {}
       },
       "id": "node-clickup-channel",
@@ -772,14 +772,14 @@
       "main": [
         [
           {
-            "node": "Create ClickUp Task",
+            "node": "Notify Team on Slack",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Notify Team on Slack",
+            "node": "Create ClickUp Task",
             "type": "main",
             "index": 0
           }
