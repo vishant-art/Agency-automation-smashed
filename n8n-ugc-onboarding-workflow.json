@@ -327,7 +327,7 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        3420,
+        6100,
         80
       ]
     },
@@ -347,7 +347,7 @@
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.2,
       "position": [
-        3460,
+        6140,
         320
       ],
       "credentials": {
@@ -370,7 +370,7 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        3840,
+        6520,
         80
       ]
     },
@@ -409,7 +409,7 @@
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
       "position": [
-        3880,
+        6560,
         320
       ],
       "credentials": {
@@ -432,7 +432,7 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        4260,
+        6940,
         80
       ]
     },
@@ -447,7 +447,7 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        4300,
+        6980,
         320
       ]
     },
@@ -652,6 +652,197 @@
         680,
         -140
       ]
+    },
+    {
+      "parameters": {
+        "content": "## 8. GOOGLE DRIVE — Client Folder Setup\nFinds the alphabet folder (A-Z) in shared Clients drive,\ncreates Brand folder + References & Scripts subfolders.\nThen creates N Google Docs (one per UGC script) in Scripts.\n\n⚠️ Replace YOUR_CLIENTS_FOLDER_ID with the actual\nClients shared drive folder ID from the URL.",
+        "height": 260,
+        "width": 420,
+        "color": 3
+      },
+      "id": "sticky-drive-setup",
+      "name": "Sticky Note - Drive Setup",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        3420,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://www.googleapis.com/drive/v3/files?fields=files(id%2Cname)&q=name%3D%27{{ $('Parse JotForm & Generate Client Code').first().json.brand_name.charAt(0).toUpperCase() }}%27%20and%20%27YOUR_CLIENTS_FOLDER_ID%27%20in%20parents%20and%20mimeType%3D%27application%2Fvnd.google-apps.folder%27%20and%20trashed%3Dfalse",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "options": {}
+      },
+      "id": "node-drive-find-letter",
+      "name": "Find Letter Folder in Drive",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3460,
+        320
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "YOUR_GOOGLE_DRIVE_CREDENTIAL_ID",
+          "name": "Google Drive account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.googleapis.com/drive/v3/files",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ name: $('Parse JotForm & Generate Client Code').first().json.brand_name, mimeType: 'application/vnd.google-apps.folder', parents: [$json.files[0].id] }) }}",
+        "options": {}
+      },
+      "id": "node-drive-brand-folder",
+      "name": "Create Brand Folder in Drive",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3860,
+        320
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "YOUR_GOOGLE_DRIVE_CREDENTIAL_ID",
+          "name": "Google Drive account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.googleapis.com/drive/v3/files",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ name: 'References', mimeType: 'application/vnd.google-apps.folder', parents: [$json.id] }) }}",
+        "options": {}
+      },
+      "id": "node-drive-references",
+      "name": "Create References Subfolder",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4260,
+        320
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "YOUR_GOOGLE_DRIVE_CREDENTIAL_ID",
+          "name": "Google Drive account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.googleapis.com/drive/v3/files",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ name: 'Scripts', mimeType: 'application/vnd.google-apps.folder', parents: [$('Create Brand Folder in Drive').first().json.id] }) }}",
+        "options": {}
+      },
+      "id": "node-drive-scripts",
+      "name": "Create Scripts Subfolder",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4660,
+        320
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "YOUR_GOOGLE_DRIVE_CREDENTIAL_ID",
+          "name": "Google Drive account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "content": "## 9. GOOGLE DOCS — Script Documents\nGenerates N empty Google Docs in the Scripts subfolder.\nDoc names match the ClickUp UGC script card names:\nUGC_C{N}_{Brand}_Creator Name_R1_{Mon'YY}\n\nScript writers open these docs and start writing.",
+        "height": 220,
+        "width": 400,
+        "color": 3
+      },
+      "id": "sticky-script-docs",
+      "name": "Sticky Note - Script Docs",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        5020,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Generate Script Doc Names for Google Drive\n// Creates N doc entries matching the ClickUp card names\n// ============================================================\n\nconst d = $('Parse JotForm & Generate Client Code').first().json;\nconst scriptsFolderId = $('Create Scripts Subfolder').first().json.id;\nconst count = d.num_scripts || 0;\n\nif (count === 0) return [{ json: { _skip: true, scriptsFolderId } }];\n\nconst months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];\nconst now = new Date();\nconst monYear = months[now.getMonth()] + \"'\" + String(now.getFullYear()).slice(-2);\n\nconst docs = [];\nfor (let i = 1; i <= count; i++) {\n  docs.push({\n    name: `UGC_C${i}_${d.brand_name}_Creator Name_R1_${monYear}`,\n    scriptsFolderId\n  });\n}\n\nreturn docs.map(d => ({ json: d }));"
+      },
+      "id": "node-generate-docs",
+      "name": "Generate Script Doc Names",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5060,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "node-loop-docs",
+      "name": "Loop Over Script Docs",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        5460,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.googleapis.com/drive/v3/files",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json._skip ? JSON.stringify({}) : JSON.stringify({ name: $json.name, mimeType: 'application/vnd.google-apps.document', parents: [$json.scriptsFolderId] }) }}",
+        "options": {}
+      },
+      "id": "node-create-doc",
+      "name": "Create Script Doc in Drive",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5720,
+        320
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "YOUR_GOOGLE_DRIVE_CREDENTIAL_ID",
+          "name": "Google Drive account"
+        }
+      },
+      "onError": "continueRegularOutput"
     }
   ],
   "connections": {
@@ -772,7 +963,7 @@
       "main": [
         [
           {
-            "node": "Notify Team on Slack",
+            "node": "Find Letter Folder in Drive",
             "type": "main",
             "index": 0
           }
@@ -846,6 +1037,111 @@
         [
           {
             "node": "Respond 200 on Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Letter Folder in Drive": {
+      "main": [
+        [
+          {
+            "node": "Create Brand Folder in Drive",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Handle Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Brand Folder in Drive": {
+      "main": [
+        [
+          {
+            "node": "Create References Subfolder",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Handle Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create References Subfolder": {
+      "main": [
+        [
+          {
+            "node": "Create Scripts Subfolder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Scripts Subfolder": {
+      "main": [
+        [
+          {
+            "node": "Generate Script Doc Names",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Handle Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Script Doc Names": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Script Docs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Script Docs": {
+      "main": [
+        [
+          {
+            "node": "Notify Team on Slack",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create Script Doc in Drive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Script Doc in Drive": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Script Docs",
             "type": "main",
             "index": 0
           }
