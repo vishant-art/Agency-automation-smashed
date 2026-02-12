@@ -140,8 +140,8 @@
       "parameters": {
         "method": "POST",
         "url": "https://api.clickup.com/api/v2/space/90165772240/folder",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "clickUpApi",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ name: $('Parse JotForm & Generate Client Code').first().json.folder_name }) }}",
@@ -153,9 +153,9 @@
       "typeVersion": 4.2,
       "position": [1520, 320],
       "credentials": {
-        "httpHeaderAuth": {
-          "id": "YOUR_CLICKUP_HEADER_AUTH_ID",
-          "name": "ClickUp API Token"
+        "clickUpApi": {
+          "id": "YOUR_CLICKUP_API_CREDENTIAL_ID",
+          "name": "ClickUp API"
         }
       },
       "onError": "continueErrorOutput"
@@ -177,8 +177,8 @@
       "parameters": {
         "method": "POST",
         "url": "=https://api.clickup.com/api/v2/folder/{{ $json.id }}/list",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "clickUpApi",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ name: $('Parse JotForm & Generate Client Code').first().json.list_name }) }}",
@@ -190,9 +190,9 @@
       "typeVersion": 4.2,
       "position": [1940, 320],
       "credentials": {
-        "httpHeaderAuth": {
-          "id": "YOUR_CLICKUP_HEADER_AUTH_ID",
-          "name": "ClickUp API Token"
+        "clickUpApi": {
+          "id": "YOUR_CLICKUP_API_CREDENTIAL_ID",
+          "name": "ClickUp API"
         }
       },
       "onError": "continueErrorOutput"
@@ -248,8 +248,8 @@
       "parameters": {
         "method": "POST",
         "url": "=https://api.clickup.com/api/v2/list/{{ $json.listId }}/task",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "clickUpApi",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ name: $json.name, description: $json.description, due_date: $json.due_date, priority: $json.priority }) }}",
@@ -261,9 +261,9 @@
       "typeVersion": 4.2,
       "position": [3040, 320],
       "credentials": {
-        "httpHeaderAuth": {
-          "id": "YOUR_CLICKUP_HEADER_AUTH_ID",
-          "name": "ClickUp API Token"
+        "clickUpApi": {
+          "id": "YOUR_CLICKUP_API_CREDENTIAL_ID",
+          "name": "ClickUp API"
         }
       },
       "onError": "continueRegularOutput"
@@ -507,8 +507,8 @@
       "parameters": {
         "method": "POST",
         "url": "https://api.clickup.com/api/v3/workspaces/90161381822/chat/channels",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "clickUpApi",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ name: $('Parse JotForm & Generate Client Code').first().json.channel_name }) }}",
@@ -520,9 +520,9 @@
       "typeVersion": 4.2,
       "position": [2150, 320],
       "credentials": {
-        "httpHeaderAuth": {
-          "id": "YOUR_CLICKUP_HEADER_AUTH_ID",
-          "name": "ClickUp API Token"
+        "clickUpApi": {
+          "id": "YOUR_CLICKUP_API_CREDENTIAL_ID",
+          "name": "ClickUp API"
         }
       },
       "onError": "continueRegularOutput"
