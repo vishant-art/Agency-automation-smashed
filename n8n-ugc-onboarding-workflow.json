@@ -43,7 +43,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// ============================================================\n// Parse JotForm & Generate Client Code\n// Handles multiple JotForm data formats\n// ============================================================\n\nconst body = $input.first().json.body || $input.first().json;\n\n// --- STRATEGY 1: rawRequest JSON string ---\nlet parsed = null;\ntry {\n  if (body.rawRequest && typeof body.rawRequest === 'string') {\n    parsed = JSON.parse(body.rawRequest);\n  } else if (body.rawRequest && typeof body.rawRequest === 'object') {\n    parsed = body.rawRequest;\n  }\n} catch (e) {\n  parsed = null;\n}\n\n// --- STRATEGY 2: q-prefixed fields (q1_whatIs, q2_email, etc.) ---\nfunction fromQFields(b) {\n  const qMap = {};\n  for (const key of Object.keys(b)) {\n    if (/^q\\d+/.test(key)) {\n      qMap[key] = b[key];\n    }\n  }\n  if (Object.keys(qMap).length === 0) return null;\n\n  // Sort by question number\n  const sorted = Object.entries(qMap).sort((a, b) => {\n    const numA = parseInt(a[0].match(/^q(\\d+)/)[1]);\n    const numB = parseInt(b[0].match(/^q(\\d+)/)[1]);\n    return numA - numB;\n  });\n\n  // Map by order (best-effort mapping based on form field order)\n  const fieldOrder = [\n    'client_name', 'client_email', 'whatsapp_number', 'brand_name', 'website_url',\n    'product_feature', 'differentiator', 'competitors', 'competitor_strengths',\n    'target_user', 'biggest_problem', 'main_hesitation',\n    'social_proof', 'selling_proposition', 'brand_personality', 'credibility_point', 'transformation',\n    'best_concepts', 'compliance', 'reference_ads', 'available_assets', 'do_not_say', 'additional_notes'\n  ];\n\n  const result = {};\n  sorted.forEach(([key, val], i) => {\n    if (i < fieldOrder.length) {\n      result[fieldOrder[i]] = val;\n    }\n  });\n  return result;\n}\n\n// --- STRATEGY 3: Direct field names ---\nfunction fromDirectFields(b) {\n  const directFields = [\n    'client_name', 'client_email', 'whatsapp_number', 'brand_name', 'website_url',\n    'product_feature', 'differentiator', 'competitors', 'competitor_strengths',\n    'target_user', 'biggest_problem', 'main_hesitation',\n    'social_proof', 'selling_proposition', 'brand_personality', 'credibility_point', 'transformation',\n    'best_concepts', 'compliance', 'reference_ads', 'available_assets', 'do_not_say', 'additional_notes'\n  ];\n  const found = {};\n  let count = 0;\n  for (const f of directFields) {\n    if (b[f] !== undefined) {\n      found[f] = b[f];\n      count++;\n    }\n  }\n  return count > 0 ? found : null;\n}\n\n// Resolve data source\nlet data = parsed || fromQFields(body) || fromDirectFields(body) || body;\n\n// --- HELPER: Clean a field value ---\nfunction clean(val) {\n  if (val === undefined || val === null) return '';\n  if (Array.isArray(val)) return val.map(v => String(v).trim()).filter(Boolean).join(', ');\n  if (typeof val === 'object') {\n    // Handle name object: { first, last } or { prefix, first, middle, last }\n    if (val.first || val.last) {\n      return [val.prefix, val.first, val.middle, val.last].filter(Boolean).map(s => String(s).trim()).join(' ');\n    }\n    // Handle phone object: { area, phone } or { countryCode, area, phone }\n    if (val.phone !== undefined) {\n      const parts = [val.countryCode, val.area, val.phone].filter(Boolean).map(s => String(s).replace(/[\\s\\-()]/g, ''));\n      return parts.join('');\n    }\n    return JSON.stringify(val);\n  }\n  return String(val).trim();\n}\n\n// --- Extract and clean all 23 fields ---\nconst client_name = clean(data.client_name || data.clientName || data.name);\nconst client_email = clean(data.client_email || data.clientEmail || data.email);\nconst whatsapp_number = clean(data.whatsapp_number || data.whatsappNumber || data.whatsapp || data.phone);\nconst brand_name = clean(data.brand_name || data.brandName || data.brand);\nconst website_url = clean(data.website_url || data.websiteUrl || data.website);\nconst product_feature = clean(data.product_feature || data.productFeature);\nconst differentiator = clean(data.differentiator);\nconst competitors = clean(data.competitors);\nconst competitor_strengths = clean(data.competitor_strengths || data.competitorStrengths);\nconst target_user = clean(data.target_user || data.targetUser);\nconst biggest_problem = clean(data.biggest_problem || data.biggestProblem);\nconst main_hesitation = clean(data.main_hesitation || data.mainHesitation);\nconst social_proof = clean(data.social_proof || data.socialProof);\nconst selling_proposition = clean(data.selling_proposition || data.sellingProposition);\nconst brand_personality = clean(data.brand_personality || data.brandPersonality);\nconst credibility_point = clean(data.credibility_point || data.credibilityPoint);\nconst transformation = clean(data.transformation);\nconst best_concepts = clean(data.best_concepts || data.bestConcepts);\nconst compliance = clean(data.compliance);\nconst reference_ads = clean(data.reference_ads || data.referenceAds);\nconst available_assets = clean(data.available_assets || data.availableAssets);\nconst do_not_say = clean(data.do_not_say || data.doNotSay);\nconst additional_notes = clean(data.additional_notes || data.additionalNotes);\n\n// --- Generate Client Code ---\n// Rules: first 3 chars of brand name (uppercase), skip \"The\" prefix, strip special chars\nfunction generateClientCode(brandName) {\n  let name = brandName.trim();\n  // Remove leading \"The \" (case-insensitive)\n  name = name.replace(/^the\\s+/i, '');\n  // Remove special characters, keep letters and spaces\n  name = name.replace(/[^a-zA-Z\\s]/g, '');\n  // Take first 3 alphabetic characters of concatenated name (no spaces)\n  // Examples: 'Yaan Man' → YAA, 'Supafuelz' → SUP, 'The Pain Company' → (skip The) → PAI\n  const concat = name.replace(/\\s+/g, '');\n  const code = (concat.substring(0, 3) || 'XXX').toUpperCase();\n\n  // Add date: MMDD\n  const now = new Date();\n  const mm = String(now.getMonth() + 1).padStart(2, '0');\n  const dd = String(now.getDate()).padStart(2, '0');\n  return `${code}-${mm}${dd}`;\n}\n\nconst client_code = generateClientCode(brand_name);\n\n// Start date: today in DD/MM/YYYY\nconst now = new Date();\nconst start_date = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;\n\nreturn [{\n  json: {\n    client_code,\n    brand_name,\n    client_name,\n    client_email,\n    whatsapp_number,\n    website_url,\n    product_feature,\n    differentiator,\n    competitors,\n    competitor_strengths,\n    target_user,\n    biggest_problem,\n    main_hesitation,\n    social_proof,\n    selling_proposition,\n    brand_personality,\n    credibility_point,\n    transformation,\n    best_concepts,\n    compliance,\n    reference_ads,\n    available_assets,\n    do_not_say,\n    additional_notes,\n    status: 'Onboarding',\n    start_date,\n    folder_name: `${brand_name} - UGC`,\n    list_name: `${brand_name} - UGC Pipeline`\n  }\n}];"
+        "jsCode": "// ============================================================\n// Parse JotForm & Generate Client Code\n// Handles multiple JotForm data formats\n// ============================================================\n\nconst body = $input.first().json.body || $input.first().json;\n\n// --- STRATEGY 1: rawRequest JSON string ---\nlet parsed = null;\ntry {\n  if (body.rawRequest && typeof body.rawRequest === 'string') {\n    parsed = JSON.parse(body.rawRequest);\n  } else if (body.rawRequest && typeof body.rawRequest === 'object') {\n    parsed = body.rawRequest;\n  }\n} catch (e) {\n  parsed = null;\n}\n\n// --- STRATEGY 2: q-prefixed fields (q1_whatIs, q2_email, etc.) ---\nfunction fromQFields(b) {\n  const qMap = {};\n  for (const key of Object.keys(b)) {\n    if (/^q\\d+/.test(key)) {\n      qMap[key] = b[key];\n    }\n  }\n  if (Object.keys(qMap).length === 0) return null;\n\n  // Sort by question number\n  const sorted = Object.entries(qMap).sort((a, b) => {\n    const numA = parseInt(a[0].match(/^q(\\d+)/)[1]);\n    const numB = parseInt(b[0].match(/^q(\\d+)/)[1]);\n    return numA - numB;\n  });\n\n  // Map by order (best-effort mapping based on form field order)\n  const fieldOrder = [\n    'client_name', 'client_email', 'whatsapp_number', 'brand_name', 'website_url',\n    'product_feature', 'differentiator', 'competitors', 'competitor_strengths',\n    'target_user', 'biggest_problem', 'main_hesitation',\n    'social_proof', 'selling_proposition', 'brand_personality', 'credibility_point', 'transformation',\n    'best_concepts', 'compliance', 'reference_ads', 'available_assets', 'do_not_say', 'additional_notes'\n  ];\n\n  const result = {};\n  sorted.forEach(([key, val], i) => {\n    if (i < fieldOrder.length) {\n      result[fieldOrder[i]] = val;\n    }\n  });\n  return result;\n}\n\n// --- STRATEGY 3: Direct field names ---\nfunction fromDirectFields(b) {\n  const directFields = [\n    'client_name', 'client_email', 'whatsapp_number', 'brand_name', 'website_url',\n    'product_feature', 'differentiator', 'competitors', 'competitor_strengths',\n    'target_user', 'biggest_problem', 'main_hesitation',\n    'social_proof', 'selling_proposition', 'brand_personality', 'credibility_point', 'transformation',\n    'best_concepts', 'compliance', 'reference_ads', 'available_assets', 'do_not_say', 'additional_notes'\n  ];\n  const found = {};\n  let count = 0;\n  for (const f of directFields) {\n    if (b[f] !== undefined) {\n      found[f] = b[f];\n      count++;\n    }\n  }\n  return count > 0 ? found : null;\n}\n\n// Resolve data source\nlet data = parsed || fromQFields(body) || fromDirectFields(body) || body;\n\n// --- HELPER: Clean a field value ---\nfunction clean(val) {\n  if (val === undefined || val === null) return '';\n  if (Array.isArray(val)) return val.map(v => String(v).trim()).filter(Boolean).join(', ');\n  if (typeof val === 'object') {\n    // Handle name object: { first, last } or { prefix, first, middle, last }\n    if (val.first || val.last) {\n      return [val.prefix, val.first, val.middle, val.last].filter(Boolean).map(s => String(s).trim()).join(' ');\n    }\n    // Handle phone object: { area, phone } or { countryCode, area, phone }\n    if (val.phone !== undefined) {\n      const parts = [val.countryCode, val.area, val.phone].filter(Boolean).map(s => String(s).replace(/[\\s\\-()]/g, ''));\n      return parts.join('');\n    }\n    return JSON.stringify(val);\n  }\n  return String(val).trim();\n}\n\n// --- Extract and clean all 23 fields ---\nconst client_name = clean(data.client_name || data.clientName || data.name);\nconst client_email = clean(data.client_email || data.clientEmail || data.email);\nconst whatsapp_number = clean(data.whatsapp_number || data.whatsappNumber || data.whatsapp || data.phone);\nconst brand_name = clean(data.brand_name || data.brandName || data.brand);\nconst website_url = clean(data.website_url || data.websiteUrl || data.website);\nconst product_feature = clean(data.product_feature || data.productFeature);\nconst differentiator = clean(data.differentiator);\nconst competitors = clean(data.competitors);\nconst competitor_strengths = clean(data.competitor_strengths || data.competitorStrengths);\nconst target_user = clean(data.target_user || data.targetUser);\nconst biggest_problem = clean(data.biggest_problem || data.biggestProblem);\nconst main_hesitation = clean(data.main_hesitation || data.mainHesitation);\nconst social_proof = clean(data.social_proof || data.socialProof);\nconst selling_proposition = clean(data.selling_proposition || data.sellingProposition);\nconst brand_personality = clean(data.brand_personality || data.brandPersonality);\nconst credibility_point = clean(data.credibility_point || data.credibilityPoint);\nconst transformation = clean(data.transformation);\nconst best_concepts = clean(data.best_concepts || data.bestConcepts);\nconst compliance = clean(data.compliance);\nconst reference_ads = clean(data.reference_ads || data.referenceAds);\nconst available_assets = clean(data.available_assets || data.availableAssets);\nconst do_not_say = clean(data.do_not_say || data.doNotSay);\nconst additional_notes = clean(data.additional_notes || data.additionalNotes);\n\n// --- Generate Client Code ---\n// Rules: first 3 chars of brand name (uppercase), skip \"The\" prefix, strip special chars\nfunction generateClientCode(brandName) {\n  let name = brandName.trim();\n  // Remove leading \"The \" (case-insensitive)\n  name = name.replace(/^the\\s+/i, '');\n  // Remove special characters, keep letters and spaces\n  name = name.replace(/[^a-zA-Z\\s]/g, '');\n  // Take first 3 alphabetic characters of concatenated name (no spaces)\n  // Examples: 'Yaan Man' → YAA, 'Supafuelz' → SUP, 'The Pain Company' → (skip The) → PAI\n  const concat = name.replace(/\\s+/g, '');\n  const code = (concat.substring(0, 3) || 'XXX').toUpperCase();\n\n  // Add date: MMDD\n  const now = new Date();\n  const mm = String(now.getMonth() + 1).padStart(2, '0');\n  const dd = String(now.getDate()).padStart(2, '0');\n  return `${code}-${mm}${dd}`;\n}\n\nconst client_code = generateClientCode(brand_name);\n\n// Start date: today in DD/MM/YYYY\nconst now = new Date();\nconst start_date = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;\n\nreturn [{\n  json: {\n    client_code,\n    brand_name,\n    client_name,\n    client_email,\n    whatsapp_number,\n    website_url,\n    product_feature,\n    differentiator,\n    competitors,\n    competitor_strengths,\n    target_user,\n    biggest_problem,\n    main_hesitation,\n    social_proof,\n    selling_proposition,\n    brand_personality,\n    credibility_point,\n    transformation,\n    best_concepts,\n    compliance,\n    reference_ads,\n    available_assets,\n    do_not_say,\n    additional_notes,\n    status: 'Onboarding',\n    start_date,\n    folder_name: `${brand_name} - UGC`,\n    list_name: `${brand_name} - UGC Pipeline`,\n    channel_name: `${brand_name} - UGC`\n  }\n}];"
       },
       "id": "node-parse",
       "name": "Parse JotForm & Generate Client Code",
@@ -289,7 +289,7 @@
           "value": "C07MN9QA1R7",
           "mode": "id"
         },
-        "text": "={{ (() => {\nconst d = $('Parse JotForm & Generate Client Code').first().json;\nconst product = (d.product_feature || '').substring(0, 100);\nconst target = (d.target_user || '').substring(0, 100);\nconst diff = (d.differentiator || '').substring(0, 100);\nconst comp = d.compliance || 'None';\nconst dontSay = d.do_not_say || 'None';\nconst personality = d.brand_personality || 'Not specified';\nreturn `🎬 *New UGC Client Onboarded!*\\n\\n*${d.client_code} — ${d.brand_name}*\\nProduct: ${product}\\nTarget: ${target}\\nDifferentiator: ${diff}\\nBrand: ${personality}\\n\\n⚠️ Compliance: ${comp}\\n🚫 Do not: ${dontSay}\\n\\n📋 ClickUp: ${d.folder_name} created with 10 tasks (15-day timeline)\\nAM: TBD\\n\\n_Let's make some fire ads!_ 🔥`;\n})() }}",
+        "text": "={{ (() => {\nconst d = $('Parse JotForm & Generate Client Code').first().json;\nconst product = (d.product_feature || '').substring(0, 100);\nconst target = (d.target_user || '').substring(0, 100);\nconst diff = (d.differentiator || '').substring(0, 100);\nconst comp = d.compliance || 'None';\nconst dontSay = d.do_not_say || 'None';\nconst personality = d.brand_personality || 'Not specified';\nreturn `🎬 *New UGC Client Onboarded!*\\n\\n*${d.client_code} — ${d.brand_name}*\\nProduct: ${product}\\nTarget: ${target}\\nDifferentiator: ${diff}\\nBrand: ${personality}\\n\\n⚠️ Compliance: ${comp}\\n🚫 Do not: ${dontSay}\\n\\n📋 ClickUp: ${d.folder_name} created with 10 tasks (15-day timeline) + Chat Channel\\nAM: TBD\\n\\n_Let's make some fire ads!_ 🔥`;\n})() }}",
         "otherOptions": {}
       },
       "id": "node-slack",
@@ -340,8 +340,8 @@
             "D": "Success",
             "E": "Yes",
             "F": "Yes",
-            "G": "Skipped",
-            "H": "Skipped",
+            "G": "Yes",
+            "H": "Yes",
             "I": "Yes",
             "J": ""
           }
@@ -489,6 +489,43 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [2360, 820]
+    },
+    {
+      "parameters": {
+        "content": "## 5b. CLICKUP — Create Chat Channel (HTTP Request)\nPOST /api/v3/workspaces/{id}/chat/channels\nCreates a \"[Brand] - UGC\" Chat Channel so the team can communicate about this client.\nRequires workspace_id — replace YOUR_CLICKUP_WORKSPACE_ID with your actual ClickUp workspace ID.",
+        "height": 200,
+        "width": 380,
+        "color": 5
+      },
+      "id": "sticky-clickup-channel",
+      "name": "Sticky Note - ClickUp Channel",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [2130, 80]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.clickup.com/api/v3/workspaces/YOUR_CLICKUP_WORKSPACE_ID/chat/channels",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "clickUpApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ name: $('Parse JotForm & Generate Client Code').item.json.channel_name }) }}",
+        "options": {}
+      },
+      "id": "node-clickup-channel",
+      "name": "Create Chat Channel",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2150, 320],
+      "credentials": {
+        "clickUpApi": {
+          "id": "YOUR_CLICKUP_CREDENTIAL_ID",
+          "name": "ClickUp account"
+        }
+      },
+      "onError": "continueErrorOutput"
     }
   ],
   "connections": {
@@ -551,6 +588,24 @@
       ]
     },
     "Create Pipeline List in Folder": {
+      "main": [
+        [
+          {
+            "node": "Create Chat Channel",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Handle Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Chat Channel": {
       "main": [
         [
           {
