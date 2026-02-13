@@ -1,11 +1,24 @@
 {
-  "name": "UGC Script Writing Agent — Smashed Agency",
+  "name": "UGC Script Writing Agent Team — Smashed Agency",
   "nodes": [
     {
       "parameters": {
-        "content": "## 1. TRIGGER\nWebhook receives POST at /ugc-script-agent\nPayload: { \"client_code\": \"ABC-0213\" }\n\nOptional fields:\n- scripts_folder_id (Google Drive)\n- clickup_list_id\nIf omitted, the agent looks them up automatically.",
-        "height": 220,
-        "width": 340,
+        "content": "## AGENT TEAM ARCHITECTURE\n\nThis is NOT an automation — it's a team of 4 AI agents that\nthink, decide, and collaborate autonomously.\n\n1. RESEARCH ANALYST — Analyzes brief, researches brand & competitors\n2. CREATIVE STRATEGIST — Develops angles, picks formats, makes creative calls\n3. SCRIPT WRITER — Writes scripts with full creative autonomy\n4. QA & COMPLIANCE — Reviews, decides APPROVE or REVISE\n\nThe QA agent can REJECT scripts and send them back to the\nwriter with revision notes — creating an autonomous quality loop.\nMax 2 revision cycles before final output.\n\nAfter approval, scripts flow to Google Docs, ClickUp, and Slack.",
+        "height": 360,
+        "width": 460,
+        "color": 7
+      },
+      "id": "sticky-architecture",
+      "name": "Sticky Note - Architecture",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-280, -60]
+    },
+    {
+      "parameters": {
+        "content": "## 1. TRIGGER\nWebhook POST /ugc-script-agent\nPayload: { \"client_code\": \"ABC-0213\" }",
+        "height": 140,
+        "width": 300,
         "color": 4
       },
       "id": "sticky-trigger",
@@ -29,19 +42,6 @@
       "webhookId": "ugc-script-agent-webhook"
     },
     {
-      "parameters": {
-        "content": "## TEST TRIGGER\nClick 'Test workflow' to run with demo data.\nUses the same test brand from onboarding.\nDisable this path in production.",
-        "height": 180,
-        "width": 340,
-        "color": 7
-      },
-      "id": "sticky-test",
-      "name": "Sticky Note - Test",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [240, -360]
-    },
-    {
       "parameters": {},
       "id": "node-manual-trigger",
       "name": "Manual Trigger — Test",
@@ -51,189 +51,382 @@
     },
     {
       "parameters": {
-        "jsCode": "// ============================================================\n// TEST DATA — Simulates a webhook call with client_code\n// In production this comes from the webhook payload.\n// ============================================================\n\nreturn [{\n  json: {\n    body: {\n      client_code: 'TES-0213'\n    }\n  }\n}];"
+        "jsCode": "return [{ json: { body: { client_code: 'TES-0213' } } }];"
       },
       "id": "node-test-data",
       "name": "Set Test Data",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [680, -140]
+      "position": [580, -140]
     },
     {
       "parameters": {
-        "jsCode": "// ============================================================\n// Extract client_code from webhook or test payload\n// ============================================================\n\nconst body = $input.first().json.body || $input.first().json;\nconst client_code = (body.client_code || body.clientCode || '').trim();\n\nif (!client_code) {\n  throw new Error('client_code is required in the webhook payload');\n}\n\nreturn [{\n  json: {\n    client_code,\n    scripts_folder_id: body.scripts_folder_id || '',\n    clickup_list_id: body.clickup_list_id || ''\n  }\n}];"
+        "jsCode": "const body = $input.first().json.body || $input.first().json;\nconst client_code = (body.client_code || body.clientCode || '').trim();\nif (!client_code) throw new Error('client_code is required');\nreturn [{ json: { client_code } }];"
       },
       "id": "node-extract-code",
       "name": "Extract Client Code",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [680, 320]
+      "position": [580, 320]
     },
     {
       "parameters": {
-        "content": "## 2. FETCH CLIENT BRIEF\nLooks up the client row in Google Sheets by client_code.\nPulls all 23+ onboarding fields so the AI has full context.\nSame spreadsheet as the onboarding workflow.",
-        "height": 200,
-        "width": 360,
+        "content": "## 2. FETCH BRIEF\nLooks up the client in Google Sheets.\nAll 23+ onboarding fields become agent context.",
+        "height": 140,
+        "width": 320,
         "color": 3
       },
       "id": "sticky-fetch",
-      "name": "Sticky Note - Fetch Brief",
+      "name": "Sticky Note - Fetch",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [1060, 80]
+      "position": [900, 80]
     },
     {
       "parameters": {
         "operation": "read",
-        "documentId": {
-          "__rl": true,
-          "value": "1cB4wtyp0l0xwH2Ukw-U93eW9_Ix1lB6EroYs1GyDLCM",
-          "mode": "id"
-        },
-        "sheetName": {
-          "__rl": true,
-          "value": "Client Database",
-          "mode": "name"
-        },
+        "documentId": { "__rl": true, "value": "1cB4wtyp0l0xwH2Ukw-U93eW9_Ix1lB6EroYs1GyDLCM", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Client Database", "mode": "name" },
         "filtersUI": {
-          "values": [
-            {
-              "lookupColumn": "client_code",
-              "lookupValue": "={{ $json.client_code }}"
-            }
-          ]
+          "values": [{ "lookupColumn": "client_code", "lookupValue": "={{ $json.client_code }}" }]
         },
         "options": {}
       },
       "id": "node-fetch-brief",
-      "name": "Fetch Client Brief from Sheets",
+      "name": "Fetch Client Brief",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
-      "position": [1100, 320],
-      "credentials": {
-        "googleSheetsOAuth2Api": {
-          "id": "YOUR_GOOGLE_SHEETS_CREDENTIAL_ID",
-          "name": "Google Sheets account"
-        }
-      },
+      "position": [940, 320],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "YOUR_GOOGLE_SHEETS_CREDENTIAL_ID", "name": "Google Sheets account" } },
       "onError": "continueErrorOutput"
     },
     {
       "parameters": {
-        "jsCode": "// ============================================================\n// Validate Brief & Merge Context\n// Ensures all required fields are present and builds\n// a clean data object for downstream AI prompts.\n// ============================================================\n\nconst items = $input.all();\nif (!items || items.length === 0 || !items[0].json) {\n  throw new Error('No client found for the given client_code. Check the Client Database sheet.');\n}\n\nconst row = items[0].json;\n\n// Passthrough optional IDs from the trigger\nlet scripts_folder_id = '';\nlet clickup_list_id = '';\ntry {\n  const trigger = $('Extract Client Code').first().json;\n  scripts_folder_id = trigger.scripts_folder_id || '';\n  clickup_list_id = trigger.clickup_list_id || '';\n} catch(e) {}\n\nfunction clean(val) {\n  if (val === undefined || val === null) return '';\n  return String(val).trim();\n}\n\nconst brief = {\n  client_code: clean(row.client_code),\n  brand_name: clean(row.brand_name),\n  client_name: clean(row.client_name),\n  client_email: clean(row.client_email),\n  whatsapp_number: clean(row.whatsapp_number),\n  website_url: clean(row.website_url),\n  product_feature: clean(row.product_feature),\n  differentiator: clean(row.differentiator),\n  competitors: clean(row.competitors),\n  competitor_strengths: clean(row.competitor_strengths),\n  target_user: clean(row.target_user),\n  biggest_problem: clean(row.biggest_problem),\n  main_hesitation: clean(row.main_hesitation),\n  social_proof: clean(row.social_proof),\n  selling_proposition: clean(row.selling_proposition),\n  brand_personality: clean(row.brand_personality),\n  credibility_point: clean(row.credibility_point),\n  transformation: clean(row.transformation),\n  best_concepts: clean(row.best_concepts),\n  compliance: clean(row.compliance),\n  reference_ads: clean(row.reference_ads),\n  available_assets: clean(row.available_assets),\n  do_not_say: clean(row.do_not_say),\n  additional_notes: clean(row.additional_notes),\n  num_scripts: parseInt(clean(row.num_scripts)) || 3,\n  scripts_folder_id,\n  clickup_list_id\n};\n\n// Validation\nconst required = ['brand_name', 'product_feature', 'target_user'];\nconst missing = required.filter(f => !brief[f]);\nif (missing.length > 0) {\n  throw new Error('Brief is missing required fields: ' + missing.join(', '));\n}\n\nreturn [{ json: brief }];"
+        "jsCode": "// ============================================================\n// Validate brief and build the master context object\n// that all agents will reference throughout the pipeline.\n// ============================================================\n\nconst items = $input.all();\nif (!items || items.length === 0 || !items[0].json) {\n  throw new Error('No client found. Check client_code in the Client Database.');\n}\nconst row = items[0].json;\nfunction c(v) { return v === undefined || v === null ? '' : String(v).trim(); }\n\nconst brief = {\n  client_code: c(row.client_code),\n  brand_name: c(row.brand_name),\n  client_name: c(row.client_name),\n  client_email: c(row.client_email),\n  website_url: c(row.website_url),\n  product_feature: c(row.product_feature),\n  differentiator: c(row.differentiator),\n  competitors: c(row.competitors),\n  competitor_strengths: c(row.competitor_strengths),\n  target_user: c(row.target_user),\n  biggest_problem: c(row.biggest_problem),\n  main_hesitation: c(row.main_hesitation),\n  social_proof: c(row.social_proof),\n  selling_proposition: c(row.selling_proposition),\n  brand_personality: c(row.brand_personality),\n  credibility_point: c(row.credibility_point),\n  transformation: c(row.transformation),\n  best_concepts: c(row.best_concepts),\n  compliance: c(row.compliance),\n  reference_ads: c(row.reference_ads),\n  available_assets: c(row.available_assets),\n  do_not_say: c(row.do_not_say),\n  additional_notes: c(row.additional_notes),\n  num_scripts: parseInt(c(row.num_scripts)) || 3\n};\n\nconst required = ['brand_name', 'product_feature', 'target_user'];\nconst missing = required.filter(f => !brief[f]);\nif (missing.length > 0) throw new Error('Brief missing: ' + missing.join(', '));\n\nreturn [{ json: { brief, revision_count: 0 } }];"
       },
-      "id": "node-validate-brief",
-      "name": "Validate & Prepare Brief",
+      "id": "node-validate",
+      "name": "Validate Brief",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1520, 320]
+      "position": [1260, 320]
+    },
+
+    {
+      "parameters": {
+        "content": "## AGENT 1: RESEARCH ANALYST\nAnalyzes the brief, researches brand positioning,\ncompetitor landscape, and audience psychology.\nHas a web scraping tool to read the brand's website.\nOutputs actionable research insights for the strategist.",
+        "height": 200,
+        "width": 380,
+        "color": 6
+      },
+      "id": "sticky-agent-research",
+      "name": "Sticky Note - Research Agent",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [1580, 80]
     },
     {
       "parameters": {
-        "content": "## 3. AI — CREATIVE STRATEGY\nCalls OpenAI GPT-4o to analyze the client brief and\ngenerate N unique creative angles. Each angle has:\n- Name, format, hook, key message, emotional trigger.\n\nUses JSON mode for reliable parsing.\nSwap the model or URL for Claude/Gemini if preferred.",
+        "jsCode": "// ============================================================\n// Build the Research Agent's input prompt from the brief.\n// The agent will analyze this and produce research insights.\n// ============================================================\n\nconst { brief } = $json;\n\nconst prompt = `ANALYZE THIS CLIENT BRIEF AND PRODUCE A RESEARCH REPORT:\n\n== BRAND ==\nBrand: ${brief.brand_name}\nProduct: ${brief.product_feature}\nDifferentiator: ${brief.differentiator}\nSelling Proposition: ${brief.selling_proposition}\nWebsite: ${brief.website_url}\n\n== COMPETITION ==\nCompetitors: ${brief.competitors}\nCompetitor Strengths: ${brief.competitor_strengths}\n\n== TARGET AUDIENCE ==\nTarget User: ${brief.target_user}\nBiggest Problem: ${brief.biggest_problem}\nMain Hesitation (why they don't buy): ${brief.main_hesitation}\nDesired Transformation: ${brief.transformation}\n\n== BRAND IDENTITY ==\nPersonality: ${brief.brand_personality}\nCredibility: ${brief.credibility_point}\nSocial Proof: ${brief.social_proof}\nReference Ads They Like: ${brief.reference_ads || 'Not specified'}\n\nProduce your research report with these sections:\n1. BRAND POSITIONING ANALYSIS — Where does this brand sit? What's the white space?\n2. COMPETITOR AD LANDSCAPE — What are competitors likely doing? What's overdone vs underused?\n3. AUDIENCE PSYCHOLOGY — Real pain points, desires, language patterns, purchase triggers\n4. CONTENT OPPORTUNITIES — Untapped angles based on the market gap\n5. KEY INSIGHTS — 5 specific, actionable insights to guide script creation`;\n\nreturn [{ json: { prompt, brief } }];"
+      },
+      "id": "node-prep-research",
+      "name": "Build Research Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1620, 320]
+    },
+    {
+      "parameters": {
+        "agent": "openAiFunctionsAgent",
+        "promptType": "define",
+        "text": "={{ $json.prompt }}",
+        "options": {
+          "systemMessage": "You are a senior market research analyst at a top-tier UGC performance marketing agency. You've analyzed 200+ DTC brands across beauty, health, food, fashion, and tech.\n\nYour job is to produce research insights that directly inform creative strategy — not academic analysis, but actionable intelligence.\n\nRESEARCH APPROACH:\n- Think about what's ACTUALLY happening in this market, not textbook theory\n- Identify what competitors are doing with their UGC ads (based on your knowledge of common industry patterns)\n- Understand the target audience's REAL language — how they talk about this problem on social media\n- Find the white space — angles competitors aren't using\n- Be specific to THIS brand and product, not generic\n\nIf you have a web research tool available, use it to check the brand's website for additional product details, pricing, and positioning.\n\nOUTPUT FORMAT:\nProvide a structured research report with clear sections and bullet points. Be concise but specific. Every insight should be directly usable by a creative strategist.",
+          "maxIterations": 5
+        }
+      },
+      "id": "node-agent-research",
+      "name": "Research Analyst Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [1960, 320]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "options": { "temperature": 0.6, "maxTokens": 3000 }
+      },
+      "id": "node-llm-research",
+      "name": "GPT-4o — Research",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1,
+      "position": [1860, 540],
+      "credentials": { "openAiApi": { "id": "YOUR_OPENAI_CREDENTIAL_ID", "name": "OpenAI account" } }
+    },
+    {
+      "parameters": {
+        "name": "read_website",
+        "description": "Fetch and read a brand's website to gather product details, pricing, and positioning. Input should be a full URL.",
+        "method": "GET",
+        "url": "={{ $fromAI('url', 'The full URL to fetch') }}",
+        "placeholderDefinitions": {
+          "values": [{ "name": "url", "description": "The URL to read" }]
+        },
+        "options": {}
+      },
+      "id": "node-tool-web",
+      "name": "Tool — Read Website",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [2060, 540]
+    },
+
+    {
+      "parameters": {
+        "content": "## AGENT 2: CREATIVE STRATEGIST\nTakes research + brief and DECIDES:\n- Which UGC formats are best for THIS brand\n- Which creative angles to pursue (and why)\n- What emotional triggers to use per script\n- How to differentiate from competitor ads\n\nThis agent makes STRATEGIC DECISIONS, not templates.",
+        "height": 220,
+        "width": 380,
+        "color": 6
+      },
+      "id": "sticky-agent-strategy",
+      "name": "Sticky Note - Strategy Agent",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [2380, 80]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Build Strategy Agent prompt with brief + research output\n// The strategist makes creative DECISIONS based on research.\n// ============================================================\n\nconst brief = $('Validate Brief').first().json.brief;\nconst researchOutput = $input.first().json.output || $input.first().json.text || JSON.stringify($input.first().json);\n\nconst prompt = `You have research from our Research Analyst. Now develop the creative strategy.\n\n== CLIENT BRIEF ==\nBrand: ${brief.brand_name}\nProduct: ${brief.product_feature}\nDifferentiator: ${brief.differentiator}\nTarget: ${brief.target_user}\nProblem: ${brief.biggest_problem}\nHesitation: ${brief.main_hesitation}\nTransformation: ${brief.transformation}\nPersonality: ${brief.brand_personality}\nSocial Proof: ${brief.social_proof}\nCredibility: ${brief.credibility_point}\nBest Concepts: ${brief.best_concepts || 'Not specified'}\nCompliance: ${brief.compliance || 'None'}\nDo NOT Say: ${brief.do_not_say || 'None'}\nNumber of Scripts Needed: ${brief.num_scripts}\n\n== RESEARCH REPORT ==\n${researchOutput}\n\n== YOUR TASK ==\nDevelop exactly ${brief.num_scripts} UNIQUE creative angles.\n\nFor EACH angle, make a clear DECISION on:\n1. ANGLE NAME — A distinctive name for this approach\n2. FORMAT — Which UGC format (testimonial, problem-solution, storytime, unboxing, before-after, day-in-life, 3-reasons, myth-buster, GRWM, comparison) and WHY this format fits this angle\n3. HOOK — The exact first line (under 10 words, must stop the scroll)\n4. EMOTIONAL JOURNEY — What sequence of emotions the viewer experiences\n5. KEY PERSUASION — The core argument that overcomes the target's hesitation\n6. DIFFERENTIATION — How this angle positions the brand against competitors\n7. TARGET OBJECTION — Which specific objection/hesitation this angle addresses\n\nIMPORTANT: Each angle must be DISTINCTLY different — different format, different emotional trigger, different entry point. Do not create variations of the same idea.`;\n\nreturn [{ json: { prompt, brief } }];"
+      },
+      "id": "node-prep-strategy",
+      "name": "Build Strategy Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2420, 320]
+    },
+    {
+      "parameters": {
+        "agent": "openAiFunctionsAgent",
+        "promptType": "define",
+        "text": "={{ $json.prompt }}",
+        "options": {
+          "systemMessage": "You are a UGC Creative Director who has driven 8-figure ad spend across 50+ DTC brands. You don't follow templates — you make bold creative decisions based on deep market understanding.\n\nYour strategic instincts:\n- You know which UGC formats perform best for different product categories\n- You understand that variety isn't random — each angle should attack a different objection\n- You pick hooks based on what's ACTUALLY stopping scrolls right now, not what worked 2 years ago\n- You think about the viewer's emotional state and design a journey from attention → desire → action\n- You avoid what competitors are doing and find the white space\n\nCRITICAL RULES:\n- Never suggest an angle that violates the compliance rules\n- Never include anything from the 'do not say' list\n- Each angle MUST target a different objection or entry point\n- Think like a creator, not a marketer — authentic beats polished\n- Be decisive. Don't hedge with 'could' or 'might' — state what WILL work and WHY",
+          "maxIterations": 3
+        }
+      },
+      "id": "node-agent-strategy",
+      "name": "Creative Strategist Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [2780, 320]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "options": { "temperature": 0.85, "maxTokens": 3000 }
+      },
+      "id": "node-llm-strategy",
+      "name": "GPT-4o — Strategy",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1,
+      "position": [2780, 540],
+      "credentials": { "openAiApi": { "id": "YOUR_OPENAI_CREDENTIAL_ID", "name": "OpenAI account" } }
+    },
+
+    {
+      "parameters": {
+        "content": "## AGENT 3: SCRIPT WRITER\nTakes strategy + brief and WRITES complete scripts.\nFull creative autonomy — adapts tone, pacing, and\nstyle to match the brand personality.\nOutputs structured scripts with sections + visual notes.\n\nOn revision (from QA), rewrites ONLY flagged scripts\nusing specific feedback from the QA agent.",
         "height": 240,
         "width": 380,
         "color": 6
       },
-      "id": "sticky-strategy",
-      "name": "Sticky Note - AI Strategy",
+      "id": "sticky-agent-writer",
+      "name": "Sticky Note - Writer Agent",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [1940, 80]
+      "position": [3200, 80]
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "https://api.openai.com/v1/chat/completions",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ (() => {\nconst d = $json;\nconst systemPrompt = `You are a senior UGC creative strategist at a top-tier performance marketing agency. You specialize in direct-response UGC ads for social media (TikTok, Instagram Reels, Facebook).\n\nYour job is to analyze a client brief and generate unique, high-converting creative angles for UGC ad scripts.\n\nRULES:\n- Every angle MUST be distinctly different in approach, format, and emotional trigger\n- Hooks must be scroll-stopping, native to social media, and under 10 words\n- Respect all compliance rules strictly\n- Never include anything from the \"do not say\" list\n- Each angle should target a different objection, desire, or entry point\n- Think like a creator, not a marketer — authentic > polished\n\nAvailable UGC formats (choose the best fit for each angle):\n1. Testimonial / Review — \"I've been using this for 2 weeks...\"\n2. Problem-Solution — \"I was struggling with X until I found...\"\n3. Storytime — \"Okay so this is crazy, let me tell you what happened...\"\n4. Unboxing / First Impressions — \"Just got this in the mail, let's try it\"\n5. Before/After — \"Here's my skin before vs after 14 days\"\n6. Day in My Life — \"Morning routine featuring [product]\"\n7. 3 Reasons Why — \"3 reasons I switched to [brand]\"\n8. Myth Buster — \"Everyone thinks X but actually...\"\n9. Get Ready With Me — \"GRWM using [product]\"\n10. Comparison — \"I tried [competitor] AND [brand], here's the truth\"\n\nRespond in JSON format only.`;\n\nconst userPrompt = `BRIEF FOR: ${d.brand_name}\n\n== PRODUCT ==\nProduct/Feature: ${d.product_feature}\nDifferentiator: ${d.differentiator}\nSelling Proposition: ${d.selling_proposition}\nWebsite: ${d.website_url}\n\n== TARGET AUDIENCE ==\nTarget User: ${d.target_user}\nBiggest Problem: ${d.biggest_problem}\nMain Hesitation: ${d.main_hesitation}\nTransformation: ${d.transformation}\n\n== BRAND & CREATIVE ==\nBrand Personality: ${d.brand_personality}\nCredibility: ${d.credibility_point}\nSocial Proof: ${d.social_proof}\nBest Concepts: ${d.best_concepts || 'Not specified'}\nReference Ads: ${d.reference_ads || 'Not specified'}\n\n== COMPETITORS ==\nCompetitors: ${d.competitors}\nWhat They Do Better: ${d.competitor_strengths}\n\n== RULES ==\nCompliance: ${d.compliance || 'None specified'}\nDo NOT Say: ${d.do_not_say || 'None specified'}\nAdditional Notes: ${d.additional_notes || 'None'}\n\n== TASK ==\nGenerate exactly ${d.num_scripts} unique creative angles.\n\nReturn a JSON object with this structure:\n{\n  \"brand\": \"${d.brand_name}\",\n  \"total_angles\": ${d.num_scripts},\n  \"angles\": [\n    {\n      \"angle_number\": 1,\n      \"angle_name\": \"Pain Point Agitator\",\n      \"format\": \"Problem-Solution\",\n      \"hook\": \"I was SO tired of [specific problem]...\",\n      \"key_message\": \"The core persuasion point for this angle\",\n      \"emotional_trigger\": \"frustration → relief\",\n      \"target_objection\": \"Which hesitation or objection this angle addresses\"\n    }\n  ]\n}`;\n\nreturn JSON.stringify({\n  model: 'gpt-4o',\n  response_format: { type: 'json_object' },\n  temperature: 0.85,\n  max_tokens: 2000,\n  messages: [\n    { role: 'system', content: systemPrompt },\n    { role: 'user', content: userPrompt }\n  ]\n});\n})() }}",
-        "options": {}
+        "jsCode": "// ============================================================\n// Build Script Writer prompt with brief + strategy.\n// If this is a REVISION pass, include QA feedback.\n// ============================================================\n\nconst brief = $('Validate Brief').first().json.brief;\nconst strategyOutput = $('Creative Strategist Agent').first().json.output || $('Creative Strategist Agent').first().json.text || '';\n\n// Check if this is a revision pass\nlet revisionNotes = '';\nlet isRevision = false;\ntry {\n  const qaCheck = $('Check QA Verdict').first().json;\n  if (qaCheck.revision_notes) {\n    revisionNotes = qaCheck.revision_notes;\n    isRevision = true;\n  }\n} catch(e) {\n  // First pass, no revision notes\n}\n\nlet prompt;\nif (isRevision) {\n  prompt = `REVISION REQUESTED — The QA agent has reviewed your scripts and sent them back.\n\n== QA REVISION NOTES ==\n${revisionNotes}\n\n== ORIGINAL BRIEF ==\nBrand: ${brief.brand_name} | Product: ${brief.product_feature}\nDifferentiator: ${brief.differentiator} | Target: ${brief.target_user}\nPersonality: ${brief.brand_personality}\nCompliance: ${brief.compliance || 'None'} | Do NOT Say: ${brief.do_not_say || 'None'}\n\n== CREATIVE STRATEGY ==\n${strategyOutput}\n\nRewrite the scripts addressing ALL revision notes. Keep what worked. Fix what didn't.\nMaintain the same JSON output format as before.`;\n} else {\n  prompt = `Write ${brief.num_scripts} complete UGC scripts based on the strategy below.\n\n== CLIENT BRIEF ==\nBrand: ${brief.brand_name}\nProduct: ${brief.product_feature}\nDifferentiator: ${brief.differentiator}\nSelling Proposition: ${brief.selling_proposition}\nTarget: ${brief.target_user}\nProblem: ${brief.biggest_problem}\nHesitation: ${brief.main_hesitation}\nTransformation: ${brief.transformation}\nPersonality: ${brief.brand_personality}\nCredibility: ${brief.credibility_point}\nSocial Proof: ${brief.social_proof}\nCompliance: ${brief.compliance || 'None'}\nDo NOT Say: ${brief.do_not_say || 'None'}\nNotes: ${brief.additional_notes || 'None'}\n\n== CREATIVE STRATEGY FROM STRATEGIST ==\n${strategyOutput}\n\n== OUTPUT FORMAT ==\nFor EACH of the ${brief.num_scripts} scripts, output this JSON structure:\n{\n  \"scripts\": [\n    {\n      \"script_number\": 1,\n      \"angle_name\": \"from strategy\",\n      \"format\": \"the UGC format\",\n      \"hook\": \"Exact opening words (0-3 sec)\",\n      \"problem\": \"Relate to viewer (3-8 sec)\",\n      \"solution\": \"Introduce product naturally (8-18 sec)\",\n      \"proof\": \"Evidence and credibility (18-25 sec)\",\n      \"cta\": \"Call to action (25-30 sec)\",\n      \"full_script\": \"The complete flowing script a creator would read\",\n      \"visual_direction\": \"What the creator does scene by scene\",\n      \"on_screen_text\": [\"overlay 1\", \"overlay 2\", \"overlay 3\"],\n      \"creator_notes\": \"Tone, energy, pacing, wardrobe, setting\",\n      \"estimated_duration\": \"30 sec\"\n    }\n  ]\n}\n\nOutput ONLY valid JSON. No markdown, no explanation outside the JSON.`;\n}\n\nreturn [{ json: { prompt, brief, is_revision: isRevision } }];"
       },
-      "id": "node-ai-strategy",
-      "name": "AI — Generate Creative Strategy",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [1980, 320],
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "YOUR_OPENAI_CREDENTIAL_ID",
-          "name": "OpenAI API Key"
-        }
-      },
-      "onError": "continueErrorOutput"
-    },
-    {
-      "parameters": {
-        "jsCode": "// ============================================================\n// Parse AI Strategy Response\n// Extracts creative angles from OpenAI JSON response\n// ============================================================\n\nconst response = $input.first().json;\n\nif (!response.choices || !response.choices[0]) {\n  throw new Error('No response from AI strategy call. Check API key and model.');\n}\n\nconst content = response.choices[0].message.content;\nlet strategy;\ntry {\n  strategy = JSON.parse(content);\n} catch (e) {\n  // Try extracting JSON from markdown code block\n  const match = content.match(/```(?:json)?\\s*([\\s\\S]*?)```/);\n  if (match) {\n    strategy = JSON.parse(match[1]);\n  } else {\n    throw new Error('Failed to parse AI strategy response: ' + content.substring(0, 200));\n  }\n}\n\nif (!strategy.angles || !Array.isArray(strategy.angles)) {\n  throw new Error('AI response missing angles array');\n}\n\n// Get brief data for next step\nconst brief = $('Validate & Prepare Brief').first().json;\n\nreturn [{\n  json: {\n    brief,\n    strategy\n  }\n}];"
-      },
-      "id": "node-parse-strategy",
-      "name": "Parse Creative Strategy",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [2400, 320]
-    },
-    {
-      "parameters": {
-        "content": "## 4. AI — WRITE ALL SCRIPTS\nCalls OpenAI GPT-4o with the strategy + brief to write\nall UGC scripts in one call. Each script includes:\n- Hook, Problem, Solution, Proof, CTA sections\n- Visual/scene directions for the creator\n- On-screen text suggestions\n- Timing notes\n\nOne call for all scripts keeps costs low and ensures variety.",
-        "height": 260,
-        "width": 400,
-        "color": 6
-      },
-      "id": "sticky-scripts",
-      "name": "Sticky Note - AI Scripts",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [2780, 80]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "https://api.openai.com/v1/chat/completions",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ (() => {\nconst data = $json;\nconst d = data.brief;\nconst strategy = data.strategy;\n\nconst anglesText = strategy.angles.map((a, i) => \n  `Script ${i+1}: \"${a.angle_name}\" — Format: ${a.format} — Hook: \"${a.hook}\" — Key Message: ${a.key_message} — Emotional Trigger: ${a.emotional_trigger} — Target Objection: ${a.target_objection || 'General'}`\n).join('\\n');\n\nconst systemPrompt = `You are an elite UGC script writer at a performance marketing agency. You write scripts that feel authentic, relatable, and native to social media — never corporate or salesy.\n\nYour scripts consistently achieve high click-through rates because they:\n- Open with scroll-stopping hooks (first 3 seconds are everything)\n- Feel like a real person talking to a friend\n- Build genuine curiosity and desire\n- Include specific, believable details (not vague claims)\n- End with clear, low-friction CTAs\n\nSCRIPT STRUCTURE (every script must follow this):\n---\nHOOK (0-3 sec): The exact first words. Must stop the scroll instantly.\nPROBLEM (3-8 sec): Relate to the viewer. Be specific and emotional.\nSOLUTION (8-18 sec): Introduce the product naturally. Show don't tell.\nPROOF (18-25 sec): Social proof, results, credibility. Be concrete.\nCTA (25-30 sec): Clear call to action. Create gentle urgency.\n---\n\nADDITIONAL SECTIONS FOR EACH SCRIPT:\n- VISUAL DIRECTION: What the creator should be doing/showing per section\n- ON-SCREEN TEXT: 2-4 text overlays for key moments\n- CREATOR NOTES: Tone guidance, pacing, energy level\n\nRULES:\n- Write in first person, conversational tone\n- Match the brand personality described in the brief\n- Respect ALL compliance rules — no exceptions\n- NEVER include anything from the \"do not say\" list\n- Each script must feel completely different from the others\n- Scripts should be 25-45 seconds when spoken naturally\n- Include specific product details and proof points\n- Address the target audience\\'s actual language and concerns\n\nRespond in JSON format only.`;\n\nconst userPrompt = `BRAND: ${d.brand_name}\nPRODUCT: ${d.product_feature}\nDIFFERENTIATOR: ${d.differentiator}\nSELLING PROPOSITION: ${d.selling_proposition}\nTARGET USER: ${d.target_user}\nBIGGEST PROBLEM: ${d.biggest_problem}\nMAIN HESITATION: ${d.main_hesitation}\nTRANSFORMATION: ${d.transformation}\nBRAND PERSONALITY: ${d.brand_personality}\nCREDIBILITY: ${d.credibility_point}\nSOCIAL PROOF: ${d.social_proof}\nCOMPLIANCE: ${d.compliance || 'None'}\nDO NOT SAY: ${d.do_not_say || 'None'}\nADDITIONAL NOTES: ${d.additional_notes || 'None'}\n\nCREATIVE STRATEGY (write one script per angle):\n${anglesText}\n\nWrite exactly ${d.num_scripts} complete UGC scripts.\n\nReturn JSON:\n{\n  \"brand\": \"${d.brand_name}\",\n  \"total_scripts\": ${d.num_scripts},\n  \"scripts\": [\n    {\n      \"script_number\": 1,\n      \"angle_name\": \"from strategy\",\n      \"format\": \"from strategy\",\n      \"hook\": \"Exact words (0-3 sec)\",\n      \"problem\": \"Exact words (3-8 sec)\",\n      \"solution\": \"Exact words (8-18 sec)\",\n      \"proof\": \"Exact words (18-25 sec)\",\n      \"cta\": \"Exact words (25-30 sec)\",\n      \"full_script\": \"The complete script as one flowing paragraph the creator reads\",\n      \"visual_direction\": \"Scene-by-scene direction for creator\",\n      \"on_screen_text\": [\"Text overlay 1\", \"Text overlay 2\"],\n      \"creator_notes\": \"Tone, energy, pacing guidance\",\n      \"estimated_duration\": \"30 sec\"\n    }\n  ]\n}`;\n\nreturn JSON.stringify({\n  model: 'gpt-4o',\n  response_format: { type: 'json_object' },\n  temperature: 0.8,\n  max_tokens: 6000,\n  messages: [\n    { role: 'system', content: systemPrompt },\n    { role: 'user', content: userPrompt }\n  ]\n});\n})() }}",
-        "options": {}
-      },
-      "id": "node-ai-scripts",
-      "name": "AI — Write All UGC Scripts",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [2820, 320],
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "YOUR_OPENAI_CREDENTIAL_ID",
-          "name": "OpenAI API Key"
-        }
-      },
-      "onError": "continueErrorOutput"
-    },
-    {
-      "parameters": {
-        "jsCode": "// ============================================================\n// Parse AI Scripts Response\n// Extracts all generated scripts from OpenAI response.\n// Formats each script as a readable document for Google Docs.\n// ============================================================\n\nconst response = $input.first().json;\n\nif (!response.choices || !response.choices[0]) {\n  throw new Error('No response from AI script writing call.');\n}\n\nconst content = response.choices[0].message.content;\nlet result;\ntry {\n  result = JSON.parse(content);\n} catch (e) {\n  const match = content.match(/```(?:json)?\\s*([\\s\\S]*?)```/);\n  if (match) {\n    result = JSON.parse(match[1]);\n  } else {\n    throw new Error('Failed to parse AI scripts response: ' + content.substring(0, 300));\n  }\n}\n\nif (!result.scripts || !Array.isArray(result.scripts)) {\n  throw new Error('AI response missing scripts array');\n}\n\nconst brief = $('Validate & Prepare Brief').first().json;\nconst strategy = $('Parse Creative Strategy').first().json.strategy;\n\n// Format each script as a readable document\nconst formattedScripts = result.scripts.map((s, i) => {\n  const onScreenText = Array.isArray(s.on_screen_text) \n    ? s.on_screen_text.map(t => `  • ${t}`).join('\\n') \n    : s.on_screen_text || '';\n\n  const docContent = [\n    `${brief.brand_name} — UGC Script #${s.script_number || (i+1)}`,\n    `═══════════════════════════════════════════`,\n    ``,\n    `ANGLE: ${s.angle_name}`,\n    `FORMAT: ${s.format}`,\n    `DURATION: ${s.estimated_duration || '30 sec'}`,\n    ``,\n    `───────────────────────────────────────────`,\n    `HOOK (0-3 sec)`,\n    `───────────────────────────────────────────`,\n    s.hook,\n    ``,\n    `───────────────────────────────────────────`,\n    `PROBLEM (3-8 sec)`,\n    `───────────────────────────────────────────`,\n    s.problem,\n    ``,\n    `───────────────────────────────────────────`,\n    `SOLUTION (8-18 sec)`,\n    `───────────────────────────────────────────`,\n    s.solution,\n    ``,\n    `───────────────────────────────────────────`,\n    `PROOF (18-25 sec)`,\n    `───────────────────────────────────────────`,\n    s.proof,\n    ``,\n    `───────────────────────────────────────────`,\n    `CTA (25-30 sec)`,\n    `───────────────────────────────────────────`,\n    s.cta,\n    ``,\n    `═══════════════════════════════════════════`,\n    `FULL SCRIPT (for creator to read)`,\n    `═══════════════════════════════════════════`,\n    s.full_script,\n    ``,\n    `═══════════════════════════════════════════`,\n    `VISUAL DIRECTION`,\n    `═══════════════════════════════════════════`,\n    s.visual_direction,\n    ``,\n    `ON-SCREEN TEXT:`,\n    onScreenText,\n    ``,\n    `CREATOR NOTES:`,\n    s.creator_notes,\n    ``,\n    `───────────────────────────────────────────`,\n    `Generated by Smashed Agency Script Agent`,\n    `Client Code: ${brief.client_code}`,\n    `Generated: ${new Date().toISOString()}`\n  ].join('\\n');\n\n  return {\n    script_number: s.script_number || (i + 1),\n    angle_name: s.angle_name,\n    format: s.format,\n    hook: s.hook,\n    full_script: s.full_script,\n    doc_content: docContent,\n    estimated_duration: s.estimated_duration || '30 sec'\n  };\n});\n\nreturn [{\n  json: {\n    brief,\n    strategy,\n    scripts: formattedScripts,\n    total_scripts: formattedScripts.length\n  }\n}];"
-      },
-      "id": "node-parse-scripts",
-      "name": "Parse & Format Scripts",
+      "id": "node-prep-writer",
+      "name": "Build Writer Prompt",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [3240, 320]
     },
     {
       "parameters": {
-        "content": "## 5. GOOGLE DRIVE — FIND SCRIPT DOCS\nSearches the shared Clients drive for existing Google Docs\nmatching the UGC script naming pattern for this brand.\nDocs were created empty during onboarding.\nThe agent fills them with AI-generated content.\n\nClients drive folder: 1tsbdVo92ECUyUCaCwvq1yGCRpA4uCDxT\nRequires Google Docs API scope on your OAuth2 credential.",
-        "height": 260,
-        "width": 400,
-        "color": 3
+        "agent": "openAiFunctionsAgent",
+        "promptType": "define",
+        "text": "={{ $json.prompt }}",
+        "options": {
+          "systemMessage": "You are an elite UGC script writer who has written 500+ scripts generating millions in ad revenue across TikTok, Instagram Reels, and Facebook.\n\nYour scripts CONVERT because they feel real. You write like a creator talking to a friend — never corporate, never forced, never 'ad-like.'\n\nYOUR WRITING PRINCIPLES:\n- The hook is EVERYTHING. If they don't stop scrolling, nothing else matters.\n- Use natural speech — contractions, reactions, pauses, real language\n- Tell mini-stories, not product descriptions\n- Make the viewer FEEL something before introducing the product\n- The product reveal should feel like sharing a discovery, not a sales pitch\n- CTAs create curiosity ('link in bio to see why' > 'buy now')\n- Each script must feel like a completely different creator made it\n\nSCRIPT STRUCTURE:\n- HOOK (0-3 sec): Stop the scroll. This is your most important line.\n- PROBLEM (3-8 sec): Make them nod. 'That's SO me.'\n- SOLUTION (8-18 sec): The natural discovery of the product.\n- PROOF (18-25 sec): Specific, believable evidence. Numbers > vague claims.\n- CTA (25-30 sec): Gentle, curiosity-driven. Never pushy.\n\nADAPT YOUR VOICE to match the brand personality described in the brief. A luxury brand sounds different from a fun DTC brand.\n\nNEVER violate compliance rules. NEVER include anything from the 'do not say' list. These are non-negotiable.\n\nYou MUST output valid JSON only.",
+          "maxIterations": 3
+        }
       },
-      "id": "sticky-drive",
-      "name": "Sticky Note - Drive Update",
+      "id": "node-agent-writer",
+      "name": "Script Writer Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [3620, 320]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "options": { "temperature": 0.8, "maxTokens": 5000 }
+      },
+      "id": "node-llm-writer",
+      "name": "GPT-4o — Writer",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1,
+      "position": [3620, 540],
+      "credentials": { "openAiApi": { "id": "YOUR_OPENAI_CREDENTIAL_ID", "name": "OpenAI account" } }
+    },
+
+    {
+      "parameters": {
+        "content": "## AGENT 4: QA & COMPLIANCE\nReviews scripts and makes the KEY DECISION:\n  APPROVED → scripts proceed to output\n  NEEDS_REVISION → scripts loop back to the writer\n\nChecks:\n- Compliance violations\n- 'Do not say' list violations\n- Hook quality (would it actually stop a scroll?)\n- Script variety (are they different enough?)\n- Brand voice match\n- Overall quality score\n\nThis agent is the gatekeeper. Max 2 revision cycles.",
+        "height": 300,
+        "width": 380,
+        "color": 1
+      },
+      "id": "sticky-agent-qa",
+      "name": "Sticky Note - QA Agent",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [3620, 80]
+      "position": [4060, 80]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Build QA Agent prompt with scripts + compliance rules.\n// The QA agent DECIDES: approve or send back for revision.\n// ============================================================\n\nconst brief = $('Validate Brief').first().json.brief;\nconst writerOutput = $input.first().json.output || $input.first().json.text || JSON.stringify($input.first().json);\nconst revisionCount = $('Validate Brief').first().json.revision_count || 0;\n\nconst prompt = `REVIEW THESE UGC SCRIPTS. You are the final quality gate.\n\n== COMPLIANCE RULES (NON-NEGOTIABLE) ==\nCompliance Policy: ${brief.compliance || 'No specific compliance rules'}\nDo NOT Say (exact phrases AND close synonyms): ${brief.do_not_say || 'No restrictions'}\n\n== BRAND CONTEXT ==\nBrand: ${brief.brand_name}\nProduct: ${brief.product_feature}\nTarget: ${brief.target_user}\nBrand Personality: ${brief.brand_personality}\nDifferentiator: ${brief.differentiator}\n\n== SCRIPTS TO REVIEW ==\n${writerOutput}\n\n== YOUR REVIEW TASK ==\nFor EACH script evaluate:\n1. COMPLIANCE — Any violations of compliance rules or 'do not say' list?\n2. HOOK QUALITY — Would this ACTUALLY stop someone scrolling? Be brutally honest.\n3. AUTHENTICITY — Does it sound like a real person or a marketing robot?\n4. BRAND VOICE — Does it match the brand personality?\n5. DIFFERENTIATION — Is each script distinct enough from the others?\n6. QUALITY SCORE — Rate 1-10\n\nThen make your DECISION. Output this JSON:\n{\n  \"verdict\": \"APPROVED\" or \"NEEDS_REVISION\",\n  \"overall_quality\": 7.5,\n  \"revision_number\": ${revisionCount},\n  \"script_reviews\": [\n    {\n      \"script_number\": 1,\n      \"compliance_pass\": true,\n      \"quality_score\": 8,\n      \"issues\": [],\n      \"revision_notes\": \"\"\n    }\n  ],\n  \"batch_notes\": \"Overall assessment and specific revision instructions if needed\"\n}\n\nRULES:\n- If ANY script has a compliance violation → NEEDS_REVISION\n- If average quality < 7 → NEEDS_REVISION\n- If hooks are weak or generic → NEEDS_REVISION\n- If scripts feel too similar → NEEDS_REVISION\n- Be rigorous but fair. Don't reject for minor style preferences.\n- This is revision #${revisionCount} of max 2. ${revisionCount >= 2 ? 'THIS IS THE FINAL REVIEW — approve with notes for manual editing if quality is acceptable.' : ''}\n\nOutput ONLY valid JSON.`;\n\nreturn [{ json: { prompt, brief, writer_output: writerOutput, revision_count: revisionCount } }];"
+      },
+      "id": "node-prep-qa",
+      "name": "Build QA Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [4100, 320]
+    },
+    {
+      "parameters": {
+        "agent": "openAiFunctionsAgent",
+        "promptType": "define",
+        "text": "={{ $json.prompt }}",
+        "options": {
+          "systemMessage": "You are the QA Lead and Compliance Officer at a UGC agency. Nothing ships without your sign-off.\n\nYou have two modes:\n1. COMPLIANCE OFFICER — Zero tolerance for rule violations. Check exact phrases AND semantic equivalents against the 'do not say' list. Check all claims against compliance policy.\n2. CREATIVE QA — Honest assessment of whether these scripts would actually perform. You've seen thousands of UGC ads and know what works.\n\nYou are NOT a yes-man. If scripts are mediocre, say so. If hooks are generic, call it out. Your job is to ensure only high-quality, compliant work reaches the client.\n\nBut you're also not unreasonably harsh. Good work gets approved. You provide specific, actionable feedback when revision is needed — not vague complaints.\n\nYou MUST output valid JSON only. Your verdict field must be exactly 'APPROVED' or 'NEEDS_REVISION'.\n\nUse the compliance_check tool to programmatically verify 'do not say' violations if available.",
+          "maxIterations": 5
+        }
+      },
+      "id": "node-agent-qa",
+      "name": "QA & Compliance Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [4480, 320]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "options": { "temperature": 0.3, "maxTokens": 3000 }
+      },
+      "id": "node-llm-qa",
+      "name": "GPT-4o — QA",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1,
+      "position": [4380, 540],
+      "credentials": { "openAiApi": { "id": "YOUR_OPENAI_CREDENTIAL_ID", "name": "OpenAI account" } }
+    },
+    {
+      "parameters": {
+        "name": "compliance_check",
+        "description": "Checks if a script text contains any forbidden phrases from the do-not-say list. Input: JSON with 'script_text' and 'forbidden_phrases' (comma-separated string). Returns violations found.",
+        "language": "javaScript",
+        "jsCode": "const input = JSON.parse($input.first().json.query || '{}');\nconst text = (input.script_text || '').toLowerCase();\nconst forbidden = (input.forbidden_phrases || '').split(',').map(p => p.trim().toLowerCase()).filter(Boolean);\nconst violations = forbidden.filter(phrase => text.includes(phrase));\nreturn JSON.stringify({ violations, has_violations: violations.length > 0, checked_phrases: forbidden.length });"
+      },
+      "id": "node-tool-compliance",
+      "name": "Tool — Compliance Check",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1.1,
+      "position": [4580, 540]
+    },
+
+    {
+      "parameters": {
+        "content": "## QA DECISION LOOP\nThe QA agent outputs a verdict.\nIf NEEDS_REVISION and under 2 cycles → loop back to writer.\nIf APPROVED or max revisions reached → proceed to output.\n\nThis feedback loop is what makes this a true agent\nsystem — not a linear automation.",
+        "height": 200,
+        "width": 380,
+        "color": 1
+      },
+      "id": "sticky-qa-loop",
+      "name": "Sticky Note - QA Loop",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [4900, 80]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Check QA Verdict — The critical DECISION point.\n// Parse the QA agent's output and determine next action.\n// ============================================================\n\nconst qaOutput = $input.first().json.output || $input.first().json.text || JSON.stringify($input.first().json);\nconst prevData = $('Build QA Prompt').first().json;\nconst writerOutput = prevData.writer_output;\nlet revisionCount = prevData.revision_count || 0;\n\n// Parse QA JSON from agent output\nlet qaResult;\ntry {\n  // Try direct parse\n  qaResult = JSON.parse(qaOutput);\n} catch(e) {\n  // Try extracting JSON from text\n  const match = qaOutput.match(/\\{[\\s\\S]*\\}/);\n  if (match) {\n    try { qaResult = JSON.parse(match[0]); } catch(e2) {\n      qaResult = { verdict: 'APPROVED', batch_notes: 'Could not parse QA response, approving by default.' };\n    }\n  } else {\n    qaResult = { verdict: 'APPROVED', batch_notes: 'Could not parse QA response, approving by default.' };\n  }\n}\n\nconst verdict = (qaResult.verdict || 'APPROVED').toUpperCase();\nconst needsRevision = verdict === 'NEEDS_REVISION' && revisionCount < 2;\n\nreturn [{\n  json: {\n    verdict,\n    needs_revision: needsRevision,\n    revision_count: revisionCount + (needsRevision ? 1 : 0),\n    revision_notes: qaResult.batch_notes || '',\n    script_reviews: qaResult.script_reviews || [],\n    overall_quality: qaResult.overall_quality || 0,\n    writer_output: writerOutput,\n    qa_output: qaOutput\n  }\n}];"
+      },
+      "id": "node-check-verdict",
+      "name": "Check QA Verdict",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [4940, 320]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "revision-check",
+              "leftValue": "={{ $json.needs_revision }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-if-revise",
+      "name": "Revision Needed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [5300, 320]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Route back to Script Writer with revision context.\n// Updates the revision counter in the brief data.\n// ============================================================\n\nconst brief = $('Validate Brief').first().json.brief;\nconst verdict = $input.first().json;\n\n// Build revision prompt that goes back to writer\nconst prompt = verdict.revision_notes + '\\n\\nScript-level feedback:\\n' + \n  (verdict.script_reviews || []).map(r => \n    `Script ${r.script_number}: Score ${r.quality_score}/10${r.issues && r.issues.length ? ' — Issues: ' + r.issues.join(', ') : ''}${r.revision_notes ? ' — Notes: ' + r.revision_notes : ''}`\n  ).join('\\n');\n\nreturn [{ json: { prompt, brief, is_revision: true } }];"
+      },
+      "id": "node-prep-revision",
+      "name": "Prepare Revision",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [5580, 180]
+    },
+
+    {
+      "parameters": {
+        "content": "## 5. FORMAT & OUTPUT\nAfter QA approval, scripts are formatted\nand distributed to Google Docs, ClickUp, and Slack.",
+        "height": 140,
+        "width": 340,
+        "color": 3
+      },
+      "id": "sticky-output",
+      "name": "Sticky Note - Output",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [5700, 80]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Format Approved Scripts for Output\n// Parses the writer's output into structured script objects\n// and formats them for Google Docs and ClickUp.\n// ============================================================\n\nconst brief = $('Validate Brief').first().json.brief;\nconst verdictData = $input.first().json;\nconst writerOutput = verdictData.writer_output || '';\nconst qaQuality = verdictData.overall_quality || 'N/A';\n\n// Parse scripts from writer output\nlet scripts = [];\ntry {\n  const parsed = JSON.parse(writerOutput);\n  scripts = parsed.scripts || [parsed];\n} catch(e) {\n  const match = writerOutput.match(/\\{[\\s\\S]*\\}/);\n  if (match) {\n    try {\n      const parsed = JSON.parse(match[0]);\n      scripts = parsed.scripts || [parsed];\n    } catch(e2) {\n      scripts = [{ script_number: 1, full_script: writerOutput, angle_name: 'Script', format: 'UGC', hook: '', visual_direction: '', on_screen_text: [], creator_notes: '', estimated_duration: '30 sec' }];\n    }\n  }\n}\n\n// Format each script as a readable document for Google Docs\nconst formattedScripts = scripts.map((s, i) => {\n  const num = s.script_number || (i + 1);\n  const onScreenText = Array.isArray(s.on_screen_text)\n    ? s.on_screen_text.map(t => `  - ${t}`).join('\\n')\n    : s.on_screen_text || '';\n\n  const docContent = [\n    `${brief.brand_name} | UGC Script #${num}`,\n    `${'='.repeat(50)}`,\n    '',\n    `ANGLE: ${s.angle_name || 'N/A'}`,\n    `FORMAT: ${s.format || 'N/A'}`,\n    `DURATION: ${s.estimated_duration || '30 sec'}`,\n    `QA SCORE: ${qaQuality}/10`,\n    '',\n    `${'─'.repeat(50)}`,\n    'HOOK (0-3 sec)',\n    `${'─'.repeat(50)}`,\n    s.hook || '',\n    '',\n    `${'─'.repeat(50)}`,\n    'PROBLEM (3-8 sec)',\n    `${'─'.repeat(50)}`,\n    s.problem || '',\n    '',\n    `${'─'.repeat(50)}`,\n    'SOLUTION (8-18 sec)',\n    `${'─'.repeat(50)}`,\n    s.solution || '',\n    '',\n    `${'─'.repeat(50)}`,\n    'PROOF (18-25 sec)',\n    `${'─'.repeat(50)}`,\n    s.proof || '',\n    '',\n    `${'─'.repeat(50)}`,\n    'CTA (25-30 sec)',\n    `${'─'.repeat(50)}`,\n    s.cta || '',\n    '',\n    `${'='.repeat(50)}`,\n    'FULL SCRIPT (for creator)',\n    `${'='.repeat(50)}`,\n    s.full_script || '',\n    '',\n    `${'='.repeat(50)}`,\n    'VISUAL DIRECTION',\n    `${'='.repeat(50)}`,\n    s.visual_direction || '',\n    '',\n    'ON-SCREEN TEXT:',\n    onScreenText,\n    '',\n    'CREATOR NOTES:',\n    s.creator_notes || '',\n    '',\n    `${'─'.repeat(50)}`,\n    `Generated by Smashed Agency Script Agent Team`,\n    `Client: ${brief.client_code} | ${new Date().toISOString()}`\n  ].join('\\n');\n\n  return {\n    script_number: num,\n    angle_name: s.angle_name || 'Script ' + num,\n    format: s.format || 'UGC',\n    hook: s.hook || '',\n    full_script: s.full_script || '',\n    doc_content: docContent,\n    estimated_duration: s.estimated_duration || '30 sec'\n  };\n});\n\nreturn [{\n  json: {\n    brief,\n    scripts: formattedScripts,\n    total_scripts: formattedScripts.length,\n    qa_quality: qaQuality,\n    revisions_used: verdictData.revision_count || 0\n  }\n}];"
+      },
+      "id": "node-format-output",
+      "name": "Format Approved Scripts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [5740, 320]
     },
     {
       "parameters": {
@@ -243,61 +436,46 @@
         "nodeCredentialType": "googleDriveOAuth2Api",
         "options": {}
       },
-      "id": "node-find-script-docs",
+      "id": "node-find-docs",
       "name": "Find Script Docs in Drive",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [3660, 320],
-      "credentials": {
-        "googleDriveOAuth2Api": {
-          "id": "YOUR_GOOGLE_DRIVE_CREDENTIAL_ID",
-          "name": "Google Drive account"
-        }
-      },
+      "position": [6140, 320],
+      "credentials": { "googleDriveOAuth2Api": { "id": "YOUR_GOOGLE_DRIVE_CREDENTIAL_ID", "name": "Google Drive account" } },
       "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "jsCode": "// ============================================================\n// Match Scripts to Google Docs\n// Pairs each AI-generated script with its corresponding\n// Google Doc based on the naming convention:\n// UGC_C{N}_{Brand}_Creator Name_R1_{Mon'YY}\n// ============================================================\n\nconst data = $('Parse & Format Scripts').first().json;\nconst driveResult = $input.first().json;\nconst docs = driveResult.files || [];\n\nconst scripts = data.scripts;\nconst brief = data.brief;\n\n// Sort docs by name to match script numbers\nconst sortedDocs = docs.sort((a, b) => {\n  const numA = parseInt((a.name.match(/UGC_C(\\d+)/) || [0,0])[1]);\n  const numB = parseInt((b.name.match(/UGC_C(\\d+)/) || [0,0])[1]);\n  return numA - numB;\n});\n\nconst items = [];\nfor (let i = 0; i < scripts.length; i++) {\n  const script = scripts[i];\n  const doc = sortedDocs[i] || null;\n  \n  items.push({\n    json: {\n      script_number: script.script_number,\n      angle_name: script.angle_name,\n      doc_content: script.doc_content,\n      full_script: script.full_script,\n      hook: script.hook,\n      doc_id: doc ? doc.id : null,\n      doc_name: doc ? doc.name : `No doc found for script ${script.script_number}`,\n      brand_name: brief.brand_name,\n      client_code: brief.client_code\n    }\n  });\n}\n\nif (items.length === 0) {\n  return [{ json: { _skip: true, message: 'No scripts to write' } }];\n}\n\nreturn items;"
+        "jsCode": "// Match generated scripts to existing Google Docs by UGC_C{N} pattern\nconst data = $('Format Approved Scripts').first().json;\nconst docs = ($input.first().json.files || []).sort((a, b) => {\n  const nA = parseInt((a.name.match(/UGC_C(\\d+)/) || [0,0])[1]);\n  const nB = parseInt((b.name.match(/UGC_C(\\d+)/) || [0,0])[1]);\n  return nA - nB;\n});\n\nconst items = data.scripts.map((s, i) => ({\n  json: {\n    doc_id: docs[i] ? docs[i].id : null,\n    doc_name: docs[i] ? docs[i].name : null,\n    doc_content: s.doc_content,\n    script_number: s.script_number\n  }\n}));\n\nreturn items.length ? items : [{ json: { _skip: true } }];"
       },
       "id": "node-match-docs",
       "name": "Match Scripts to Docs",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [4080, 320]
+      "position": [6500, 320]
     },
     {
-      "parameters": {
-        "batchSize": 1,
-        "options": {}
-      },
+      "parameters": { "batchSize": 1, "options": {} },
       "id": "node-loop-docs",
-      "name": "Loop Over Script Docs",
+      "name": "Loop Over Docs",
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 3,
-      "position": [4480, 320]
+      "position": [6840, 320]
     },
     {
       "parameters": {
         "conditions": {
           "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
-          "conditions": [
-            {
-              "id": "has-doc-id",
-              "leftValue": "={{ $json.doc_id }}",
-              "rightValue": "",
-              "operator": { "type": "string", "operation": "notEmpty" }
-            }
-          ],
+          "conditions": [{ "id": "doc-check", "leftValue": "={{ $json.doc_id }}", "rightValue": "", "operator": { "type": "string", "operation": "notEmpty" } }],
           "combinator": "and"
         },
         "options": {}
       },
-      "id": "node-if-doc-exists",
-      "name": "Doc Exists?",
+      "id": "node-if-doc",
+      "name": "Doc Found?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [4700, 320]
+      "position": [7060, 320]
     },
     {
       "parameters": {
@@ -311,40 +489,32 @@
         "options": {}
       },
       "id": "node-write-doc",
-      "name": "Write Script to Google Doc",
+      "name": "Write to Google Doc",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [4960, 240],
-      "credentials": {
-        "googleDriveOAuth2Api": {
-          "id": "YOUR_GOOGLE_DRIVE_CREDENTIAL_ID",
-          "name": "Google Drive account"
-        }
-      },
+      "position": [7320, 240],
+      "credentials": { "googleDriveOAuth2Api": { "id": "YOUR_GOOGLE_DRIVE_CREDENTIAL_ID", "name": "Google Drive account" } },
       "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "content": "## 6. CLICKUP — UPDATE SCRIPT CARDS\nFinds the brand's ClickUp folder and list, then updates\neach UGC script card with the AI-generated script content.\nThe task description gets the full script + visual notes.",
-        "height": 200,
-        "width": 380,
-        "color": 5
+        "jsCode": "return [$input.first()];"
       },
-      "id": "sticky-clickup",
-      "name": "Sticky Note - ClickUp Update",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [5400, 80]
+      "id": "node-skip-doc",
+      "name": "Skip Doc",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [7320, 440]
     },
     {
       "parameters": {
-        "jsCode": "// ============================================================\n// Prepare for ClickUp Update\n// Collapse loop output and prepare for ClickUp lookup\n// ============================================================\n\nconst data = $('Parse & Format Scripts').first().json;\nreturn [{ json: data }];"
+        "jsCode": "// Prepare for ClickUp lookup after doc loop completes\nconst data = $('Format Approved Scripts').first().json;\nreturn [{ json: data }];"
       },
-      "id": "node-prepare-clickup",
+      "id": "node-prep-clickup",
       "name": "Prepare ClickUp Step",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [5440, 320]
+      "position": [7660, 320]
     },
     {
       "parameters": {
@@ -358,46 +528,34 @@
       "name": "Get ClickUp Folders",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [5860, 320],
-      "credentials": {
-        "clickUpApi": {
-          "id": "YOUR_CLICKUP_API_CREDENTIAL_ID",
-          "name": "ClickUp API"
-        }
-      },
+      "position": [8020, 320],
+      "credentials": { "clickUpApi": { "id": "YOUR_CLICKUP_API_CREDENTIAL_ID", "name": "ClickUp API" } },
       "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "jsCode": "// ============================================================\n// Find Brand Folder & Extract List ID\n// Searches through ClickUp folders to find the brand's\n// UGC folder and its pipeline list.\n// ============================================================\n\nconst foldersData = $input.first().json;\nconst data = $('Prepare ClickUp Step').first().json;\nconst brief = data.brief;\nconst folderName = brief.brand_name + ' - UGC';\n\nconst folders = foldersData.folders || [];\nconst brandFolder = folders.find(f => f.name === folderName);\n\nif (!brandFolder) {\n  // Try partial match\n  const partial = folders.find(f => f.name.toLowerCase().includes(brief.brand_name.toLowerCase()));\n  if (!partial) {\n    return [{ json: { folder_found: false, list_id: null, brand_name: brief.brand_name, message: 'Folder not found: ' + folderName } }];\n  }\n  // Use partial match\n  const list = (partial.lists || []).find(l => l.name.includes('Pipeline') || l.name.includes('UGC'));\n  return [{ json: { folder_found: true, folder_id: partial.id, list_id: list ? list.id : null, brand_name: brief.brand_name } }];\n}\n\nconst lists = brandFolder.lists || [];\nconst pipelineList = lists.find(l => l.name.includes('Pipeline')) || lists[0];\n\nreturn [{ json: { folder_found: true, folder_id: brandFolder.id, list_id: pipelineList ? pipelineList.id : null, brand_name: brief.brand_name } }];"
+        "jsCode": "// Find the brand's folder and extract the pipeline list ID\nconst folders = ($input.first().json.folders || []);\nconst brief = $('Format Approved Scripts').first().json.brief;\nconst target = brief.brand_name + ' - UGC';\nconst folder = folders.find(f => f.name === target) || folders.find(f => f.name.toLowerCase().includes(brief.brand_name.toLowerCase()));\nif (!folder) return [{ json: { list_id: null } }];\nconst list = (folder.lists || []).find(l => l.name.includes('Pipeline')) || (folder.lists || [])[0];\nreturn [{ json: { list_id: list ? list.id : null, folder_id: folder.id } }];"
       },
       "id": "node-find-list",
       "name": "Find Brand List",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [6260, 320]
+      "position": [8380, 320]
     },
     {
       "parameters": {
         "conditions": {
           "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
-          "conditions": [
-            {
-              "id": "has-list-id",
-              "leftValue": "={{ $json.list_id }}",
-              "rightValue": "",
-              "operator": { "type": "string", "operation": "notEmpty" }
-            }
-          ],
+          "conditions": [{ "id": "list-check", "leftValue": "={{ $json.list_id }}", "rightValue": "", "operator": { "type": "string", "operation": "notEmpty" } }],
           "combinator": "and"
         },
         "options": {}
       },
-      "id": "node-if-list-found",
+      "id": "node-if-list",
       "name": "List Found?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [6620, 320]
+      "position": [8700, 320]
     },
     {
       "parameters": {
@@ -408,38 +566,30 @@
         "options": {}
       },
       "id": "node-get-tasks",
-      "name": "Get Tasks from List",
+      "name": "Get Tasks",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [6880, 240],
-      "credentials": {
-        "clickUpApi": {
-          "id": "YOUR_CLICKUP_API_CREDENTIAL_ID",
-          "name": "ClickUp API"
-        }
-      },
+      "position": [8960, 240],
+      "credentials": { "clickUpApi": { "id": "YOUR_CLICKUP_API_CREDENTIAL_ID", "name": "ClickUp API" } },
       "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "jsCode": "// ============================================================\n// Match Scripts to ClickUp Tasks\n// Pairs AI scripts with UGC_C{N} tasks for description update\n// ============================================================\n\nconst tasksData = $input.first().json;\nconst data = $('Parse & Format Scripts').first().json;\nconst scripts = data.scripts;\n\nconst tasks = tasksData.tasks || [];\n\n// Find UGC script card tasks (match UGC_C pattern)\nconst scriptTasks = tasks.filter(t => /^UGC_C\\d+/.test(t.name))\n  .sort((a, b) => {\n    const numA = parseInt((a.name.match(/UGC_C(\\d+)/) || [0,0])[1]);\n    const numB = parseInt((b.name.match(/UGC_C(\\d+)/) || [0,0])[1]);\n    return numA - numB;\n  });\n\nconst items = [];\nfor (let i = 0; i < scripts.length; i++) {\n  const script = scripts[i];\n  const task = scriptTasks[i] || null;\n  \n  if (task) {\n    const description = [\n      `ANGLE: ${script.angle_name}`,\n      `FORMAT: ${script.format}`,\n      `DURATION: ${script.estimated_duration}`,\n      '',\n      '== FULL SCRIPT ==',\n      script.full_script,\n      '',\n      '== HOOK ==',\n      script.hook,\n      '',\n      '---',\n      'AI-generated by Smashed Agency Script Agent',\n      'Ready for review and creator briefing'\n    ].join('\\n');\n\n    items.push({\n      json: {\n        task_id: task.id,\n        task_name: task.name,\n        description\n      }\n    });\n  }\n}\n\nif (items.length === 0) {\n  return [{ json: { _skip: true, message: 'No matching ClickUp tasks found' } }];\n}\n\nreturn items;"
+        "jsCode": "// Match scripts to UGC_C{N} ClickUp tasks\nconst tasks = ($input.first().json.tasks || []).filter(t => /^UGC_C\\d+/.test(t.name)).sort((a, b) => {\n  const nA = parseInt((a.name.match(/UGC_C(\\d+)/) || [0,0])[1]);\n  const nB = parseInt((b.name.match(/UGC_C(\\d+)/) || [0,0])[1]);\n  return nA - nB;\n});\nconst scripts = $('Format Approved Scripts').first().json.scripts;\nconst items = scripts.map((s, i) => {\n  const task = tasks[i];\n  if (!task) return null;\n  return { json: {\n    task_id: task.id,\n    description: `ANGLE: ${s.angle_name}\\nFORMAT: ${s.format}\\nDURATION: ${s.estimated_duration}\\n\\n== FULL SCRIPT ==\\n${s.full_script}\\n\\n== HOOK ==\\n${s.hook}\\n\\n---\\nAI-generated by Smashed Agency Script Agent Team\\nReady for internal review`\n  }};\n}).filter(Boolean);\nreturn items.length ? items : [{ json: { _skip: true } }];"
       },
       "id": "node-match-tasks",
       "name": "Match Scripts to Tasks",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [7300, 240]
+      "position": [9320, 240]
     },
     {
-      "parameters": {
-        "batchSize": 1,
-        "options": {}
-      },
+      "parameters": { "batchSize": 1, "options": {} },
       "id": "node-loop-tasks",
-      "name": "Loop Over Task Updates",
+      "name": "Loop Over Tasks",
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 3,
-      "position": [7700, 240]
+      "position": [9680, 240]
     },
     {
       "parameters": {
@@ -453,78 +603,67 @@
         "options": {}
       },
       "id": "node-update-task",
-      "name": "Update ClickUp Script Card",
+      "name": "Update Script Card",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [7960, 320],
-      "credentials": {
-        "clickUpApi": {
-          "id": "YOUR_CLICKUP_API_CREDENTIAL_ID",
-          "name": "ClickUp API"
-        }
-      },
+      "position": [9940, 320],
+      "credentials": { "clickUpApi": { "id": "YOUR_CLICKUP_API_CREDENTIAL_ID", "name": "ClickUp API" } },
       "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "content": "## 7. NOTIFY & LOG\nSlack notification with script summary.\nLogs the generation event to the Onboarding Log sheet.\nResponds to the webhook with all generated scripts.",
-        "height": 180,
-        "width": 340,
+        "jsCode": "return [{ json: { _skip: true } }];"
+      },
+      "id": "node-skip-clickup",
+      "name": "Skip ClickUp",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [8960, 440]
+    },
+
+    {
+      "parameters": {
+        "content": "## 6. NOTIFY & LOG",
+        "height": 80,
+        "width": 260,
         "color": 2
       },
       "id": "sticky-notify",
       "name": "Sticky Note - Notify",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [8340, 80]
+      "position": [10320, 80]
     },
     {
       "parameters": {
-        "jsCode": "// ============================================================\n// Prepare Notification Data\n// Collapses loop output and prepares Slack + log data\n// ============================================================\n\nconst data = $('Parse & Format Scripts').first().json;\nconst brief = data.brief;\nconst scripts = data.scripts;\n\nconst scriptSummary = scripts.map(s => \n  `  ${s.script_number}. \"${s.angle_name}\" (${s.format}) — Hook: \"${s.hook.substring(0, 50)}...\"`\n).join('\\n');\n\nreturn [{\n  json: {\n    brand_name: brief.brand_name,\n    client_code: brief.client_code,\n    client_name: brief.client_name,\n    client_email: brief.client_email,\n    total_scripts: scripts.length,\n    script_summary: scriptSummary,\n    scripts: scripts\n  }\n}];"
+        "jsCode": "const data = $('Format Approved Scripts').first().json;\nconst b = data.brief;\nconst summary = data.scripts.map(s => `  ${s.script_number}. \"${s.angle_name}\" (${s.format}) — \"${(s.hook || '').substring(0, 50)}...\"`).join('\\n');\nreturn [{ json: { brand_name: b.brand_name, client_code: b.client_code, client_name: b.client_name, total_scripts: data.total_scripts, qa_quality: data.qa_quality, revisions_used: data.revisions_used, script_summary: summary, scripts: data.scripts } }];"
       },
-      "id": "node-prepare-notify",
+      "id": "node-prep-notify",
       "name": "Prepare Notification",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [8380, 320]
+      "position": [10360, 320]
     },
     {
       "parameters": {
         "select": "channel",
-        "channelId": {
-          "__rl": true,
-          "value": "C07MN9QA1R7",
-          "mode": "id"
-        },
-        "text": "={{ `✍️ *Script Agent Complete — ${$json.brand_name}*\\n\\n*${$json.total_scripts} UGC scripts generated for ${$json.client_code}*\\n\\n${$json.script_summary}\\n\\n📄 Scripts written to Google Docs\\n📋 ClickUp cards updated with script content\\n\\n_Ready for internal review before sharing with ${$json.client_name}_ 🔥` }}",
+        "channelId": { "__rl": true, "value": "C07MN9QA1R7", "mode": "id" },
+        "text": "={{ `✍️ *Script Agent Team Complete — ${$json.brand_name}*\\n\\n*${$json.total_scripts} UGC scripts generated for ${$json.client_code}*\\nQA Score: ${$json.qa_quality}/10 | Revisions: ${$json.revisions_used}\\n\\n${$json.script_summary}\\n\\n📄 Google Docs populated\\n📋 ClickUp cards updated\\n\\n*Agent Pipeline:* Research → Strategy → Writer → QA${$json.revisions_used > 0 ? ' → Revision × ' + $json.revisions_used : ''}\\n\\n_Ready for internal review before sharing with ${$json.client_name}_ 🔥` }}",
         "otherOptions": {}
       },
       "id": "node-slack",
-      "name": "Notify Team on Slack",
+      "name": "Notify Slack",
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.2,
-      "position": [8800, 320],
-      "credentials": {
-        "slackOAuth2Api": {
-          "id": "YOUR_SLACK_CREDENTIAL_ID",
-          "name": "Slack account"
-        }
-      },
+      "position": [10720, 320],
+      "credentials": { "slackOAuth2Api": { "id": "YOUR_SLACK_CREDENTIAL_ID", "name": "Slack account" } },
       "onError": "continueRegularOutput"
     },
     {
       "parameters": {
         "operation": "append",
-        "documentId": {
-          "__rl": true,
-          "value": "1cB4wtyp0l0xwH2Ukw-U93eW9_Ix1lB6EroYs1GyDLCM",
-          "mode": "id"
-        },
-        "sheetName": {
-          "__rl": true,
-          "value": "Script Agent Log",
-          "mode": "name"
-        },
+        "documentId": { "__rl": true, "value": "1cB4wtyp0l0xwH2Ukw-U93eW9_Ix1lB6EroYs1GyDLCM", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Script Agent Log", "mode": "name" },
         "columns": {
           "mappingMode": "defineBelow",
           "value": {
@@ -533,120 +672,86 @@
             "C": "={{ $json.brand_name }}",
             "D": "Success",
             "E": "={{ $json.total_scripts }}",
-            "F": "={{ $json.script_summary }}"
+            "F": "={{ $json.qa_quality }}",
+            "G": "={{ $json.revisions_used }}",
+            "H": "={{ $json.script_summary }}"
           }
         },
         "options": {}
       },
       "id": "node-log",
-      "name": "Log to Script Agent Log",
+      "name": "Log to Sheet",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
-      "position": [9220, 320],
-      "credentials": {
-        "googleSheetsOAuth2Api": {
-          "id": "YOUR_GOOGLE_SHEETS_CREDENTIAL_ID",
-          "name": "Google Sheets account"
-        }
-      },
+      "position": [11080, 320],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "YOUR_GOOGLE_SHEETS_CREDENTIAL_ID", "name": "Google Sheets account" } },
       "onError": "continueRegularOutput"
     },
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({ status: 'success', client_code: $json.client_code, brand: $json.brand_name, scripts_generated: $json.total_scripts, scripts: $json.scripts }) }}",
+        "responseBody": "={{ JSON.stringify({ status: 'success', client_code: $json.client_code, brand: $json.brand_name, scripts_generated: $json.total_scripts, qa_quality: $json.qa_quality, revisions: $json.revisions_used, scripts: $json.scripts }) }}",
         "options": {}
       },
       "id": "node-respond",
       "name": "Respond to Webhook",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [9640, 320]
+      "position": [11440, 320]
     },
+
     {
       "parameters": {
-        "content": "## ERROR HANDLING\nIf any critical node fails, this error branch:\n1. Sends a Slack DM to U06P9F49BJT\n2. Logs the failure\n3. Returns 200 to prevent retry loops",
-        "height": 200,
-        "width": 380,
+        "content": "## ERROR HANDLING\nSlack DM + error log + safe 200 response.",
+        "height": 100,
+        "width": 300,
         "color": 1
       },
       "id": "sticky-error",
-      "name": "Sticky Note - Error Handling",
+      "name": "Sticky Note - Errors",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [1060, 560]
+      "position": [900, 560]
     },
     {
       "parameters": {
-        "jsCode": "// ============================================================\n// Error Handler — Capture error details\n// ============================================================\n\nconst errorData = $input.first().json;\n\nlet brand_name = 'Unknown';\nlet client_code = 'N/A';\ntry {\n  const brief = $('Validate & Prepare Brief').first().json;\n  brand_name = brief.brand_name || 'Unknown';\n  client_code = brief.client_code || 'N/A';\n} catch (e) {\n  try {\n    const trigger = $('Extract Client Code').first().json;\n    client_code = trigger.client_code || 'N/A';\n  } catch (e2) {}\n}\n\nconst errorMessage = errorData.error?.message || errorData.message || 'Unknown error';\nconst errorNode = errorData.error?.node?.name || errorData.node || 'Unknown node';\n\nreturn [{\n  json: {\n    brand_name,\n    client_code,\n    error_message: errorMessage,\n    error_node: errorNode,\n    timestamp: new Date().toISOString()\n  }\n}];"
+        "jsCode": "const err = $input.first().json;\nlet brand = 'Unknown', code = 'N/A';\ntry { const b = $('Validate Brief').first().json.brief; brand = b.brand_name; code = b.client_code; } catch(e) {}\nreturn [{ json: { brand_name: brand, client_code: code, error_message: err.error?.message || err.message || 'Unknown', error_node: err.error?.node?.name || 'Unknown', timestamp: new Date().toISOString() } }];"
       },
       "id": "node-error-handler",
       "name": "Handle Error",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1100, 780]
+      "position": [940, 780]
     },
     {
       "parameters": {
         "select": "user",
-        "user": {
-          "__rl": true,
-          "value": "U06P9F49BJT",
-          "mode": "id"
-        },
+        "user": { "__rl": true, "value": "U06P9F49BJT", "mode": "id" },
         "text": "={{ `❌ Script Agent failed for ${$json.brand_name} (${$json.client_code}). Error: ${$json.error_message}. Node: ${$json.error_node}` }}",
         "otherOptions": {}
       },
       "id": "node-error-slack",
-      "name": "Slack DM — Error Alert",
+      "name": "Error Slack DM",
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.2,
-      "position": [1520, 780],
-      "credentials": {
-        "slackOAuth2Api": {
-          "id": "YOUR_SLACK_CREDENTIAL_ID",
-          "name": "Slack account"
-        }
-      },
+      "position": [1340, 780],
+      "credentials": { "slackOAuth2Api": { "id": "YOUR_SLACK_CREDENTIAL_ID", "name": "Slack account" } },
       "onError": "continueRegularOutput"
     },
     {
       "parameters": {
         "operation": "append",
-        "documentId": {
-          "__rl": true,
-          "value": "1cB4wtyp0l0xwH2Ukw-U93eW9_Ix1lB6EroYs1GyDLCM",
-          "mode": "id"
-        },
-        "sheetName": {
-          "__rl": true,
-          "value": "Script Agent Log",
-          "mode": "name"
-        },
-        "columns": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "A": "={{ $json.timestamp }}",
-            "B": "={{ $json.client_code }}",
-            "C": "={{ $json.brand_name }}",
-            "D": "Failed",
-            "E": "0",
-            "F": "={{ $json.error_node }}: {{ $json.error_message }}"
-          }
-        },
+        "documentId": { "__rl": true, "value": "1cB4wtyp0l0xwH2Ukw-U93eW9_Ix1lB6EroYs1GyDLCM", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Script Agent Log", "mode": "name" },
+        "columns": { "mappingMode": "defineBelow", "value": { "A": "={{ $json.timestamp }}", "B": "={{ $json.client_code }}", "C": "={{ $json.brand_name }}", "D": "Failed", "E": "0", "F": "0", "G": "0", "H": "={{ $json.error_node }}: {{ $json.error_message }}" } },
         "options": {}
       },
       "id": "node-error-log",
-      "name": "Log Error to Sheet",
+      "name": "Log Error",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
-      "position": [1940, 780],
-      "credentials": {
-        "googleSheetsOAuth2Api": {
-          "id": "YOUR_GOOGLE_SHEETS_CREDENTIAL_ID",
-          "name": "Google Sheets account"
-        }
-      },
+      "position": [1740, 780],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "YOUR_GOOGLE_SHEETS_CREDENTIAL_ID", "name": "Google Sheets account" } },
       "onError": "continueRegularOutput"
     },
     {
@@ -659,417 +764,181 @@
       "name": "Respond 200 on Error",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [2360, 780]
-    },
-    {
-      "parameters": {
-        "jsCode": "// Passthrough for List Not Found — skip ClickUp updates\nreturn [{ json: { _skip: true, message: 'ClickUp list not found, skipping task updates' } }];"
-      },
-      "id": "node-skip-clickup",
-      "name": "Skip ClickUp Update",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [6880, 440]
-    },
-    {
-      "parameters": {
-        "jsCode": "// Passthrough for Doc Not Found — skip this doc\nreturn [$input.first()];"
-      },
-      "id": "node-skip-doc",
-      "name": "Skip This Doc",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [4960, 440]
+      "position": [2140, 780]
     }
   ],
+
   "connections": {
     "Webhook — Script Agent": {
-      "main": [
-        [
-          {
-            "node": "Extract Client Code",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Extract Client Code", "type": "main", "index": 0 }]]
     },
     "Manual Trigger — Test": {
-      "main": [
-        [
-          {
-            "node": "Set Test Data",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Set Test Data", "type": "main", "index": 0 }]]
     },
     "Set Test Data": {
-      "main": [
-        [
-          {
-            "node": "Extract Client Code",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Extract Client Code", "type": "main", "index": 0 }]]
     },
     "Extract Client Code": {
+      "main": [[{ "node": "Fetch Client Brief", "type": "main", "index": 0 }]]
+    },
+    "Fetch Client Brief": {
       "main": [
-        [
-          {
-            "node": "Fetch Client Brief from Sheets",
-            "type": "main",
-            "index": 0
-          }
-        ]
+        [{ "node": "Validate Brief", "type": "main", "index": 0 }],
+        [{ "node": "Handle Error", "type": "main", "index": 0 }]
       ]
     },
-    "Fetch Client Brief from Sheets": {
+    "Validate Brief": {
+      "main": [[{ "node": "Build Research Prompt", "type": "main", "index": 0 }]]
+    },
+
+    "Build Research Prompt": {
+      "main": [[{ "node": "Research Analyst Agent", "type": "main", "index": 0 }]]
+    },
+    "GPT-4o — Research": {
+      "ai_languageModel": [[{ "node": "Research Analyst Agent", "type": "ai_languageModel", "index": 0 }]]
+    },
+    "Tool — Read Website": {
+      "ai_tool": [[{ "node": "Research Analyst Agent", "type": "ai_tool", "index": 0 }]]
+    },
+    "Research Analyst Agent": {
+      "main": [[{ "node": "Build Strategy Prompt", "type": "main", "index": 0 }]]
+    },
+
+    "Build Strategy Prompt": {
+      "main": [[{ "node": "Creative Strategist Agent", "type": "main", "index": 0 }]]
+    },
+    "GPT-4o — Strategy": {
+      "ai_languageModel": [[{ "node": "Creative Strategist Agent", "type": "ai_languageModel", "index": 0 }]]
+    },
+    "Creative Strategist Agent": {
+      "main": [[{ "node": "Build Writer Prompt", "type": "main", "index": 0 }]]
+    },
+
+    "Build Writer Prompt": {
+      "main": [[{ "node": "Script Writer Agent", "type": "main", "index": 0 }]]
+    },
+    "GPT-4o — Writer": {
+      "ai_languageModel": [[{ "node": "Script Writer Agent", "type": "ai_languageModel", "index": 0 }]]
+    },
+    "Script Writer Agent": {
+      "main": [[{ "node": "Build QA Prompt", "type": "main", "index": 0 }]]
+    },
+
+    "Build QA Prompt": {
+      "main": [[{ "node": "QA & Compliance Agent", "type": "main", "index": 0 }]]
+    },
+    "GPT-4o — QA": {
+      "ai_languageModel": [[{ "node": "QA & Compliance Agent", "type": "ai_languageModel", "index": 0 }]]
+    },
+    "Tool — Compliance Check": {
+      "ai_tool": [[{ "node": "QA & Compliance Agent", "type": "ai_tool", "index": 0 }]]
+    },
+    "QA & Compliance Agent": {
+      "main": [[{ "node": "Check QA Verdict", "type": "main", "index": 0 }]]
+    },
+
+    "Check QA Verdict": {
+      "main": [[{ "node": "Revision Needed?", "type": "main", "index": 0 }]]
+    },
+    "Revision Needed?": {
       "main": [
-        [
-          {
-            "node": "Validate & Prepare Brief",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Handle Error",
-            "type": "main",
-            "index": 0
-          }
-        ]
+        [{ "node": "Prepare Revision", "type": "main", "index": 0 }],
+        [{ "node": "Format Approved Scripts", "type": "main", "index": 0 }]
       ]
     },
-    "Validate & Prepare Brief": {
-      "main": [
-        [
-          {
-            "node": "AI — Generate Creative Strategy",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+    "Prepare Revision": {
+      "main": [[{ "node": "Build Writer Prompt", "type": "main", "index": 0 }]]
     },
-    "AI — Generate Creative Strategy": {
-      "main": [
-        [
-          {
-            "node": "Parse Creative Strategy",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Handle Error",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Parse Creative Strategy": {
-      "main": [
-        [
-          {
-            "node": "AI — Write All UGC Scripts",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "AI — Write All UGC Scripts": {
-      "main": [
-        [
-          {
-            "node": "Parse & Format Scripts",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Handle Error",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Parse & Format Scripts": {
-      "main": [
-        [
-          {
-            "node": "Find Script Docs in Drive",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "Prepare ClickUp Step",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+
+    "Format Approved Scripts": {
+      "main": [[
+        { "node": "Find Script Docs in Drive", "type": "main", "index": 0 },
+        { "node": "Prepare ClickUp Step", "type": "main", "index": 0 }
+      ]]
     },
     "Find Script Docs in Drive": {
-      "main": [
-        [
-          {
-            "node": "Match Scripts to Docs",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Match Scripts to Docs", "type": "main", "index": 0 }]]
     },
     "Match Scripts to Docs": {
+      "main": [[{ "node": "Loop Over Docs", "type": "main", "index": 0 }]]
+    },
+    "Loop Over Docs": {
       "main": [
-        [
-          {
-            "node": "Loop Over Script Docs",
-            "type": "main",
-            "index": 0
-          }
-        ]
+        [{ "node": "Prepare Notification", "type": "main", "index": 0 }],
+        [{ "node": "Doc Found?", "type": "main", "index": 0 }]
       ]
     },
-    "Loop Over Script Docs": {
+    "Doc Found?": {
       "main": [
-        [
-          {
-            "node": "Prepare Notification",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Doc Exists?",
-            "type": "main",
-            "index": 0
-          }
-        ]
+        [{ "node": "Write to Google Doc", "type": "main", "index": 0 }],
+        [{ "node": "Skip Doc", "type": "main", "index": 0 }]
       ]
     },
-    "Doc Exists?": {
-      "main": [
-        [
-          {
-            "node": "Write Script to Google Doc",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Skip This Doc",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+    "Write to Google Doc": {
+      "main": [[{ "node": "Loop Over Docs", "type": "main", "index": 0 }]]
     },
-    "Write Script to Google Doc": {
-      "main": [
-        [
-          {
-            "node": "Loop Over Script Docs",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+    "Skip Doc": {
+      "main": [[{ "node": "Loop Over Docs", "type": "main", "index": 0 }]]
     },
-    "Skip This Doc": {
-      "main": [
-        [
-          {
-            "node": "Loop Over Script Docs",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
+
     "Prepare ClickUp Step": {
-      "main": [
-        [
-          {
-            "node": "Get ClickUp Folders",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Get ClickUp Folders", "type": "main", "index": 0 }]]
     },
     "Get ClickUp Folders": {
-      "main": [
-        [
-          {
-            "node": "Find Brand List",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Find Brand List", "type": "main", "index": 0 }]]
     },
     "Find Brand List": {
-      "main": [
-        [
-          {
-            "node": "List Found?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "List Found?", "type": "main", "index": 0 }]]
     },
     "List Found?": {
       "main": [
-        [
-          {
-            "node": "Get Tasks from List",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Skip ClickUp Update",
-            "type": "main",
-            "index": 0
-          }
-        ]
+        [{ "node": "Get Tasks", "type": "main", "index": 0 }],
+        [{ "node": "Skip ClickUp", "type": "main", "index": 0 }]
       ]
     },
-    "Get Tasks from List": {
-      "main": [
-        [
-          {
-            "node": "Match Scripts to Tasks",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+    "Get Tasks": {
+      "main": [[{ "node": "Match Scripts to Tasks", "type": "main", "index": 0 }]]
     },
     "Match Scripts to Tasks": {
-      "main": [
-        [
-          {
-            "node": "Loop Over Task Updates",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Loop Over Tasks", "type": "main", "index": 0 }]]
     },
-    "Loop Over Task Updates": {
+    "Loop Over Tasks": {
       "main": [
         [],
-        [
-          {
-            "node": "Update ClickUp Script Card",
-            "type": "main",
-            "index": 0
-          }
-        ]
+        [{ "node": "Update Script Card", "type": "main", "index": 0 }]
       ]
     },
-    "Update ClickUp Script Card": {
-      "main": [
-        [
-          {
-            "node": "Loop Over Task Updates",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+    "Update Script Card": {
+      "main": [[{ "node": "Loop Over Tasks", "type": "main", "index": 0 }]]
     },
+
     "Prepare Notification": {
-      "main": [
-        [
-          {
-            "node": "Notify Team on Slack",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Notify Slack", "type": "main", "index": 0 }]]
     },
-    "Notify Team on Slack": {
-      "main": [
-        [
-          {
-            "node": "Log to Script Agent Log",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+    "Notify Slack": {
+      "main": [[{ "node": "Log to Sheet", "type": "main", "index": 0 }]]
     },
-    "Log to Script Agent Log": {
-      "main": [
-        [
-          {
-            "node": "Respond to Webhook",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+    "Log to Sheet": {
+      "main": [[{ "node": "Respond to Webhook", "type": "main", "index": 0 }]]
     },
+
     "Handle Error": {
-      "main": [
-        [
-          {
-            "node": "Slack DM — Error Alert",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Error Slack DM", "type": "main", "index": 0 }]]
     },
-    "Slack DM — Error Alert": {
-      "main": [
-        [
-          {
-            "node": "Log Error to Sheet",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+    "Error Slack DM": {
+      "main": [[{ "node": "Log Error", "type": "main", "index": 0 }]]
     },
-    "Log Error to Sheet": {
-      "main": [
-        [
-          {
-            "node": "Respond 200 on Error",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+    "Log Error": {
+      "main": [[{ "node": "Respond 200 on Error", "type": "main", "index": 0 }]]
     }
   },
-  "settings": {
-    "executionOrder": "v1"
-  },
+
+  "settings": { "executionOrder": "v1" },
   "staticData": null,
   "tags": [
+    { "name": "AI Agents", "id": "6" },
     { "name": "Script Agent", "id": "4" },
-    { "name": "UGC", "id": "2" },
-    { "name": "AI", "id": "5" }
+    { "name": "UGC", "id": "2" }
   ],
   "triggerCount": 1,
   "pinData": {}
