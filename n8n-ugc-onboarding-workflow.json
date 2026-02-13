@@ -209,7 +209,7 @@
         "nodeCredentialType": "clickUpApi",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ name: $('Parse JotForm & Generate Client Code').first().json.brand_name + ' — Onboarding Brief', parent: { id: $('Create Client Folder').first().json.id, type: 5 }, visibility: 'public', create_page: true }) }}",
+        "jsonBody": "={{ JSON.stringify({ name: $('Parse JotForm & Generate Client Code').first().json.brand_name + ' — Onboarding Brief', parent: { id: String($('Create Client Folder').first().json.id), type: 5 } }) }}",
         "options": {}
       },
       "id": "node-clickup-doc",
@@ -230,8 +230,8 @@
     },
     {
       "parameters": {
-        "method": "PUT",
-        "url": "=https://api.clickup.com/api/v3/workspaces/90161381822/docs/{{ $json.id }}/pages/{{ $json.pages[0].id }}",
+        "method": "POST",
+        "url": "=https://api.clickup.com/api/v3/workspaces/90161381822/docs/{{ $json.id }}/pages",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "clickUpApi",
         "sendBody": true,
@@ -240,7 +240,7 @@
         "options": {}
       },
       "id": "node-clickup-doc-page",
-      "name": "Edit Onboarding Doc Page",
+      "name": "Add Onboarding Brief Page",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -1011,7 +1011,7 @@
       "main": [
         [
           {
-            "node": "Edit Onboarding Doc Page",
+            "node": "Add Onboarding Brief Page",
             "type": "main",
             "index": 0
           }
