@@ -187,6 +187,76 @@
     },
     {
       "parameters": {
+        "content": "## 4b. CLICKUP — Create Onboarding Doc\nPOST /api/v3/workspaces/90161381822/docs\nCreates a ClickUp Doc inside the brand folder so\nthe script writer has the full onboarding brief in one place.\nThen edits the first page with all form data formatted in markdown.",
+        "height": 220,
+        "width": 380,
+        "color": 5
+      },
+      "id": "sticky-clickup-doc",
+      "name": "Sticky Note - ClickUp Onboarding Doc",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1700,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.clickup.com/api/v3/workspaces/90161381822/docs",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "clickUpApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ name: $('Parse JotForm & Generate Client Code').first().json.brand_name + ' — Onboarding Brief', parent: { id: $('Create Client Folder').first().json.id, type: 5 }, visibility: 'public', create_page: true }) }}",
+        "options": {}
+      },
+      "id": "node-clickup-doc",
+      "name": "Create Onboarding Doc",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1730,
+        -40
+      ],
+      "credentials": {
+        "clickUpApi": {
+          "id": "YOUR_CLICKUP_API_CREDENTIAL_ID",
+          "name": "ClickUp API"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://api.clickup.com/api/v3/workspaces/90161381822/docs/{{ $json.id }}/pages/{{ $json.pages[0].id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "clickUpApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ (() => { const d = $('Parse JotForm & Generate Client Code').first().json; const content = '# ' + d.brand_name + ' — Onboarding Brief\\n\\n' + '**Client Code:** ' + d.client_code + '\\n' + '**Client Name:** ' + d.client_name + '\\n' + '**Email:** ' + d.client_email + '\\n' + '**WhatsApp:** ' + d.whatsapp_number + '\\n' + '**Website:** ' + d.website_url + '\\n\\n' + '---\\n\\n' + '## Product & Positioning\\n' + '**Product / Feature:** ' + d.product_feature + '\\n' + '**Differentiator:** ' + d.differentiator + '\\n' + '**Competitors:** ' + d.competitors + '\\n' + '**Competitor Strengths:** ' + d.competitor_strengths + '\\n' + '**Selling Proposition:** ' + d.selling_proposition + '\\n\\n' + '---\\n\\n' + '## Target Audience\\n' + '**Target User:** ' + d.target_user + '\\n' + '**Biggest Problem:** ' + d.biggest_problem + '\\n' + '**Main Hesitation:** ' + d.main_hesitation + '\\n' + '**Transformation:** ' + d.transformation + '\\n\\n' + '---\\n\\n' + '## Brand & Creative\\n' + '**Brand Personality:** ' + d.brand_personality + '\\n' + '**Credibility Point:** ' + d.credibility_point + '\\n' + '**Social Proof:** ' + d.social_proof + '\\n' + '**Best Concepts:** ' + d.best_concepts + '\\n' + '**Reference Ads:** ' + d.reference_ads + '\\n\\n' + '---\\n\\n' + '## Rules & Compliance\\n' + '**Compliance:** ' + d.compliance + '\\n' + '**Do NOT Say:** ' + d.do_not_say + '\\n\\n' + '---\\n\\n' + '## Assets & Notes\\n' + '**Available Assets:** ' + d.available_assets + '\\n' + '**Number of Scripts:** ' + d.num_scripts + '\\n' + '**Additional Notes:** ' + d.additional_notes; return JSON.stringify({ name: d.brand_name + ' — Onboarding Brief', content: content, content_format: 'text/md' }); })() }}",
+        "options": {}
+      },
+      "id": "node-clickup-doc-page",
+      "name": "Edit Onboarding Doc Page",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2130,
+        -40
+      ],
+      "credentials": {
+        "clickUpApi": {
+          "id": "YOUR_CLICKUP_API_CREDENTIAL_ID",
+          "name": "ClickUp API"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
         "content": "## 5. CLICKUP — Create List (HTTP Request)\nPOST /api/v2/folder/{id}/list\nCreates pipeline list inside new folder. Uses HTTP Request to bypass dropdown issues.",
         "height": 180,
         "width": 340,
@@ -339,7 +409,7 @@
           "value": "C07MN9QA1R7",
           "mode": "id"
         },
-        "text": "={{ (() => {\nconst d = $('Parse JotForm & Generate Client Code').first().json;\nconst product = (d.product_feature || '').substring(0, 100);\nconst target = (d.target_user || '').substring(0, 100);\nconst diff = (d.differentiator || '').substring(0, 100);\nconst comp = d.compliance || 'None';\nconst dontSay = d.do_not_say || 'None';\nconst personality = d.brand_personality || 'Not specified';\nreturn `🎬 *New UGC Client Onboarded!*\\n\\n*${d.client_code} — ${d.brand_name}*\\nProduct: ${product}\\nTarget: ${target}\\nDifferentiator: ${diff}\\nBrand: ${personality}\\n\\n⚠️ Compliance: ${comp}\\n🚫 Do not: ${dontSay}\\n\\n📋 ClickUp: ${d.folder_name} created with 10 tasks (15-day timeline) + ${d.num_scripts || 0} UGC script cards + Chat Channel\\nAM: TBD\\n\\n_Let's make some fire ads!_ 🔥`;\n})() }}",
+        "text": "={{ (() => {\nconst d = $('Parse JotForm & Generate Client Code').first().json;\nconst product = (d.product_feature || '').substring(0, 100);\nconst target = (d.target_user || '').substring(0, 100);\nconst diff = (d.differentiator || '').substring(0, 100);\nconst comp = d.compliance || 'None';\nconst dontSay = d.do_not_say || 'None';\nconst personality = d.brand_personality || 'Not specified';\nreturn `🎬 *New UGC Client Onboarded!*\\n\\n*${d.client_code} — ${d.brand_name}*\\nProduct: ${product}\\nTarget: ${target}\\nDifferentiator: ${diff}\\nBrand: ${personality}\\n\\n⚠️ Compliance: ${comp}\\n🚫 Do not: ${dontSay}\\n\\n📋 ClickUp: ${d.folder_name} created with 10 tasks (15-day timeline) + ${d.num_scripts || 0} UGC script cards + Chat Channel + Onboarding Brief Doc\\nAM: TBD\\n\\n_Let's make some fire ads!_ 🔥`;\n})() }}",
         "otherOptions": {}
       },
       "id": "node-slack",
@@ -921,11 +991,27 @@
             "node": "Create Pipeline List in Folder",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "Create Onboarding Doc",
+            "type": "main",
+            "index": 0
           }
         ],
         [
           {
             "node": "Handle Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Onboarding Doc": {
+      "main": [
+        [
+          {
+            "node": "Edit Onboarding Doc Page",
             "type": "main",
             "index": 0
           }
