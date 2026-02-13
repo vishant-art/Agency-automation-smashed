@@ -113,8 +113,8 @@
 
     {
       "parameters": {
-        "content": "## AGENT 1: RESEARCH ANALYST\nAnalyzes the brief, researches brand positioning,\ncompetitor landscape, and audience psychology.\nHas a web scraping tool to read the brand's website.\nOutputs actionable research insights for the strategist.",
-        "height": 200,
+        "content": "## AGENT 1: DEEP RESEARCH ANALYST\n5-step autonomous research protocol:\n1. Brand Deep Dive (website scraping)\n2. Amazon/Marketplace Review Mining (SerpAPI)\n3. Reddit/Forum Intelligence (Reddit API)\n4. Competitor Ad Research (SerpAPI)\n5. Social Media Sentiment Scan\n\nTools: Google Search, Reddit Search, Amazon\nReview Search, Competitor Ad Search, Read Website\n\nOutputs: Voice of Customer goldmine (10-15 real\nquotes), pain/desire/objection mapping, competitor\ngap analysis, and audience language patterns.",
+        "height": 340,
         "width": 380,
         "color": 6
       },
@@ -126,7 +126,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// ============================================================\n// Build the Research Agent's input prompt from the brief.\n// The agent will analyze this and produce research insights.\n// ============================================================\n\nconst { brief } = $json;\n\nconst prompt = `ANALYZE THIS CLIENT BRIEF AND PRODUCE A RESEARCH REPORT:\n\n== BRAND ==\nBrand: ${brief.brand_name}\nProduct: ${brief.product_feature}\nDifferentiator: ${brief.differentiator}\nSelling Proposition: ${brief.selling_proposition}\nWebsite: ${brief.website_url}\n\n== COMPETITION ==\nCompetitors: ${brief.competitors}\nCompetitor Strengths: ${brief.competitor_strengths}\n\n== TARGET AUDIENCE ==\nTarget User: ${brief.target_user}\nBiggest Problem: ${brief.biggest_problem}\nMain Hesitation (why they don't buy): ${brief.main_hesitation}\nDesired Transformation: ${brief.transformation}\n\n== BRAND IDENTITY ==\nPersonality: ${brief.brand_personality}\nCredibility: ${brief.credibility_point}\nSocial Proof: ${brief.social_proof}\nReference Ads They Like: ${brief.reference_ads || 'Not specified'}\n\nProduce your research report with these sections:\n1. BRAND POSITIONING ANALYSIS — Where does this brand sit? What's the white space?\n2. COMPETITOR AD LANDSCAPE — What are competitors likely doing? What's overdone vs underused?\n3. AUDIENCE PSYCHOLOGY — Real pain points, desires, language patterns, purchase triggers\n4. CONTENT OPPORTUNITIES — Untapped angles based on the market gap\n5. KEY INSIGHTS — 5 specific, actionable insights to guide script creation`;\n\nreturn [{ json: { prompt, brief } }];"
+        "jsCode": "// ============================================================\n// Build the Research Agent's input prompt from the brief.\n// The agent will analyze this and produce research insights.\n// ============================================================\n\nconst { brief } = $json;\n\nconst prompt = `DEEP RESEARCH MISSION for ${brief.brand_name}.\n\nYou have 5 research tools. USE ALL OF THEM to gather real intelligence.\n\n== CLIENT BRIEF ==\nBrand: ${brief.brand_name}\nProduct: ${brief.product_feature}\nDifferentiator: ${brief.differentiator}\nSelling Proposition: ${brief.selling_proposition}\nWebsite: ${brief.website_url}\nCompetitors: ${brief.competitors}\nCompetitor Strengths: ${brief.competitor_strengths}\nTarget User: ${brief.target_user}\nBiggest Problem: ${brief.biggest_problem}\nMain Hesitation: ${brief.main_hesitation}\nTransformation: ${brief.transformation}\nBrand Personality: ${brief.brand_personality}\nCredibility: ${brief.credibility_point}\nSocial Proof: ${brief.social_proof}\nReference Ads: ${brief.reference_ads || 'Not specified'}\n\n== YOUR RESEARCH TASKS (do ALL of these) ==\n\n1. READ THE BRAND WEBSITE: Use read_website on ${brief.website_url || 'the brand website'} to understand their product, pricing, and claims.\n\n2. MINE AMAZON/MARKETPLACE REVIEWS: Use amazon_review_search for \"${brief.product_feature}\" to find real customer language. Then use read_website on the top 2-3 review pages.\n\n3. SEARCH REDDIT: Use reddit_search for \"${brief.biggest_problem}\" AND for \"${brief.product_feature}\". Extract real discussions, pain points, and the exact words people use.\n\n4. RESEARCH COMPETITOR ADS: Use competitor_ad_search for each competitor: ${brief.competitors || 'the main competitors in this space'}. Find what ads they are running.\n\n5. CHECK SOCIAL SENTIMENT: Use google_search for \"${brief.brand_name} review\" and \"${brief.product_feature} TikTok\". See what real people are saying.\n\n== REQUIRED OUTPUT SECTIONS ==\n\n1. BRAND ANALYSIS — What the brand website reveals about positioning, pricing, messaging.\n\n2. VOICE OF CUSTOMER GOLDMINE (MOST IMPORTANT SECTION)\n   Extract 10-15 real quotes from Amazon reviews, Reddit, and forums. Label each:\n   - PAIN: exact customer complaints and frustrations\n   - DESIRE: what they wish for / dream outcome\n   - PROOF: specific results they mention (timeframes, metrics)\n   - OBJECTION: hesitations and doubts they express\n   - LANGUAGE: exact phrases and words they use repeatedly\n   These raw quotes become hooks and scripts.\n\n3. COMPETITOR AD LANDSCAPE — What are competitors doing? What angles are overused? Where is the white space?\n\n4. AUDIENCE PSYCHOLOGY — How this audience talks, thinks, and makes purchase decisions based on real data (not assumptions).\n\n5. MARKET GAP ANALYSIS — What is this brand's unfair advantage? What can they say that competitors can NOT?\n\n6. SCRIPT AMMUNITION — 5-7 specific, actionable insights that should directly inform script angles. Examples:\n   - \"Amazon reviewers repeatedly mention 'visible results in 2 weeks' — use this exact timeframe in proof sections\"\n   - \"Reddit users are skeptical of vitamin C serums because they oxidize — address this objection head-on\"\n   - \"Competitors are all running testimonial-style ads — there's white space for myth-buster and comparison formats\"\n\nDo NOT skip the tool research. The entire value of this agent is real data, not AI assumptions.`;\n\nreturn [{ json: { prompt, brief } }];"
       },
       "id": "node-prep-research",
       "name": "Build Research Prompt",
@@ -140,8 +140,8 @@
         "promptType": "define",
         "text": "={{ $json.prompt }}",
         "options": {
-          "systemMessage": "You are a senior performance marketing research analyst who has spent 8 years inside UGC agencies managing $50M+ in ad spend across Meta, TikTok, and YouTube Shorts. You don't do academic research — you do AD CREATIVE INTELLIGENCE.\n\nYou understand the full paid media ecosystem:\n- TOF (Top of Funnel): Cold audiences. Need pattern interrupts, curiosity, broad relatability.\n- MOF (Middle of Funnel): Warm audiences. Need social proof stacking, objection handling, deeper product education.\n- BOF (Bottom of Funnel): Hot audiences. Need urgency, specific offers, final objection crushers.\n\nYour research is focused on CREATIVE PERFORMANCE, not brand theory:\n\nAD CREATIVE ANALYSIS:\n- What hook styles are competitors running? (talking head, text overlay, b-roll, green screen, stitch format)\n- What's their creative volume? (are they testing 5 ads/week or 50?)\n- What creative fatigue signals exist? (same angles recycled, same creators)\n- What ad formats dominate? (UGC testimonial, founder story, unboxing, educational)\n- Where is the white space in their creative strategy?\n\nAUDIENCE INTELLIGENCE:\n- How does this audience talk about the PROBLEM on TikTok/Reddit/forums? (exact language patterns)\n- What are the real scroll-stopping triggers for this demo? (not what marketers think, what ACTUALLY works)\n- What content do they already engage with organically?\n- What are their unconscious purchase triggers vs stated reasons?\n- What objections live in the comments of competitor ads?\n\nPERFORMANCE PATTERNS:\n- For this product category, what hook styles typically drive highest thumb-stop rate?\n- What script length performs best? (15s, 30s, 45s, 60s)\n- What CTAs convert in this vertical?\n- What creative angles have the longest shelf life before fatigue?\n\nMARKET POSITIONING:\n- Where does this brand sit on the price-value spectrum?\n- What's their defensible angle competitors can't copy?\n- What market narratives can they own?\n\nIf you have a web research tool, use it to check the brand's website for pricing, product pages, reviews, and any existing ad creative.\n\nOUTPUT: Structured report with sections. Every insight must be DIRECTLY usable by a creative strategist making decisions about UGC scripts. No fluff, no theory, no 'could potentially' — specific, actionable intelligence.",
-          "maxIterations": 5
+          "systemMessage": "You are a senior performance marketing research analyst who has spent 8 years inside UGC agencies managing $50M+ in ad spend across Meta, TikTok, and YouTube Shorts. You don't do academic research — you do LIVE AD CREATIVE INTELLIGENCE using real data.\n\nYOU HAVE 5 RESEARCH TOOLS — USE THEM ALL:\n1. google_search — Search Google for anything: reviews, forums, competitor analysis, trends\n2. reddit_search — Search Reddit for real unfiltered customer discussions and pain points\n3. amazon_review_search — Find Amazon reviews for the product category (real customer language)\n4. competitor_ad_search — Find competitor ads, Meta Ad Library data, ad breakdowns\n5. read_website — Read any URL to get detailed content from search results\n\nYOUR RESEARCH PROTOCOL (follow this EXACT sequence):\n\nSTEP 1: BRAND DEEP DIVE\n- Use read_website on the brand's website URL to understand their product pages, pricing, positioning, and messaging\n- Note: What claims do they make? What language do they use? What's their price point?\n\nSTEP 2: AMAZON & MARKETPLACE REVIEW MINING\n- Use amazon_review_search for the product category (e.g., 'vitamin C serum', 'protein powder')\n- Use read_website on 2-3 top Amazon review pages from results\n- Extract the VOICE OF CUSTOMER:\n  * Top 5 COMPLAINTS people have (these become PROBLEMS in scripts)\n  * Top 5 PRAISES people give (these become PROOF POINTS in scripts)\n  * EXACT PHRASES customers repeat (these become HOOKS — real language converts)\n  * Common HESITATIONS in reviews ('I wasn't sure if...' = objection to address)\n  * Specific RESULTS mentioned ('after 2 weeks my...', 'within 3 days I noticed...')\n\nSTEP 3: REDDIT & FORUM INTELLIGENCE\n- Use reddit_search for the PROBLEM the product solves (e.g., 'dark spots skincare routine')\n- Use reddit_search for the product CATEGORY (e.g., 'best vitamin C serum 2024')\n- Extract:\n  * How real people DESCRIBE the problem (their words, not marketing words)\n  * What solutions they've already tried and why they failed\n  * What they wish existed (unmet needs = positioning opportunities)\n  * Specific subreddits where this audience lives\n  * Upvoted comments = validated pain points\n\nSTEP 4: COMPETITOR AD RESEARCH\n- Use competitor_ad_search for each competitor mentioned in the brief\n- Use google_search for '[competitor] UGC ads' or '[competitor] TikTok ads'\n- Identify:\n  * What angles competitors are running (what's overdone?)\n  * What formats they use (talking head? unboxing? before-after?)\n  * What hooks are they leading with?\n  * Where is the WHITE SPACE they're NOT covering?\n  * What's getting engagement vs what's stale?\n\nSTEP 5: SOCIAL MEDIA SENTIMENT\n- Use google_search for '[product category] TikTok' or '[brand] TikTok reviews'\n- Use google_search for '[product category] honest review 2024'\n- Look for:\n  * Trending content formats in this category\n  * What's going viral organically (= what the audience actually engages with)\n  * Creator styles that work for this category\n  * Comment patterns on viral posts\n\nCRITICAL OUTPUT REQUIREMENTS:\n\nYour report MUST include a 'VOICE OF CUSTOMER GOLDMINE' section with:\n- 10+ exact customer quotes/phrases extracted from reviews and Reddit\n- Label each as: PAIN (problem), DESIRE (aspiration), PROOF (result), OBJECTION (hesitation)\n- These EXACT phrases become the basis for hooks and scripts — this is the #1 value you provide\n\nExample:\n- PAIN: 'I've literally tried every serum and nothing works on my dark spots' (Amazon, 47 upvotes)\n- DESIRE: 'I just want to wake up and not have to use concealer' (Reddit r/SkincareAddiction)\n- PROOF: 'okay week 3 and my coworker asked what I've been doing differently' (Amazon review)\n- OBJECTION: 'another vitamin C that's going to oxidize and turn orange in a week' (Reddit)\n\nThese raw quotes are MORE valuable than any analysis because they're the actual language the target audience uses.\n\nDo NOT skip any research step. Do NOT rely on your training data alone. USE THE TOOLS to get REAL, CURRENT data. The whole point of this research phase is to ground the creative strategy in reality, not in AI assumptions.",
+          "maxIterations": 15
         }
       },
       "id": "node-agent-research",
@@ -165,7 +165,7 @@
     {
       "parameters": {
         "name": "read_website",
-        "description": "Fetch and read a brand's website to gather product details, pricing, and positioning. Input should be a full URL.",
+        "description": "Fetch and read any webpage — brand websites, Amazon product pages, review sites, blog posts, competitor pages. Input should be a full URL (e.g., https://example.com). Use this to read product pages, review pages, competitor websites, or any URL found via Google search.",
         "method": "GET",
         "url": "={{ $fromAI('url', 'The full URL to fetch') }}",
         "placeholderDefinitions": {
@@ -178,6 +178,96 @@
       "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
       "typeVersion": 1.1,
       "position": [2060, 540]
+    },
+    {
+      "parameters": {
+        "name": "google_search",
+        "description": "Search Google for any query. Use this to find: Amazon reviews for a product category, Reddit discussions about a problem, competitor reviews, TikTok trends, Meta Ad Library results, Trustpilot reviews, blog reviews, forum discussions. Returns search result titles, snippets, and URLs. You can then use the read_website tool to visit the most relevant URLs. Input should be a search query string like 'vitamin C serum reviews reddit' or 'site:amazon.com organic skincare serum reviews'.",
+        "method": "GET",
+        "url": "=https://serpapi.com/search.json?q={{ encodeURIComponent($fromAI('query', 'The Google search query')) }}&api_key={{ $credentials.httpHeaderAuth.value }}&num=10",
+        "placeholderDefinitions": {
+          "values": [{ "name": "query", "description": "The search query to run on Google" }]
+        },
+        "options": {}
+      },
+      "id": "node-tool-google",
+      "name": "Tool — Google Search",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [1860, 680],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "YOUR_SERPAPI_CREDENTIAL_ID",
+          "name": "SerpAPI Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "name": "reddit_search",
+        "description": "Search Reddit for real unfiltered discussions about a product, problem, or category. No API key needed. Returns posts with titles, text, scores, and subreddit names. Use queries like: 'best vitamin C serum', 'skincare routine oily skin', '[brand name] review'. Great for finding exact customer language, pain points, and authentic opinions that can inspire hooks and scripts.",
+        "method": "GET",
+        "url": "=https://www.reddit.com/search.json?q={{ encodeURIComponent($fromAI('query', 'The Reddit search query')) }}&sort=relevance&limit=15&t=year",
+        "placeholderDefinitions": {
+          "values": [{ "name": "query", "description": "What to search for on Reddit" }]
+        },
+        "options": {
+          "response": {
+            "response": { "neverError": true }
+          }
+        }
+      },
+      "id": "node-tool-reddit",
+      "name": "Tool — Reddit Search",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [2060, 680]
+    },
+    {
+      "parameters": {
+        "name": "amazon_review_search",
+        "description": "Search for Amazon product reviews and customer feedback by querying Google with site:amazon.com filter. Use this to find real customer language, complaints, praise, and buying patterns. Input should be a product category or specific product name, like 'vitamin C serum' or 'organic face cream'. The tool automatically adds the Amazon filter.",
+        "method": "GET",
+        "url": "=https://serpapi.com/search.json?q=site%3Aamazon.com+{{ encodeURIComponent($fromAI('product', 'The product or category to search Amazon reviews for')) }}+reviews&api_key={{ $credentials.httpHeaderAuth.value }}&num=10",
+        "placeholderDefinitions": {
+          "values": [{ "name": "product", "description": "The product or category to search for on Amazon" }]
+        },
+        "options": {}
+      },
+      "id": "node-tool-amazon",
+      "name": "Tool — Amazon Review Search",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [1960, 780],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "YOUR_SERPAPI_CREDENTIAL_ID",
+          "name": "SerpAPI Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "name": "competitor_ad_search",
+        "description": "Search for competitor ads and ad creative strategies using Google. Finds Meta Ad Library results, ad breakdowns, and competitor creative analysis. Input should be a competitor brand name or product category. Example: 'Minimalist skincare Meta Ad Library' or 'best DTC skincare Facebook ads 2024'.",
+        "method": "GET",
+        "url": "=https://serpapi.com/search.json?q={{ encodeURIComponent($fromAI('query', 'Competitor or category to search ads for')) }}+ads+OR+%22ad+library%22+OR+%22facebook+ads%22&api_key={{ $credentials.httpHeaderAuth.value }}&num=10",
+        "placeholderDefinitions": {
+          "values": [{ "name": "query", "description": "The competitor or category to research ads for" }]
+        },
+        "options": {}
+      },
+      "id": "node-tool-ads",
+      "name": "Tool — Competitor Ad Search",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [2160, 780],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "YOUR_SERPAPI_CREDENTIAL_ID",
+          "name": "SerpAPI Key"
+        }
+      }
     },
 
     {
@@ -798,6 +888,18 @@
       "ai_languageModel": [[{ "node": "Research Analyst Agent", "type": "ai_languageModel", "index": 0 }]]
     },
     "Tool — Read Website": {
+      "ai_tool": [[{ "node": "Research Analyst Agent", "type": "ai_tool", "index": 0 }]]
+    },
+    "Tool — Google Search": {
+      "ai_tool": [[{ "node": "Research Analyst Agent", "type": "ai_tool", "index": 0 }]]
+    },
+    "Tool — Reddit Search": {
+      "ai_tool": [[{ "node": "Research Analyst Agent", "type": "ai_tool", "index": 0 }]]
+    },
+    "Tool — Amazon Review Search": {
+      "ai_tool": [[{ "node": "Research Analyst Agent", "type": "ai_tool", "index": 0 }]]
+    },
+    "Tool — Competitor Ad Search": {
       "ai_tool": [[{ "node": "Research Analyst Agent", "type": "ai_tool", "index": 0 }]]
     },
     "Research Analyst Agent": {
