@@ -1,0 +1,767 @@
+{
+  "name": "UGC Phase 4 — Delivery (Google Docs + ClickUp + Client)",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## WORKFLOW 4: DELIVERY\n\nWebhook POST /ugc-delivery with { project_id, action, script_ids, notes }\n\nIF action = approve:\n1. Read approved scripts from Airtable\n2. Format scripts (same formatting logic as original)\n3. Write to Google Docs\n4. Update ClickUp tasks\n5. Update Project status to Delivered\n6. Update script records (overall_status: Delivered)\n7. Slack notification to PM + channel\n8. Log to Google Sheets\n9. Respond to webhook\n\nIF action = reject:\n1. Store revision notes in Airtable\n2. Trigger re-write (HTTP request back to Workflow 3)\n3. Slack notification",
+        "height": 520,
+        "width": 480,
+        "color": 7
+      },
+      "id": "w4-sticky-overview",
+      "name": "Sticky Note - Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-280, -60]
+    },
+
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ugc-delivery",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "w4-webhook",
+      "name": "Webhook — Delivery",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [280, 320],
+      "webhookId": "ugc-delivery-webhook"
+    },
+    {
+      "parameters": {},
+      "id": "w4-manual-trigger",
+      "name": "Manual Trigger — Test",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [280, -140]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { body: { project_id: 'rec_TEST_123', action: 'approve', script_ids: [], notes: '' } } }];"
+      },
+      "id": "w4-test-data",
+      "name": "Set Test Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [580, -140]
+    },
+
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Extract and validate delivery payload\n// ============================================================\nconst body = $input.first().json.body || $input.first().json;\nconst project_id = (body.project_id || '').trim();\nconst action = (body.action || 'approve').trim().toLowerCase();\nconst script_ids = body.script_ids || [];\nconst notes = (body.notes || '').trim();\n\nif (!project_id) throw new Error('project_id is required');\nif (!['approve', 'reject'].includes(action)) {\n  throw new Error('action must be approve or reject');\n}\n\nreturn [{ json: { project_id, action, script_ids, notes } }];"
+      },
+      "id": "w4-extract-payload",
+      "name": "Extract Delivery Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [580, 320]
+    },
+
+    {
+      "parameters": {
+        "resource": "record",
+        "operation": "search",
+        "base": { "__rl": true, "value": "YOUR_AIRTABLE_BASE_ID", "mode": "id" },
+        "table": { "__rl": true, "value": "Projects", "mode": "name" },
+        "filterByFormula": "=RECORD_ID() = '{{ $json.project_id }}'",
+        "options": {}
+      },
+      "id": "w4-fetch-project",
+      "name": "Fetch Project",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [940, 320],
+      "credentials": { "airtableTokenApi": { "id": "YOUR_AIRTABLE_CREDENTIAL_ID", "name": "Airtable Personal Access Token" } }
+    },
+
+    {
+      "parameters": {
+        "resource": "record",
+        "operation": "search",
+        "base": { "__rl": true, "value": "YOUR_AIRTABLE_BASE_ID", "mode": "id" },
+        "table": { "__rl": true, "value": "Scripts", "mode": "name" },
+        "filterByFormula": "={project_id} = '{{ $('Extract Delivery Payload').first().json.project_id }}'",
+        "options": {}
+      },
+      "id": "w4-fetch-scripts",
+      "name": "Fetch Scripts from Airtable",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [1300, 320],
+      "credentials": { "airtableTokenApi": { "id": "YOUR_AIRTABLE_CREDENTIAL_ID", "name": "Airtable Personal Access Token" } }
+    },
+
+    {
+      "parameters": {
+        "jsCode": "// Merge project + scripts + payload\nconst payload = $('Extract Delivery Payload').first().json;\nconst project = $('Fetch Project').first().json;\nconst scripts = $input.all().map(item => item.json);\n\nreturn [{ json: {\n  ...payload,\n  project,\n  scripts,\n  script_count: scripts.length\n} }];"
+      },
+      "id": "w4-merge-data",
+      "name": "Merge Delivery Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1660, 320]
+    },
+
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "approve-check",
+              "leftValue": "={{ $json.action }}",
+              "rightValue": "approve",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "w4-if-approve",
+      "name": "Approve or Reject?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [2020, 320]
+    },
+
+    {
+      "parameters": {
+        "content": "## APPROVE BRANCH\nFormat scripts -> Google Docs -> ClickUp\n-> Update Airtable -> Slack -> Log -> Respond",
+        "height": 120,
+        "width": 440,
+        "color": 3
+      },
+      "id": "w4-sticky-approve",
+      "name": "Sticky Note - Approve",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [2380, -60]
+    },
+
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Format approved scripts for Google Docs output\n// Same formatting logic as original workflow\n// ============================================================\n\nconst data = $input.first().json;\nconst project = data.project;\nconst scripts = data.scripts;\nconst scriptIds = data.script_ids || [];\nconst brandName = project.brand_name || project.fields?.brand_name || 'Brand';\nconst clientCode = project.client_code || project.fields?.client_code || 'N/A';\nconst clientName = project.client_name || project.fields?.client_name || 'Client';\nconst qaQuality = 'N/A';\n\n// Filter to specific script_ids if provided, otherwise use all\nconst selectedScripts = scriptIds.length > 0\n  ? scripts.filter(s => scriptIds.includes(s.id))\n  : scripts;\n\nconst formattedScripts = selectedScripts.map((s, i) => {\n  const d = s.fields || s;\n  const num = d.script_number || (i + 1);\n  const onScreenText = d.on_screen_text || '';\n\n  const docContent = [\n    `${brandName} | UGC Script #${num}`,\n    `${'='.repeat(50)}`,\n    '',\n    `CONCEPT: ${d.concept_name || 'N/A'}`,\n    `FORMAT: ${d.format || 'UGC'}`,\n    `DURATION: ${d.estimated_duration || '30 sec'}`,\n    `QA SCORE: ${d.qa_score || 'N/A'}/10`,\n    '',\n    `${'='.repeat(50)}`,\n    'HOOK (0-3 sec)',\n    `${'='.repeat(50)}`,\n    d.hook || '',\n    '',\n    `${'='.repeat(50)}`,\n    'HOOK REINFORCEMENT (3-5 sec)',\n    `${'='.repeat(50)}`,\n    d.hook_reinforcement || '',\n    '',\n    `${'='.repeat(50)}`,\n    'PROBLEM (5-10 sec)',\n    `${'='.repeat(50)}`,\n    d.problem || '',\n    '',\n    `${'='.repeat(50)}`,\n    'SOLUTION (10-18 sec)',\n    `${'='.repeat(50)}`,\n    d.solution || '',\n    '',\n    `${'='.repeat(50)}`,\n    'PROOF (18-25 sec)',\n    `${'='.repeat(50)}`,\n    d.proof || '',\n    '',\n    `${'='.repeat(50)}`,\n    'CTA (25-30 sec)',\n    `${'='.repeat(50)}`,\n    d.cta || '',\n    '',\n    `${'='.repeat(50)}`,\n    'FULL SCRIPT (for creator)',\n    `${'='.repeat(50)}`,\n    d.full_script || '',\n    '',\n    `${'='.repeat(50)}`,\n    'VISUAL DIRECTION',\n    `${'='.repeat(50)}`,\n    d.visual_direction || '',\n    '',\n    'ON-SCREEN TEXT:',\n    onScreenText,\n    '',\n    'CREATOR NOTES:',\n    d.creator_notes || '',\n    '',\n    'THUMBNAIL FRAME:',\n    d.thumbnail_frame || '',\n    '',\n    `${'='.repeat(50)}`,\n    `Generated by Smashed Agency UGC Script Agent Team`,\n    `Client: ${clientCode} | ${new Date().toISOString()}`\n  ].join('\\n');\n\n  return {\n    script_id: s.id,\n    script_number: num,\n    concept_name: d.concept_name || 'Concept ' + num,\n    format: d.format || 'UGC',\n    hook: d.hook || '',\n    full_script: d.full_script || '',\n    doc_content: docContent,\n    estimated_duration: d.estimated_duration || '30 sec'\n  };\n});\n\nreturn [{\n  json: {\n    project_id: data.project_id,\n    project,\n    brand_name: brandName,\n    client_code: clientCode,\n    client_name: clientName,\n    scripts: formattedScripts,\n    script_ids: selectedScripts.map(s => s.id),\n    total_scripts: formattedScripts.length\n  }\n}];"
+      },
+      "id": "w4-format-scripts",
+      "name": "Format Approved Scripts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2420, 180]
+    },
+
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://www.googleapis.com/drive/v3/files?supportsAllDrives=true&includeItemsFromAllDrives=true&fields=files(id%2Cname)&orderBy=name&q=name%20contains%20%27UGC_C%27%20and%20name%20contains%20%27{{ encodeURIComponent($json.brand_name) }}%27%20and%20mimeType%3D%27application%2Fvnd.google-apps.document%27%20and%20trashed%3Dfalse",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "options": {}
+      },
+      "id": "w4-find-docs",
+      "name": "Find Script Docs in Drive",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2780, 180],
+      "credentials": { "googleDriveOAuth2Api": { "id": "YOUR_GOOGLE_DRIVE_CREDENTIAL_ID", "name": "Google Drive account" } },
+      "onError": "continueRegularOutput"
+    },
+
+    {
+      "parameters": {
+        "jsCode": "// Match generated scripts to existing Google Docs by UGC_C{N} pattern\nconst data = $('Format Approved Scripts').first().json;\nconst docs = ($input.first().json.files || []).sort((a, b) => {\n  const nA = parseInt((a.name.match(/UGC_C(\\d+)/) || [0,0])[1]);\n  const nB = parseInt((b.name.match(/UGC_C(\\d+)/) || [0,0])[1]);\n  return nA - nB;\n});\n\nconst items = data.scripts.map((s, i) => ({\n  json: {\n    doc_id: docs[i] ? docs[i].id : null,\n    doc_name: docs[i] ? docs[i].name : null,\n    doc_content: s.doc_content,\n    script_number: s.script_number\n  }\n}));\n\nreturn items.length ? items : [{ json: { _skip: true } }];"
+      },
+      "id": "w4-match-docs",
+      "name": "Match Scripts to Docs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3140, 180]
+    },
+
+    {
+      "parameters": { "batchSize": 1, "options": {} },
+      "id": "w4-loop-docs",
+      "name": "Loop Over Docs",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [3500, 180]
+    },
+
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [{ "id": "doc-check", "leftValue": "={{ $json.doc_id }}", "rightValue": "", "operator": { "type": "string", "operation": "notEmpty" } }],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "w4-if-doc",
+      "name": "Doc Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [3720, 180]
+    },
+
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://docs.googleapis.com/v1/documents/{{ $json.doc_id }}:batchUpdate",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ requests: [{ insertText: { location: { index: 1 }, text: $json.doc_content } }] }) }}",
+        "options": {}
+      },
+      "id": "w4-write-doc",
+      "name": "Write to Google Doc",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3980, 100],
+      "credentials": { "googleDriveOAuth2Api": { "id": "YOUR_GOOGLE_DRIVE_CREDENTIAL_ID", "name": "Google Drive account" } },
+      "onError": "continueRegularOutput"
+    },
+
+    {
+      "parameters": {
+        "jsCode": "return [$input.first()];"
+      },
+      "id": "w4-skip-doc",
+      "name": "Skip Doc",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3980, 280]
+    },
+
+    {
+      "parameters": {
+        "jsCode": "// Prepare for ClickUp lookup after doc loop completes\nconst data = $('Format Approved Scripts').first().json;\nreturn [{ json: data }];"
+      },
+      "id": "w4-prep-clickup",
+      "name": "Prepare ClickUp Step",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [4340, 180]
+    },
+
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.clickup.com/api/v2/space/90165772240/folder",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "clickUpApi",
+        "options": {}
+      },
+      "id": "w4-get-folders",
+      "name": "Get ClickUp Folders",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [4700, 180],
+      "credentials": { "clickUpApi": { "id": "YOUR_CLICKUP_API_CREDENTIAL_ID", "name": "ClickUp API" } },
+      "onError": "continueRegularOutput"
+    },
+
+    {
+      "parameters": {
+        "jsCode": "// Find the brand's folder and extract the pipeline list ID\nconst folders = ($input.first().json.folders || []);\nconst data = $('Format Approved Scripts').first().json;\nconst target = data.brand_name + ' - UGC';\nconst folder = folders.find(f => f.name === target) || folders.find(f => f.name.toLowerCase().includes(data.brand_name.toLowerCase()));\nif (!folder) return [{ json: { list_id: null } }];\nconst list = (folder.lists || []).find(l => l.name.includes('Pipeline')) || (folder.lists || [])[0];\nreturn [{ json: { list_id: list ? list.id : null, folder_id: folder.id } }];"
+      },
+      "id": "w4-find-list",
+      "name": "Find Brand List",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [5060, 180]
+    },
+
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [{ "id": "list-check", "leftValue": "={{ $json.list_id }}", "rightValue": "", "operator": { "type": "string", "operation": "notEmpty" } }],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "w4-if-list",
+      "name": "List Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [5380, 180]
+    },
+
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.clickup.com/api/v2/list/{{ $json.list_id }}/task?include_closed=true",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "clickUpApi",
+        "options": {}
+      },
+      "id": "w4-get-tasks",
+      "name": "Get Tasks",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [5640, 100],
+      "credentials": { "clickUpApi": { "id": "YOUR_CLICKUP_API_CREDENTIAL_ID", "name": "ClickUp API" } },
+      "onError": "continueRegularOutput"
+    },
+
+    {
+      "parameters": {
+        "jsCode": "// Match scripts to UGC_C{N} ClickUp tasks\nconst tasks = ($input.first().json.tasks || []).filter(t => /^UGC_C\\d+/.test(t.name)).sort((a, b) => {\n  const nA = parseInt((a.name.match(/UGC_C(\\d+)/) || [0,0])[1]);\n  const nB = parseInt((b.name.match(/UGC_C(\\d+)/) || [0,0])[1]);\n  return nA - nB;\n});\nconst scripts = $('Format Approved Scripts').first().json.scripts;\nconst items = scripts.map((s, i) => {\n  const task = tasks[i];\n  if (!task) return null;\n  return { json: {\n    task_id: task.id,\n    description: `CONCEPT: ${s.concept_name}\\nFORMAT: ${s.format}\\nDURATION: ${s.estimated_duration}\\n\\n== FULL SCRIPT ==\\n${s.full_script}\\n\\n== HOOK ==\\n${s.hook}\\n\\n---\\nAI-generated by Smashed Agency UGC Script Agent Team\\nDelivered to client`\n  }};\n}).filter(Boolean);\nreturn items.length ? items : [{ json: { _skip: true } }];"
+      },
+      "id": "w4-match-tasks",
+      "name": "Match Scripts to Tasks",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [6000, 100]
+    },
+
+    {
+      "parameters": { "batchSize": 1, "options": {} },
+      "id": "w4-loop-tasks",
+      "name": "Loop Over Tasks",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [6360, 100]
+    },
+
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://api.clickup.com/api/v2/task/{{ $json.task_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "clickUpApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ description: $json.description }) }}",
+        "options": {}
+      },
+      "id": "w4-update-task",
+      "name": "Update Script Card",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [6620, 180],
+      "credentials": { "clickUpApi": { "id": "YOUR_CLICKUP_API_CREDENTIAL_ID", "name": "ClickUp API" } },
+      "onError": "continueRegularOutput"
+    },
+
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { _skip: true } }];"
+      },
+      "id": "w4-skip-clickup",
+      "name": "Skip ClickUp",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [5640, 280]
+    },
+
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Update script records in Airtable to 'Delivered'\n// ============================================================\nconst data = $('Format Approved Scripts').first().json;\nconst items = data.script_ids.map(id => ({ json: {\n  record_id: id,\n  pm_status: 'Approved',\n  overall_status: 'Delivered'\n}}));\nreturn items.length ? items : [{ json: { _skip: true } }];"
+      },
+      "id": "w4-prep-script-update",
+      "name": "Prepare Script Status Update",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [4340, 480]
+    },
+
+    {
+      "parameters": {
+        "resource": "record",
+        "operation": "update",
+        "base": { "__rl": true, "value": "YOUR_AIRTABLE_BASE_ID", "mode": "id" },
+        "table": { "__rl": true, "value": "Scripts", "mode": "name" },
+        "id": "={{ $json.record_id }}",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "pm_status": "={{ $json.pm_status }}",
+            "overall_status": "={{ $json.overall_status }}"
+          }
+        },
+        "options": { "bulkSize": 10 }
+      },
+      "id": "w4-update-scripts-delivered",
+      "name": "Update Scripts — Delivered",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [4700, 480],
+      "credentials": { "airtableTokenApi": { "id": "YOUR_AIRTABLE_CREDENTIAL_ID", "name": "Airtable Personal Access Token" } },
+      "onError": "continueRegularOutput"
+    },
+
+    {
+      "parameters": {
+        "resource": "record",
+        "operation": "update",
+        "base": { "__rl": true, "value": "YOUR_AIRTABLE_BASE_ID", "mode": "id" },
+        "table": { "__rl": true, "value": "Projects", "mode": "name" },
+        "id": "={{ $('Format Approved Scripts').first().json.project_id }}",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "Delivered"
+          }
+        },
+        "options": {}
+      },
+      "id": "w4-update-project-delivered",
+      "name": "Update Project — Delivered",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [5060, 480],
+      "credentials": { "airtableTokenApi": { "id": "YOUR_AIRTABLE_CREDENTIAL_ID", "name": "Airtable Personal Access Token" } }
+    },
+
+    {
+      "parameters": {
+        "jsCode": "const data = $('Format Approved Scripts').first().json;\nconst summary = data.scripts.map(s => `  ${s.script_number}. \"${s.concept_name}\" (${s.format}) — \"${(s.hook || '').substring(0, 50)}...\"`).join('\\n');\nreturn [{ json: {\n  brand_name: data.brand_name,\n  client_code: data.client_code,\n  client_name: data.client_name,\n  total_scripts: data.total_scripts,\n  script_summary: summary,\n  project_id: data.project_id\n} }];"
+      },
+      "id": "w4-prep-notify",
+      "name": "Prepare Notification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [5420, 480]
+    },
+
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": { "__rl": true, "value": "C07MN9QA1R7", "mode": "id" },
+        "text": "={{ `*Scripts Delivered: ${$json.brand_name}*\\n\\n*${$json.total_scripts} UGC scripts delivered for ${$json.client_code}*\\n\\n${$json.script_summary}\\n\\nGoogle Docs populated | ClickUp cards updated | Airtable status: Delivered\\n\\n_Ready for ${$json.client_name}_` }}",
+        "otherOptions": {}
+      },
+      "id": "w4-slack-delivered",
+      "name": "Notify Slack — Delivered",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [5780, 480],
+      "credentials": { "slackOAuth2Api": { "id": "YOUR_SLACK_CREDENTIAL_ID", "name": "Slack account" } },
+      "onError": "continueRegularOutput"
+    },
+
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": { "__rl": true, "value": "1cB4wtyp0l0xwH2Ukw-U93eW9_Ix1lB6EroYs1GyDLCM", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Script Agent Log", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "A": "={{ new Date().toISOString() }}",
+            "B": "={{ $json.client_code }}",
+            "C": "={{ $json.brand_name }}",
+            "D": "Delivered",
+            "E": "={{ $json.total_scripts }}",
+            "F": "N/A",
+            "G": "0",
+            "H": "={{ $json.script_summary }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "w4-log",
+      "name": "Log to Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [6140, 480],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "YOUR_GOOGLE_SHEETS_CREDENTIAL_ID", "name": "Google Sheets account" } },
+      "onError": "continueRegularOutput"
+    },
+
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'success', action: 'delivered', project_id: $json.project_id || $('Format Approved Scripts').first().json.project_id, brand: $json.brand_name, client_code: $json.client_code, scripts_delivered: $json.total_scripts, message: 'Scripts delivered to Google Docs, ClickUp, and Airtable. Client notified.' }) }}",
+        "options": {}
+      },
+      "id": "w4-respond-approve",
+      "name": "Respond — Delivered",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [6500, 480]
+    },
+
+    {
+      "parameters": {
+        "content": "## REJECT BRANCH\nStore revision notes -> Trigger re-write\n-> Slack notification",
+        "height": 120,
+        "width": 380,
+        "color": 1
+      },
+      "id": "w4-sticky-reject",
+      "name": "Sticky Note - Reject",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [2380, 560]
+    },
+
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// PM Rejects scripts: prepare revision notes for Airtable\n// ============================================================\nconst data = $input.first().json;\nconst scripts = data.scripts;\nconst notes = data.notes;\nconst scriptIds = data.script_ids || [];\n\nconst targetScripts = scriptIds.length > 0\n  ? scripts.filter(s => scriptIds.includes(s.id))\n  : scripts;\n\nconst items = targetScripts.map(s => ({ json: {\n  record_id: s.id,\n  pm_status: 'Rejected',\n  pm_notes: notes || 'Revision needed',\n  overall_status: 'PM Review'\n}}));\n\nreturn items;"
+      },
+      "id": "w4-reject-prep",
+      "name": "Prepare Script Rejections",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2420, 680]
+    },
+
+    {
+      "parameters": {
+        "resource": "record",
+        "operation": "update",
+        "base": { "__rl": true, "value": "YOUR_AIRTABLE_BASE_ID", "mode": "id" },
+        "table": { "__rl": true, "value": "Scripts", "mode": "name" },
+        "id": "={{ $json.record_id }}",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "pm_status": "={{ $json.pm_status }}",
+            "pm_notes": "={{ $json.pm_notes }}",
+            "overall_status": "={{ $json.overall_status }}"
+          }
+        },
+        "options": { "bulkSize": 10 }
+      },
+      "id": "w4-update-scripts-rejected",
+      "name": "Update Scripts — Rejected",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [2780, 680],
+      "credentials": { "airtableTokenApi": { "id": "YOUR_AIRTABLE_CREDENTIAL_ID", "name": "Airtable Personal Access Token" } },
+      "onError": "continueRegularOutput"
+    },
+
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "YOUR_N8N_BASE_URL/webhook/ugc-phase3",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ project_id: $('Merge Delivery Context').first().json.project_id }) }}",
+        "options": { "timeout": 300000 }
+      },
+      "id": "w4-trigger-rewrite",
+      "name": "Trigger Rewrite — Workflow 3",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3140, 680],
+      "onError": "continueRegularOutput"
+    },
+
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": { "__rl": true, "value": "C07MN9QA1R7", "mode": "id" },
+        "text": "={{ `PM rejected scripts for ${$('Merge Delivery Context').first().json.project.brand_name || 'project'}. Revision notes: ${$('Merge Delivery Context').first().json.notes || 'No notes provided'}. Re-write triggered automatically.` }}",
+        "otherOptions": {}
+      },
+      "id": "w4-slack-reject",
+      "name": "Slack — Rewrite Triggered",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [3500, 680],
+      "credentials": { "slackOAuth2Api": { "id": "YOUR_SLACK_CREDENTIAL_ID", "name": "Slack account" } },
+      "onError": "continueRegularOutput"
+    },
+
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'success', action: 'reject', project_id: $('Merge Delivery Context').first().json.project_id, message: 'Scripts rejected. Revision notes stored. Re-write workflow triggered.' }) }}",
+        "options": {}
+      },
+      "id": "w4-respond-reject",
+      "name": "Respond — Reject",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [3860, 680]
+    },
+
+    {
+      "parameters": {
+        "jsCode": "const err = $input.first().json;\nlet project_id = 'N/A';\ntry { project_id = $('Extract Delivery Payload').first().json.project_id; } catch(e) {}\nreturn [{ json: { project_id, error_message: err.error?.message || err.message || 'Unknown', error_node: err.error?.node?.name || 'Unknown', timestamp: new Date().toISOString() } }];"
+      },
+      "id": "w4-error-handler",
+      "name": "Handle Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [940, 900]
+    },
+    {
+      "parameters": {
+        "select": "user",
+        "user": { "__rl": true, "value": "U06P9F49BJT", "mode": "id" },
+        "text": "={{ `Phase 4 (Delivery) failed for project ${$json.project_id}. Error: ${$json.error_message}. Node: ${$json.error_node}` }}",
+        "otherOptions": {}
+      },
+      "id": "w4-error-slack",
+      "name": "Error Slack DM",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [1340, 900],
+      "credentials": { "slackOAuth2Api": { "id": "YOUR_SLACK_CREDENTIAL_ID", "name": "Slack account" } },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'error', phase: 'delivery', message: $json.error_message, project_id: $json.project_id }) }}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "w4-error-respond",
+      "name": "Respond 200 on Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1740, 900]
+    }
+  ],
+
+  "connections": {
+    "Webhook — Delivery": {
+      "main": [[{ "node": "Extract Delivery Payload", "type": "main", "index": 0 }]]
+    },
+    "Manual Trigger — Test": {
+      "main": [[{ "node": "Set Test Data", "type": "main", "index": 0 }]]
+    },
+    "Set Test Data": {
+      "main": [[{ "node": "Extract Delivery Payload", "type": "main", "index": 0 }]]
+    },
+    "Extract Delivery Payload": {
+      "main": [[{ "node": "Fetch Project", "type": "main", "index": 0 }]]
+    },
+    "Fetch Project": {
+      "main": [[{ "node": "Fetch Scripts from Airtable", "type": "main", "index": 0 }]]
+    },
+    "Fetch Scripts from Airtable": {
+      "main": [[{ "node": "Merge Delivery Context", "type": "main", "index": 0 }]]
+    },
+    "Merge Delivery Context": {
+      "main": [[{ "node": "Approve or Reject?", "type": "main", "index": 0 }]]
+    },
+    "Approve or Reject?": {
+      "main": [
+        [{ "node": "Format Approved Scripts", "type": "main", "index": 0 }],
+        [{ "node": "Prepare Script Rejections", "type": "main", "index": 0 }]
+      ]
+    },
+
+    "Format Approved Scripts": {
+      "main": [[
+        { "node": "Find Script Docs in Drive", "type": "main", "index": 0 },
+        { "node": "Prepare Script Status Update", "type": "main", "index": 0 }
+      ]]
+    },
+
+    "Find Script Docs in Drive": {
+      "main": [[{ "node": "Match Scripts to Docs", "type": "main", "index": 0 }]]
+    },
+    "Match Scripts to Docs": {
+      "main": [[{ "node": "Loop Over Docs", "type": "main", "index": 0 }]]
+    },
+    "Loop Over Docs": {
+      "main": [
+        [{ "node": "Prepare ClickUp Step", "type": "main", "index": 0 }],
+        [{ "node": "Doc Found?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Doc Found?": {
+      "main": [
+        [{ "node": "Write to Google Doc", "type": "main", "index": 0 }],
+        [{ "node": "Skip Doc", "type": "main", "index": 0 }]
+      ]
+    },
+    "Write to Google Doc": {
+      "main": [[{ "node": "Loop Over Docs", "type": "main", "index": 0 }]]
+    },
+    "Skip Doc": {
+      "main": [[{ "node": "Loop Over Docs", "type": "main", "index": 0 }]]
+    },
+
+    "Prepare ClickUp Step": {
+      "main": [[{ "node": "Get ClickUp Folders", "type": "main", "index": 0 }]]
+    },
+    "Get ClickUp Folders": {
+      "main": [[{ "node": "Find Brand List", "type": "main", "index": 0 }]]
+    },
+    "Find Brand List": {
+      "main": [[{ "node": "List Found?", "type": "main", "index": 0 }]]
+    },
+    "List Found?": {
+      "main": [
+        [{ "node": "Get Tasks", "type": "main", "index": 0 }],
+        [{ "node": "Skip ClickUp", "type": "main", "index": 0 }]
+      ]
+    },
+    "Get Tasks": {
+      "main": [[{ "node": "Match Scripts to Tasks", "type": "main", "index": 0 }]]
+    },
+    "Match Scripts to Tasks": {
+      "main": [[{ "node": "Loop Over Tasks", "type": "main", "index": 0 }]]
+    },
+    "Loop Over Tasks": {
+      "main": [
+        [],
+        [{ "node": "Update Script Card", "type": "main", "index": 0 }]
+      ]
+    },
+    "Update Script Card": {
+      "main": [[{ "node": "Loop Over Tasks", "type": "main", "index": 0 }]]
+    },
+
+    "Prepare Script Status Update": {
+      "main": [[{ "node": "Update Scripts — Delivered", "type": "main", "index": 0 }]]
+    },
+    "Update Scripts — Delivered": {
+      "main": [[{ "node": "Update Project — Delivered", "type": "main", "index": 0 }]]
+    },
+    "Update Project — Delivered": {
+      "main": [[{ "node": "Prepare Notification", "type": "main", "index": 0 }]]
+    },
+    "Prepare Notification": {
+      "main": [[{ "node": "Notify Slack — Delivered", "type": "main", "index": 0 }]]
+    },
+    "Notify Slack — Delivered": {
+      "main": [[{ "node": "Log to Sheet", "type": "main", "index": 0 }]]
+    },
+    "Log to Sheet": {
+      "main": [[{ "node": "Respond — Delivered", "type": "main", "index": 0 }]]
+    },
+
+    "Prepare Script Rejections": {
+      "main": [[{ "node": "Update Scripts — Rejected", "type": "main", "index": 0 }]]
+    },
+    "Update Scripts — Rejected": {
+      "main": [[{ "node": "Trigger Rewrite — Workflow 3", "type": "main", "index": 0 }]]
+    },
+    "Trigger Rewrite — Workflow 3": {
+      "main": [[{ "node": "Slack — Rewrite Triggered", "type": "main", "index": 0 }]]
+    },
+    "Slack — Rewrite Triggered": {
+      "main": [[{ "node": "Respond — Reject", "type": "main", "index": 0 }]]
+    },
+
+    "Handle Error": {
+      "main": [[{ "node": "Error Slack DM", "type": "main", "index": 0 }]]
+    },
+    "Error Slack DM": {
+      "main": [[{ "node": "Respond 200 on Error", "type": "main", "index": 0 }]]
+    }
+  },
+
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "tags": [
+    { "name": "UGC", "id": "2" },
+    { "name": "Delivery", "id": "14" },
+    { "name": "Phase 4", "id": "15" }
+  ],
+  "triggerCount": 1,
+  "pinData": {}
+}
