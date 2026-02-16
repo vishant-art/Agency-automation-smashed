@@ -63,7 +63,7 @@
       "parameters": {
         "resource": "record",
         "operation": "search",
-        "base": { "__rl": true, "value": "YOUR_AIRTABLE_BASE_ID", "mode": "id" },
+        "base": { "__rl": true, "value": "appvFxwZc9yU8o8pK", "mode": "id" },
         "table": { "__rl": true, "value": "Projects", "mode": "name" },
         "filterByFormula": "=RECORD_ID() = '{{ $json.project_id }}'",
         "options": {}
@@ -80,7 +80,7 @@
       "parameters": {
         "resource": "record",
         "operation": "search",
-        "base": { "__rl": true, "value": "YOUR_AIRTABLE_BASE_ID", "mode": "id" },
+        "base": { "__rl": true, "value": "appvFxwZc9yU8o8pK", "mode": "id" },
         "table": { "__rl": true, "value": "Scripts", "mode": "name" },
         "filterByFormula": "={project_id} = '{{ $('Extract Delivery Payload').first().json.project_id }}'",
         "options": {}
@@ -374,7 +374,7 @@
       "parameters": {
         "resource": "record",
         "operation": "update",
-        "base": { "__rl": true, "value": "YOUR_AIRTABLE_BASE_ID", "mode": "id" },
+        "base": { "__rl": true, "value": "appvFxwZc9yU8o8pK", "mode": "id" },
         "table": { "__rl": true, "value": "Scripts", "mode": "name" },
         "id": "={{ $json.record_id }}",
         "columns": {
@@ -399,7 +399,7 @@
       "parameters": {
         "resource": "record",
         "operation": "update",
-        "base": { "__rl": true, "value": "YOUR_AIRTABLE_BASE_ID", "mode": "id" },
+        "base": { "__rl": true, "value": "appvFxwZc9yU8o8pK", "mode": "id" },
         "table": { "__rl": true, "value": "Projects", "mode": "name" },
         "id": "={{ $('Format Approved Scripts').first().json.project_id }}",
         "columns": {
@@ -516,7 +516,7 @@
       "parameters": {
         "resource": "record",
         "operation": "update",
-        "base": { "__rl": true, "value": "YOUR_AIRTABLE_BASE_ID", "mode": "id" },
+        "base": { "__rl": true, "value": "appvFxwZc9yU8o8pK", "mode": "id" },
         "table": { "__rl": true, "value": "Scripts", "mode": "name" },
         "id": "={{ $json.record_id }}",
         "columns": {

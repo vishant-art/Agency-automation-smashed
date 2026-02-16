@@ -178,14 +178,18 @@ Create these filtered views for easy review:
 **In the Projects table:**
 - "Active Pipeline" view — Filter: `status != Delivered`, sorted by `created_at` descending
 
-### Get Your Airtable IDs
+### Airtable IDs (Already Configured)
 
-After creating the base, you need two things:
+The Airtable base **"UGC Script Engine"** has been created. All workflow files are pre-configured with these IDs:
 
-1. **Base ID**: Go to https://airtable.com/developers/web/api/introduction → select your base → the URL shows `app...` — that's your Base ID
-2. **Personal Access Token**: Go to https://airtable.com/create/tokens → Create token → Scopes: `data.records:read`, `data.records:write`, `schema.bases:read` → Add your base
+- **Base ID**: `appvFxwZc9yU8o8pK`
+- **Projects**: `tblTEqixoeRKPMgDE`
+- **Research**: `tbltJxXA5YevGxJ8r`
+- **Reference_Videos**: `tblgU6cOrJ075rBQF`
+- **Concepts**: `tbl4pDNYswMN2Fx6X`
+- **Scripts**: `tbl2D9mapezLKMPg7`
 
-**Replace `YOUR_AIRTABLE_BASE_ID` in all workflow files with your actual Base ID.**
+You still need a **Personal Access Token**: Go to https://airtable.com/create/tokens → Create token → Scopes: `data.records:read`, `data.records:write`, `schema.bases:read` → Add your base
 
 ---
 
@@ -322,7 +326,7 @@ The workflows chain together via webhooks. After importing and activating, you n
 
 In each JSON file, do a global find-and-replace:
 - Replace `YOUR_N8N_BASE_URL` → your actual n8n URL (e.g., `https://smashed.app.n8n.cloud`)
-- Replace `YOUR_AIRTABLE_BASE_ID` → your Airtable base ID (e.g., `appXXXXXXXXXX`)
+- ~~`appvFxwZc9yU8o8pK`~~ → **Already configured** (Airtable Base ID)
 - Replace `YOUR_AIRTABLE_CREDENTIAL_ID` → the n8n credential ID for Airtable
 - Replace `YOUR_OPENAI_CREDENTIAL_ID` → the n8n credential ID for OpenAI
 - Replace `YOUR_SERPAPI_CREDENTIAL_ID` → the n8n credential ID for SerpAPI

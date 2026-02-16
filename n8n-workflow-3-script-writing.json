@@ -63,7 +63,7 @@
       "parameters": {
         "resource": "record",
         "operation": "search",
-        "base": { "__rl": true, "value": "YOUR_AIRTABLE_BASE_ID", "mode": "id" },
+        "base": { "__rl": true, "value": "appvFxwZc9yU8o8pK", "mode": "id" },
         "table": { "__rl": true, "value": "Projects", "mode": "name" },
         "filterByFormula": "=RECORD_ID() = '{{ $json.project_id }}'",
         "options": {}
@@ -91,7 +91,7 @@
       "parameters": {
         "resource": "record",
         "operation": "search",
-        "base": { "__rl": true, "value": "YOUR_AIRTABLE_BASE_ID", "mode": "id" },
+        "base": { "__rl": true, "value": "appvFxwZc9yU8o8pK", "mode": "id" },
         "table": { "__rl": true, "value": "Concepts", "mode": "name" },
         "filterByFormula": "=AND({project_id} = '{{ $json.project_id }}', {client_status} = 'Approved')",
         "options": {}
@@ -108,7 +108,7 @@
       "parameters": {
         "resource": "record",
         "operation": "search",
-        "base": { "__rl": true, "value": "YOUR_AIRTABLE_BASE_ID", "mode": "id" },
+        "base": { "__rl": true, "value": "appvFxwZc9yU8o8pK", "mode": "id" },
         "table": { "__rl": true, "value": "Research", "mode": "name" },
         "filterByFormula": "={project_id} = '{{ $('Extract Client Code').first().json.project_id }}'",
         "options": {}
@@ -125,7 +125,7 @@
       "parameters": {
         "resource": "record",
         "operation": "search",
-        "base": { "__rl": true, "value": "YOUR_AIRTABLE_BASE_ID", "mode": "id" },
+        "base": { "__rl": true, "value": "appvFxwZc9yU8o8pK", "mode": "id" },
         "table": { "__rl": true, "value": "Reference_Videos", "mode": "name" },
         "filterByFormula": "={project_id} = '{{ $('Extract Client Code').first().json.project_id }}'",
         "options": {}
@@ -321,7 +321,7 @@
       "parameters": {
         "resource": "record",
         "operation": "create",
-        "base": { "__rl": true, "value": "YOUR_AIRTABLE_BASE_ID", "mode": "id" },
+        "base": { "__rl": true, "value": "appvFxwZc9yU8o8pK", "mode": "id" },
         "table": { "__rl": true, "value": "Scripts", "mode": "name" },
         "columns": {
           "mappingMode": "defineBelow",
@@ -365,7 +365,7 @@
       "parameters": {
         "resource": "record",
         "operation": "update",
-        "base": { "__rl": true, "value": "YOUR_AIRTABLE_BASE_ID", "mode": "id" },
+        "base": { "__rl": true, "value": "appvFxwZc9yU8o8pK", "mode": "id" },
         "table": { "__rl": true, "value": "Projects", "mode": "name" },
         "id": "={{ $('Parse Scripts for Airtable').first().json.project_id }}",
         "columns": {
@@ -386,7 +386,7 @@
 
     {
       "parameters": {
-        "jsCode": "// ============================================================\n// Build Slack notification for PM script review\n// ============================================================\nconst data = $('Parse Scripts for Airtable').first().json;\nconst brief = data.brief;\nconst scripts = data.script_records;\nconst project_id = data.project_id;\n\nconst scriptSummary = scripts.map((s, i) =>\n  `${i + 1}. *${s.concept_name}* (${s.format})\\n   Hook: _\"${(s.hook || '').substring(0, 60)}...\"_\\n   Duration: ${s.estimated_duration} | QA: ${s.qa_score}/10`\n).join('\\n\\n');\n\nconst slackBlocks = [\n  {\n    \"type\": \"header\",\n    \"text\": { \"type\": \"plain_text\", \"text\": `Scripts Ready for PM Review: ${brief.brand_name || 'Brand'}` }\n  },\n  {\n    \"type\": \"section\",\n    \"text\": {\n      \"type\": \"mrkdwn\",\n      \"text\": `*${scripts.length} scripts written and QA'd for ${brief.client_code || 'project'}*\\nQA Score: ${data.qa_quality}/10 | Revisions used: ${data.revisions_used}\\n\\n${scriptSummary}`\n    }\n  },\n  {\n    \"type\": \"divider\"\n  },\n  {\n    \"type\": \"actions\",\n    \"elements\": [\n      {\n        \"type\": \"button\",\n        \"text\": { \"type\": \"plain_text\", \"text\": \"Review Scripts in Airtable\" },\n        \"style\": \"primary\",\n        \"url\": `https://airtable.com/YOUR_AIRTABLE_BASE_ID/Scripts?filter_project_id=${project_id}`\n      },\n      {\n        \"type\": \"button\",\n        \"text\": { \"type\": \"plain_text\", \"text\": \"Approve All & Deliver\" },\n        \"url\": `YOUR_N8N_BASE_URL/webhook/ugc-delivery?project_id=${project_id}&action=approve`\n      }\n    ]\n  }\n];\n\nreturn [{ json: {\n  project_id,\n  brief,\n  script_count: scripts.length,\n  slack_blocks: JSON.stringify(slackBlocks),\n  slack_text: `${scripts.length} UGC scripts ready for PM review: ${brief.brand_name || 'Brand'} (${brief.client_code || ''}) — QA: ${data.qa_quality}/10`\n} }];"
+        "jsCode": "// ============================================================\n// Build Slack notification for PM script review\n// ============================================================\nconst data = $('Parse Scripts for Airtable').first().json;\nconst brief = data.brief;\nconst scripts = data.script_records;\nconst project_id = data.project_id;\n\nconst scriptSummary = scripts.map((s, i) =>\n  `${i + 1}. *${s.concept_name}* (${s.format})\\n   Hook: _\"${(s.hook || '').substring(0, 60)}...\"_\\n   Duration: ${s.estimated_duration} | QA: ${s.qa_score}/10`\n).join('\\n\\n');\n\nconst slackBlocks = [\n  {\n    \"type\": \"header\",\n    \"text\": { \"type\": \"plain_text\", \"text\": `Scripts Ready for PM Review: ${brief.brand_name || 'Brand'}` }\n  },\n  {\n    \"type\": \"section\",\n    \"text\": {\n      \"type\": \"mrkdwn\",\n      \"text\": `*${scripts.length} scripts written and QA'd for ${brief.client_code || 'project'}*\\nQA Score: ${data.qa_quality}/10 | Revisions used: ${data.revisions_used}\\n\\n${scriptSummary}`\n    }\n  },\n  {\n    \"type\": \"divider\"\n  },\n  {\n    \"type\": \"actions\",\n    \"elements\": [\n      {\n        \"type\": \"button\",\n        \"text\": { \"type\": \"plain_text\", \"text\": \"Review Scripts in Airtable\" },\n        \"style\": \"primary\",\n        \"url\": `https://airtable.com/appvFxwZc9yU8o8pK/Scripts?filter_project_id=${project_id}`\n      },\n      {\n        \"type\": \"button\",\n        \"text\": { \"type\": \"plain_text\", \"text\": \"Approve All & Deliver\" },\n        \"url\": `YOUR_N8N_BASE_URL/webhook/ugc-delivery?project_id=${project_id}&action=approve`\n      }\n    ]\n  }\n];\n\nreturn [{ json: {\n  project_id,\n  brief,\n  script_count: scripts.length,\n  slack_blocks: JSON.stringify(slackBlocks),\n  slack_text: `${scripts.length} UGC scripts ready for PM review: ${brief.brand_name || 'Brand'} (${brief.client_code || ''}) — QA: ${data.qa_quality}/10`\n} }];"
       },
       "id": "w3-prep-slack",
       "name": "Prepare Slack Notification",

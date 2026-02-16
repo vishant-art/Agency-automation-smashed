@@ -63,7 +63,7 @@
       "parameters": {
         "resource": "record",
         "operation": "search",
-        "base": { "__rl": true, "value": "YOUR_AIRTABLE_BASE_ID", "mode": "id" },
+        "base": { "__rl": true, "value": "appvFxwZc9yU8o8pK", "mode": "id" },
         "table": { "__rl": true, "value": "Projects", "mode": "name" },
         "filterByFormula": "=RECORD_ID() = '{{ $json.project_id }}'",
         "options": {}
@@ -80,7 +80,7 @@
       "parameters": {
         "resource": "record",
         "operation": "search",
-        "base": { "__rl": true, "value": "YOUR_AIRTABLE_BASE_ID", "mode": "id" },
+        "base": { "__rl": true, "value": "appvFxwZc9yU8o8pK", "mode": "id" },
         "table": { "__rl": true, "value": "Concepts", "mode": "name" },
         "filterByFormula": "={project_id} = '{{ $('Extract Approval Payload').first().json.project_id }}'",
         "options": {}
@@ -152,7 +152,7 @@
       "parameters": {
         "resource": "record",
         "operation": "update",
-        "base": { "__rl": true, "value": "YOUR_AIRTABLE_BASE_ID", "mode": "id" },
+        "base": { "__rl": true, "value": "appvFxwZc9yU8o8pK", "mode": "id" },
         "table": { "__rl": true, "value": "Concepts", "mode": "name" },
         "id": "={{ $json.record_id }}",
         "columns": {
@@ -178,7 +178,7 @@
       "parameters": {
         "resource": "record",
         "operation": "update",
-        "base": { "__rl": true, "value": "YOUR_AIRTABLE_BASE_ID", "mode": "id" },
+        "base": { "__rl": true, "value": "appvFxwZc9yU8o8pK", "mode": "id" },
         "table": { "__rl": true, "value": "Projects", "mode": "name" },
         "id": "={{ $('Merge Context').first().json.project_id }}",
         "columns": {
@@ -199,7 +199,7 @@
 
     {
       "parameters": {
-        "jsCode": "// ============================================================\n// Build Slack notification for client concept review\n// ============================================================\nconst data = $('Merge Context').first().json;\nconst project = data.project;\nconst concepts = data.concepts.filter(c => {\n  const ids = data.concept_ids || [];\n  return ids.length === 0 || ids.includes(c.id);\n});\n\nconst conceptSummary = concepts.map((c, i) =>\n  `${i + 1}. *${c.concept_name || c.fields?.concept_name || 'Concept'}*\\n   _\"${c.hook_text || c.fields?.hook_text || ''}\"_\\n   ${c.concept_pitch || c.fields?.concept_pitch || ''}`\n).join('\\n\\n');\n\nconst brandName = project.brand_name || project.fields?.brand_name || 'Client';\nconst clientEmail = project.client_email || project.fields?.client_email || '';\nconst clientName = project.client_name || project.fields?.client_name || 'Client';\nconst projectId = data.project_id;\n\nconst slackBlocks = [\n  {\n    \"type\": \"header\",\n    \"text\": { \"type\": \"plain_text\", \"text\": `Client Review: ${brandName} Concepts` }\n  },\n  {\n    \"type\": \"section\",\n    \"text\": {\n      \"type\": \"mrkdwn\",\n      \"text\": `PM has approved *${concepts.length} concepts* for ${brandName}.\\nClient: ${clientName} (${clientEmail})\\n\\n*Approved Concepts:*\\n\\n${conceptSummary}\\n\\nConcepts are ready for client review. Share the Airtable view link with the client.`\n    }\n  },\n  {\n    \"type\": \"actions\",\n    \"elements\": [\n      {\n        \"type\": \"button\",\n        \"text\": { \"type\": \"plain_text\", \"text\": \"Client Airtable View\" },\n        \"url\": `https://airtable.com/YOUR_AIRTABLE_BASE_ID/Concepts?filter_project_id=${projectId}`\n      }\n    ]\n  }\n];\n\nreturn [{ json: {\n  project_id: projectId,\n  slack_blocks: JSON.stringify(slackBlocks),\n  slack_text: `PM approved ${concepts.length} concepts for ${brandName}. Ready for client review.`,\n  client_email: clientEmail,\n  client_name: clientName,\n  brand_name: brandName,\n  approved_count: concepts.length\n} }];"
+        "jsCode": "// ============================================================\n// Build Slack notification for client concept review\n// ============================================================\nconst data = $('Merge Context').first().json;\nconst project = data.project;\nconst concepts = data.concepts.filter(c => {\n  const ids = data.concept_ids || [];\n  return ids.length === 0 || ids.includes(c.id);\n});\n\nconst conceptSummary = concepts.map((c, i) =>\n  `${i + 1}. *${c.concept_name || c.fields?.concept_name || 'Concept'}*\\n   _\"${c.hook_text || c.fields?.hook_text || ''}\"_\\n   ${c.concept_pitch || c.fields?.concept_pitch || ''}`\n).join('\\n\\n');\n\nconst brandName = project.brand_name || project.fields?.brand_name || 'Client';\nconst clientEmail = project.client_email || project.fields?.client_email || '';\nconst clientName = project.client_name || project.fields?.client_name || 'Client';\nconst projectId = data.project_id;\n\nconst slackBlocks = [\n  {\n    \"type\": \"header\",\n    \"text\": { \"type\": \"plain_text\", \"text\": `Client Review: ${brandName} Concepts` }\n  },\n  {\n    \"type\": \"section\",\n    \"text\": {\n      \"type\": \"mrkdwn\",\n      \"text\": `PM has approved *${concepts.length} concepts* for ${brandName}.\\nClient: ${clientName} (${clientEmail})\\n\\n*Approved Concepts:*\\n\\n${conceptSummary}\\n\\nConcepts are ready for client review. Share the Airtable view link with the client.`\n    }\n  },\n  {\n    \"type\": \"actions\",\n    \"elements\": [\n      {\n        \"type\": \"button\",\n        \"text\": { \"type\": \"plain_text\", \"text\": \"Client Airtable View\" },\n        \"url\": `https://airtable.com/appvFxwZc9yU8o8pK/Concepts?filter_project_id=${projectId}`\n      }\n    ]\n  }\n];\n\nreturn [{ json: {\n  project_id: projectId,\n  slack_blocks: JSON.stringify(slackBlocks),\n  slack_text: `PM approved ${concepts.length} concepts for ${brandName}. Ready for client review.`,\n  client_email: clientEmail,\n  client_name: clientName,\n  brand_name: brandName,\n  approved_count: concepts.length\n} }];"
       },
       "id": "w2-pm-approve-notify-prep",
       "name": "Prepare Client Review Notification",
@@ -268,7 +268,7 @@
       "parameters": {
         "resource": "record",
         "operation": "update",
-        "base": { "__rl": true, "value": "YOUR_AIRTABLE_BASE_ID", "mode": "id" },
+        "base": { "__rl": true, "value": "appvFxwZc9yU8o8pK", "mode": "id" },
         "table": { "__rl": true, "value": "Concepts", "mode": "name" },
         "id": "={{ $json.record_id }}",
         "columns": {
@@ -348,7 +348,7 @@
       "parameters": {
         "resource": "record",
         "operation": "update",
-        "base": { "__rl": true, "value": "YOUR_AIRTABLE_BASE_ID", "mode": "id" },
+        "base": { "__rl": true, "value": "appvFxwZc9yU8o8pK", "mode": "id" },
         "table": { "__rl": true, "value": "Concepts", "mode": "name" },
         "id": "={{ $json.record_id }}",
         "columns": {
@@ -374,7 +374,7 @@
       "parameters": {
         "resource": "record",
         "operation": "update",
-        "base": { "__rl": true, "value": "YOUR_AIRTABLE_BASE_ID", "mode": "id" },
+        "base": { "__rl": true, "value": "appvFxwZc9yU8o8pK", "mode": "id" },
         "table": { "__rl": true, "value": "Projects", "mode": "name" },
         "id": "={{ $('Merge Context').first().json.project_id }}",
         "columns": {
@@ -479,7 +479,7 @@
       "parameters": {
         "resource": "record",
         "operation": "update",
-        "base": { "__rl": true, "value": "YOUR_AIRTABLE_BASE_ID", "mode": "id" },
+        "base": { "__rl": true, "value": "appvFxwZc9yU8o8pK", "mode": "id" },
         "table": { "__rl": true, "value": "Concepts", "mode": "name" },
         "id": "={{ $json.record_id }}",
         "columns": {
