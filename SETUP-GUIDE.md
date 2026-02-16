@@ -34,7 +34,7 @@ The script replaces all 90+ placeholder values across all 6 workflow files autom
 4. [Credential Setup](#4-credential-setup)
 5. [Webhook URL Configuration](#5-webhook-url-configuration)
 6. [Google Sheets Template](#6-google-sheets-template)
-7. [Tally Onboarding Form](#7-tally-onboarding-form)
+7. [JotForm Onboarding Form](#7-jotform-onboarding-form)
 8. [Slack Configuration](#8-slack-configuration)
 9. [Testing & Validation](#9-testing--validation)
 10. [Cost Breakdown](#10-cost-breakdown)
@@ -55,7 +55,7 @@ The script replaces all 90+ placeholder values across all 6 workflow files autom
 | Google | Sheets + Drive + Docs | accounts.google.com |
 | Slack | Notifications + approval buttons | slack.com |
 | ClickUp | Task management (optional) | clickup.com |
-| Tally | Client onboarding form | tally.so |
+| JotForm | Client onboarding form | jotform.com |
 
 ---
 
@@ -414,12 +414,12 @@ Timestamp | Client Code | Brand | Status | Scripts | QA Score | Revisions | Summ
 
 ---
 
-## 7. Tally Onboarding Form
+## 7. JotForm Onboarding Form
 
-Create a Tally form with fields matching the Client Database columns. See the onboarding workflow file for the exact field mapping.
+Create a JotForm form with fields matching the Client Database columns. See the onboarding workflow file for the exact field mapping.
 
-Connect Tally to Workflow 0 (onboarding) via webhook:
-- In Tally: Form Settings → Integrations → Webhook
+Connect JotForm to Workflow 0 (onboarding) via webhook:
+- In JotForm: Settings → Integrations → Webhooks → Add Webhook
 - URL: `YOUR_N8N_BASE_URL/webhook/ugc-onboarding`
 
 ---
