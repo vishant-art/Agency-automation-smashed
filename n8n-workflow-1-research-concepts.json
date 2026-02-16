@@ -103,8 +103,7 @@
             "client_email": "={{ $json.brief.client_email }}",
             "status": "Research",
             "num_scripts": "={{ $json.brief.num_scripts }}",
-            "brief_summary": "={{ $json.brief.product_feature + ' | ' + $json.brief.target_user + ' | ' + $json.brief.biggest_problem }}",
-            "created_at": "={{ new Date().toISOString() }}"
+            "brief_summary": "={{ $json.brief.product_feature + ' | ' + $json.brief.target_user + ' | ' + $json.brief.biggest_problem }}"
           }
         },
         "options": {}
