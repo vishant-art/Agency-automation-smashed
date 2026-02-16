@@ -1,7 +1,28 @@
 # Smashed Agency — UGC Script Agent System: Complete Setup Guide
 
 > **5 workflows, 4 AI agents, Airtable database, multi-stage approval gates.**
-> Estimated setup time: 45-60 minutes.
+> Estimated setup time: 45-60 minutes (or 15 minutes with the automated setup script).
+
+---
+
+## Quick Start (Automated Setup)
+
+If you already have your n8n credentials created, use the setup script to replace all placeholders in one go:
+
+```bash
+# 1. Copy the config template
+cp config.env.example config.env
+
+# 2. Fill in your credential IDs and URLs (see Section 4 for how to find them)
+nano config.env   # or use any editor
+
+# 3. Run the setup script
+bash setup.sh
+
+# 4. Import the updated JSON files into n8n
+```
+
+The script replaces all 90+ placeholder values across all 6 workflow files automatically.
 
 ---
 
@@ -230,7 +251,26 @@ Import these 5 workflow files **in this order**:
 
 ## 4. Credential Setup
 
-After importing, you need to set up credentials in n8n. Go to **Settings → Credentials** and create:
+After importing, you need to set up credentials in n8n. Go to **Settings → Credentials** and create each one below.
+
+### How to Find Credential IDs
+
+After creating a credential in n8n, you need its internal ID for the setup script:
+
+**Method 1 — Browser URL (easiest):**
+1. Go to Settings → Credentials → click a credential
+2. The URL will be: `https://your-n8n.com/credentials/{CREDENTIAL_ID}`
+3. Copy the ID from the URL
+
+**Method 2 — n8n API:**
+```bash
+curl -H "X-N8N-API-KEY: your-api-key" https://your-n8n.com/api/v1/credentials
+```
+
+**Method 3 — In-app dropdown (no script needed):**
+Instead of using the setup script, you can click each node in n8n and select the correct credential from the dropdown. This works but is tedious with 90+ nodes.
+
+Create these credentials:
 
 ### 4.1 OpenAI API Key
 
@@ -324,18 +364,29 @@ The workflows chain together via webhooks. After importing and activating, you n
 
 ### Quick Find & Replace
 
-In each JSON file, do a global find-and-replace:
-- Replace `YOUR_N8N_BASE_URL` → your actual n8n URL (e.g., `https://smashed.app.n8n.cloud`)
-- ~~`appvFxwZc9yU8o8pK`~~ → **Already configured** (Airtable Base ID)
-- Replace `YOUR_AIRTABLE_CREDENTIAL_ID` → the n8n credential ID for Airtable
-- Replace `YOUR_OPENAI_CREDENTIAL_ID` → the n8n credential ID for OpenAI
-- Replace `YOUR_SERPAPI_CREDENTIAL_ID` → the n8n credential ID for SerpAPI
-- Replace `YOUR_GOOGLE_SHEETS_CREDENTIAL_ID` → the n8n credential ID for Google Sheets
-- Replace `YOUR_GOOGLE_DRIVE_CREDENTIAL_ID` → the n8n credential ID for Google Drive
-- Replace `YOUR_SLACK_CREDENTIAL_ID` → the n8n credential ID for Slack
-- Replace `YOUR_CLICKUP_API_CREDENTIAL_ID` → the n8n credential ID for ClickUp
+**Option A — Automated (recommended):** Use the setup script:
+```bash
+cp config.env.example config.env
+# Fill in your credential IDs in config.env
+bash setup.sh
+```
 
-> **Tip**: After importing into n8n, you can also update credentials by clicking each node and selecting the right credential from the dropdown. This is often easier than editing the JSON.
+**Option B — Manual:** In each JSON file, do a global find-and-replace:
+
+| Placeholder | Replace With |
+|-------------|-------------|
+| `YOUR_N8N_BASE_URL` | Your n8n URL (e.g., `https://smashed.app.n8n.cloud`) |
+| `YOUR_AIRTABLE_CREDENTIAL_ID` | n8n credential ID for Airtable |
+| `YOUR_OPENAI_CREDENTIAL_ID` | n8n credential ID for OpenAI |
+| `YOUR_SERPAPI_CREDENTIAL_ID` | n8n credential ID for SerpAPI/Header Auth |
+| `YOUR_GOOGLE_SHEETS_CREDENTIAL_ID` | n8n credential ID for Google Sheets |
+| `YOUR_GOOGLE_DRIVE_CREDENTIAL_ID` | n8n credential ID for Google Drive |
+| `YOUR_SLACK_CREDENTIAL_ID` | n8n credential ID for Slack |
+| `YOUR_CLICKUP_API_CREDENTIAL_ID` | n8n credential ID for ClickUp |
+
+The setup script also handles optional replacements (Google Sheet ID, Slack channel/user IDs, ClickUp workspace IDs, Google Drive folder ID). See `config.env.example` for the full list.
+
+> **Tip**: After importing into n8n, you can also update credentials by clicking each node and selecting the right credential from the dropdown. This works but is tedious with 90+ nodes across 6 workflows.
 
 ---
 
