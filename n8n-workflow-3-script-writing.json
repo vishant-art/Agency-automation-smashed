@@ -73,7 +73,7 @@
       "type": "n8n-nodes-base.airtable",
       "typeVersion": 2.1,
       "position": [940, 320],
-      "credentials": { "airtableTokenApi": { "id": "YOUR_AIRTABLE_CREDENTIAL_ID", "name": "Airtable Personal Access Token" } }
+      "credentials": { "airtableTokenApi": { "id": "WelvlJEjoHaI3l9G", "name": "Airtable Personal Access Token" } }
     },
 
     {
@@ -101,7 +101,7 @@
       "type": "n8n-nodes-base.airtable",
       "typeVersion": 2.1,
       "position": [1660, 160],
-      "credentials": { "airtableTokenApi": { "id": "YOUR_AIRTABLE_CREDENTIAL_ID", "name": "Airtable Personal Access Token" } }
+      "credentials": { "airtableTokenApi": { "id": "WelvlJEjoHaI3l9G", "name": "Airtable Personal Access Token" } }
     },
 
     {
@@ -118,7 +118,7 @@
       "type": "n8n-nodes-base.airtable",
       "typeVersion": 2.1,
       "position": [1660, 340],
-      "credentials": { "airtableTokenApi": { "id": "YOUR_AIRTABLE_CREDENTIAL_ID", "name": "Airtable Personal Access Token" } }
+      "credentials": { "airtableTokenApi": { "id": "WelvlJEjoHaI3l9G", "name": "Airtable Personal Access Token" } }
     },
 
     {
@@ -135,7 +135,7 @@
       "type": "n8n-nodes-base.airtable",
       "typeVersion": 2.1,
       "position": [1660, 520],
-      "credentials": { "airtableTokenApi": { "id": "YOUR_AIRTABLE_CREDENTIAL_ID", "name": "Airtable Personal Access Token" } }
+      "credentials": { "airtableTokenApi": { "id": "WelvlJEjoHaI3l9G", "name": "Airtable Personal Access Token" } }
     },
 
     {
@@ -153,7 +153,7 @@
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
       "position": [1660, 700],
-      "credentials": { "googleSheetsOAuth2Api": { "id": "YOUR_GOOGLE_SHEETS_CREDENTIAL_ID", "name": "Google Sheets account" } },
+      "credentials": { "googleSheetsOAuth2Api": { "id": "Aas0vt74gbEuYgmW", "name": "Google Sheets account" } },
       "onError": "continueRegularOutput"
     },
 
@@ -194,7 +194,7 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
       "typeVersion": 1,
       "position": [2500, 540],
-      "credentials": { "openAiApi": { "id": "YOUR_OPENAI_CREDENTIAL_ID", "name": "OpenAI account" } }
+      "credentials": { "openAiApi": { "id": "OUom69v74KTvlioi", "name": "OpenAI account" } }
     },
 
     {
@@ -234,7 +234,7 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
       "typeVersion": 1,
       "position": [3120, 540],
-      "credentials": { "openAiApi": { "id": "YOUR_OPENAI_CREDENTIAL_ID", "name": "OpenAI account" } }
+      "credentials": { "openAiApi": { "id": "OUom69v74KTvlioi", "name": "OpenAI account" } }
     },
     {
       "parameters": {
@@ -357,7 +357,7 @@
       "type": "n8n-nodes-base.airtable",
       "typeVersion": 2.1,
       "position": [4960, 460],
-      "credentials": { "airtableTokenApi": { "id": "YOUR_AIRTABLE_CREDENTIAL_ID", "name": "Airtable Personal Access Token" } },
+      "credentials": { "airtableTokenApi": { "id": "WelvlJEjoHaI3l9G", "name": "Airtable Personal Access Token" } },
       "onError": "continueRegularOutput"
     },
 
@@ -381,12 +381,12 @@
       "type": "n8n-nodes-base.airtable",
       "typeVersion": 2.1,
       "position": [5320, 460],
-      "credentials": { "airtableTokenApi": { "id": "YOUR_AIRTABLE_CREDENTIAL_ID", "name": "Airtable Personal Access Token" } }
+      "credentials": { "airtableTokenApi": { "id": "WelvlJEjoHaI3l9G", "name": "Airtable Personal Access Token" } }
     },
 
     {
       "parameters": {
-        "jsCode": "// ============================================================\n// Build Slack notification for PM script review\n// ============================================================\nconst data = $('Parse Scripts for Airtable').first().json;\nconst brief = data.brief;\nconst scripts = data.script_records;\nconst project_id = data.project_id;\n\nconst scriptSummary = scripts.map((s, i) =>\n  `${i + 1}. *${s.concept_name}* (${s.format})\\n   Hook: _\"${(s.hook || '').substring(0, 60)}...\"_\\n   Duration: ${s.estimated_duration} | QA: ${s.qa_score}/10`\n).join('\\n\\n');\n\nconst slackBlocks = [\n  {\n    \"type\": \"header\",\n    \"text\": { \"type\": \"plain_text\", \"text\": `Scripts Ready for PM Review: ${brief.brand_name || 'Brand'}` }\n  },\n  {\n    \"type\": \"section\",\n    \"text\": {\n      \"type\": \"mrkdwn\",\n      \"text\": `*${scripts.length} scripts written and QA'd for ${brief.client_code || 'project'}*\\nQA Score: ${data.qa_quality}/10 | Revisions used: ${data.revisions_used}\\n\\n${scriptSummary}`\n    }\n  },\n  {\n    \"type\": \"divider\"\n  },\n  {\n    \"type\": \"actions\",\n    \"elements\": [\n      {\n        \"type\": \"button\",\n        \"text\": { \"type\": \"plain_text\", \"text\": \"Review Scripts in Airtable\" },\n        \"style\": \"primary\",\n        \"url\": `https://airtable.com/appvFxwZc9yU8o8pK/Scripts?filter_project_id=${project_id}`\n      },\n      {\n        \"type\": \"button\",\n        \"text\": { \"type\": \"plain_text\", \"text\": \"Approve All & Deliver\" },\n        \"url\": `YOUR_N8N_BASE_URL/webhook/ugc-delivery?project_id=${project_id}&action=approve`\n      }\n    ]\n  }\n];\n\nreturn [{ json: {\n  project_id,\n  brief,\n  script_count: scripts.length,\n  slack_blocks: JSON.stringify(slackBlocks),\n  slack_text: `${scripts.length} UGC scripts ready for PM review: ${brief.brand_name || 'Brand'} (${brief.client_code || ''}) — QA: ${data.qa_quality}/10`\n} }];"
+        "jsCode": "// ============================================================\n// Build Slack notification for PM script review\n// ============================================================\nconst data = $('Parse Scripts for Airtable').first().json;\nconst brief = data.brief;\nconst scripts = data.script_records;\nconst project_id = data.project_id;\n\nconst scriptSummary = scripts.map((s, i) =>\n  `${i + 1}. *${s.concept_name}* (${s.format})\\n   Hook: _\"${(s.hook || '').substring(0, 60)}...\"_\\n   Duration: ${s.estimated_duration} | QA: ${s.qa_score}/10`\n).join('\\n\\n');\n\nconst slackBlocks = [\n  {\n    \"type\": \"header\",\n    \"text\": { \"type\": \"plain_text\", \"text\": `Scripts Ready for PM Review: ${brief.brand_name || 'Brand'}` }\n  },\n  {\n    \"type\": \"section\",\n    \"text\": {\n      \"type\": \"mrkdwn\",\n      \"text\": `*${scripts.length} scripts written and QA'd for ${brief.client_code || 'project'}*\\nQA Score: ${data.qa_quality}/10 | Revisions used: ${data.revisions_used}\\n\\n${scriptSummary}`\n    }\n  },\n  {\n    \"type\": \"divider\"\n  },\n  {\n    \"type\": \"actions\",\n    \"elements\": [\n      {\n        \"type\": \"button\",\n        \"text\": { \"type\": \"plain_text\", \"text\": \"Review Scripts in Airtable\" },\n        \"style\": \"primary\",\n        \"url\": `https://airtable.com/appvFxwZc9yU8o8pK/Scripts?filter_project_id=${project_id}`\n      },\n      {\n        \"type\": \"button\",\n        \"text\": { \"type\": \"plain_text\", \"text\": \"Approve All & Deliver\" },\n        \"url\": `http://n8n-jeet.duckdns.org:5678/webhook/ugc-delivery?project_id=${project_id}&action=approve`\n      }\n    ]\n  }\n];\n\nreturn [{ json: {\n  project_id,\n  brief,\n  script_count: scripts.length,\n  slack_blocks: JSON.stringify(slackBlocks),\n  slack_text: `${scripts.length} UGC scripts ready for PM review: ${brief.brand_name || 'Brand'} (${brief.client_code || ''}) — QA: ${data.qa_quality}/10`\n} }];"
       },
       "id": "w3-prep-slack",
       "name": "Prepare Slack Notification",
@@ -409,7 +409,7 @@
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.2,
       "position": [6040, 460],
-      "credentials": { "slackOAuth2Api": { "id": "YOUR_SLACK_CREDENTIAL_ID", "name": "Slack account" } },
+      "credentials": { "slackOAuth2Api": { "id": "5Q37UpOjGx4YsbyC", "name": "Slack account" } },
       "onError": "continueRegularOutput"
     },
 
@@ -439,7 +439,7 @@
     {
       "parameters": {
         "select": "user",
-        "user": { "__rl": true, "value": "U06P9F49BJT", "mode": "id" },
+        "user": { "__rl": true, "value": "dakshina@smashed.agency", "mode": "id" },
         "text": "={{ `Phase 3 (Script Writing) failed for project ${$json.project_id}. Error: ${$json.error_message}. Node: ${$json.error_node}` }}",
         "otherOptions": {}
       },
@@ -448,7 +448,7 @@
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.2,
       "position": [1340, 780],
-      "credentials": { "slackOAuth2Api": { "id": "YOUR_SLACK_CREDENTIAL_ID", "name": "Slack account" } },
+      "credentials": { "slackOAuth2Api": { "id": "5Q37UpOjGx4YsbyC", "name": "Slack account" } },
       "onError": "continueRegularOutput"
     },
     {

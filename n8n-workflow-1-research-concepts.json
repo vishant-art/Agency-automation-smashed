@@ -73,7 +73,7 @@
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
       "position": [940, 320],
-      "credentials": { "googleSheetsOAuth2Api": { "id": "YOUR_GOOGLE_SHEETS_CREDENTIAL_ID", "name": "Google Sheets account" } },
+      "credentials": { "googleSheetsOAuth2Api": { "id": "Aas0vt74gbEuYgmW", "name": "Google Sheets account" } },
       "onError": "continueErrorOutput"
     },
 
@@ -114,7 +114,7 @@
       "type": "n8n-nodes-base.airtable",
       "typeVersion": 2.1,
       "position": [1620, 320],
-      "credentials": { "airtableTokenApi": { "id": "YOUR_AIRTABLE_CREDENTIAL_ID", "name": "Airtable Personal Access Token" } }
+      "credentials": { "airtableTokenApi": { "id": "WelvlJEjoHaI3l9G", "name": "Airtable Personal Access Token" } }
     },
 
     {
@@ -154,7 +154,7 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
       "typeVersion": 1,
       "position": [2240, 540],
-      "credentials": { "openAiApi": { "id": "YOUR_OPENAI_CREDENTIAL_ID", "name": "OpenAI account" } }
+      "credentials": { "openAiApi": { "id": "OUom69v74KTvlioi", "name": "OpenAI account" } }
     },
     {
       "parameters": {
@@ -185,7 +185,7 @@
       "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
       "typeVersion": 1.1,
       "position": [2240, 680],
-      "credentials": { "httpHeaderAuth": { "id": "YOUR_SERPAPI_CREDENTIAL_ID", "name": "SerpAPI Key" } }
+      "credentials": { "httpHeaderAuth": { "id": "CmIS7AD49M1ajRog", "name": "SerpAPI Key" } }
     },
     {
       "parameters": {
@@ -216,7 +216,7 @@
       "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
       "typeVersion": 1.1,
       "position": [2340, 780],
-      "credentials": { "httpHeaderAuth": { "id": "YOUR_SERPAPI_CREDENTIAL_ID", "name": "SerpAPI Key" } }
+      "credentials": { "httpHeaderAuth": { "id": "CmIS7AD49M1ajRog", "name": "SerpAPI Key" } }
     },
     {
       "parameters": {
@@ -232,7 +232,7 @@
       "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
       "typeVersion": 1.1,
       "position": [2540, 780],
-      "credentials": { "httpHeaderAuth": { "id": "YOUR_SERPAPI_CREDENTIAL_ID", "name": "SerpAPI Key" } }
+      "credentials": { "httpHeaderAuth": { "id": "CmIS7AD49M1ajRog", "name": "SerpAPI Key" } }
     },
     {
       "parameters": {
@@ -248,7 +248,7 @@
       "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
       "typeVersion": 1.1,
       "position": [2140, 780],
-      "credentials": { "httpHeaderAuth": { "id": "YOUR_SERPAPI_CREDENTIAL_ID", "name": "SerpAPI Key" } }
+      "credentials": { "httpHeaderAuth": { "id": "CmIS7AD49M1ajRog", "name": "SerpAPI Key" } }
     },
     {
       "parameters": {
@@ -264,7 +264,7 @@
       "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
       "typeVersion": 1.1,
       "position": [2240, 880],
-      "credentials": { "httpHeaderAuth": { "id": "YOUR_SERPAPI_CREDENTIAL_ID", "name": "SerpAPI Key" } }
+      "credentials": { "httpHeaderAuth": { "id": "CmIS7AD49M1ajRog", "name": "SerpAPI Key" } }
     },
     {
       "parameters": {
@@ -280,7 +280,7 @@
       "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
       "typeVersion": 1.1,
       "position": [2440, 880],
-      "credentials": { "httpHeaderAuth": { "id": "YOUR_SERPAPI_CREDENTIAL_ID", "name": "SerpAPI Key" } }
+      "credentials": { "httpHeaderAuth": { "id": "CmIS7AD49M1ajRog", "name": "SerpAPI Key" } }
     },
 
     {
@@ -329,7 +329,7 @@
       "type": "n8n-nodes-base.airtable",
       "typeVersion": 2.1,
       "position": [3420, 160],
-      "credentials": { "airtableTokenApi": { "id": "YOUR_AIRTABLE_CREDENTIAL_ID", "name": "Airtable Personal Access Token" } },
+      "credentials": { "airtableTokenApi": { "id": "WelvlJEjoHaI3l9G", "name": "Airtable Personal Access Token" } },
       "onError": "continueRegularOutput"
     },
 
@@ -371,7 +371,7 @@
       "type": "n8n-nodes-base.airtable",
       "typeVersion": 2.1,
       "position": [3420, 480],
-      "credentials": { "airtableTokenApi": { "id": "YOUR_AIRTABLE_CREDENTIAL_ID", "name": "Airtable Personal Access Token" } },
+      "credentials": { "airtableTokenApi": { "id": "WelvlJEjoHaI3l9G", "name": "Airtable Personal Access Token" } },
       "onError": "continueRegularOutput"
     },
 
@@ -406,7 +406,7 @@
       "type": "n8n-nodes-base.airtable",
       "typeVersion": 2.1,
       "position": [4140, 320],
-      "credentials": { "airtableTokenApi": { "id": "YOUR_AIRTABLE_CREDENTIAL_ID", "name": "Airtable Personal Access Token" } }
+      "credentials": { "airtableTokenApi": { "id": "WelvlJEjoHaI3l9G", "name": "Airtable Personal Access Token" } }
     },
 
     {
@@ -446,7 +446,7 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
       "typeVersion": 1,
       "position": [4860, 540],
-      "credentials": { "openAiApi": { "id": "YOUR_OPENAI_CREDENTIAL_ID", "name": "OpenAI account" } }
+      "credentials": { "openAiApi": { "id": "OUom69v74KTvlioi", "name": "OpenAI account" } }
     },
 
     {
@@ -507,7 +507,7 @@
       "type": "n8n-nodes-base.airtable",
       "typeVersion": 2.1,
       "position": [5940, 320],
-      "credentials": { "airtableTokenApi": { "id": "YOUR_AIRTABLE_CREDENTIAL_ID", "name": "Airtable Personal Access Token" } },
+      "credentials": { "airtableTokenApi": { "id": "WelvlJEjoHaI3l9G", "name": "Airtable Personal Access Token" } },
       "onError": "continueRegularOutput"
     },
 
@@ -531,12 +531,12 @@
       "type": "n8n-nodes-base.airtable",
       "typeVersion": 2.1,
       "position": [6300, 320],
-      "credentials": { "airtableTokenApi": { "id": "YOUR_AIRTABLE_CREDENTIAL_ID", "name": "Airtable Personal Access Token" } }
+      "credentials": { "airtableTokenApi": { "id": "WelvlJEjoHaI3l9G", "name": "Airtable Personal Access Token" } }
     },
 
     {
       "parameters": {
-        "jsCode": "// ============================================================\n// Build Slack notification with concept summary + approval buttons\n// ============================================================\nconst data = $('Parse Concepts Output').first().json;\nconst brief = data.brief;\nconst concepts = data.concept_records;\nconst project_id = data.project_id;\n\nconst conceptSummary = concepts.map((c, i) => \n  `${i + 1}. *${c.concept_name}* (${c.framework} / ${c.format}) — Virality: ${c.virality_score}/10\\n   _\"${c.hook_text}\"_\\n   Pitch: ${c.concept_pitch}`\n).join('\\n\\n');\n\nconst slackBlocks = [\n  {\n    \"type\": \"header\",\n    \"text\": { \"type\": \"plain_text\", \"text\": `Concepts Ready for Review: ${brief.brand_name}` }\n  },\n  {\n    \"type\": \"section\",\n    \"text\": {\n      \"type\": \"mrkdwn\",\n      \"text\": `*${concepts.length} concepts generated for ${brief.client_code}*\\nClient: ${brief.client_name}\\nScripts ordered: ${brief.num_scripts} | Concepts presented: ${concepts.length}\\n\\n${conceptSummary}`\n    }\n  },\n  {\n    \"type\": \"divider\"\n  },\n  {\n    \"type\": \"section\",\n    \"text\": {\n      \"type\": \"mrkdwn\",\n      \"text\": \"Review concepts in Airtable, then approve or reject below.\"\n    }\n  },\n  {\n    \"type\": \"actions\",\n    \"elements\": [\n      {\n        \"type\": \"button\",\n        \"text\": { \"type\": \"plain_text\", \"text\": \"Approve All Concepts\" },\n        \"style\": \"primary\",\n        \"url\": `YOUR_N8N_BASE_URL/webhook/ugc-concept-approval?project_id=${project_id}&action=pm_approve`\n      },\n      {\n        \"type\": \"button\",\n        \"text\": { \"type\": \"plain_text\", \"text\": \"Review in Airtable\" },\n        \"url\": `https://airtable.com/appvFxwZc9yU8o8pK/Concepts?filter_project_id=${project_id}`\n      }\n    ]\n  }\n];\n\nreturn [{ json: {\n  project_id,\n  brief,\n  concept_count: concepts.length,\n  slack_blocks: JSON.stringify(slackBlocks),\n  slack_text: `${concepts.length} UGC concepts ready for PM review: ${brief.brand_name} (${brief.client_code})`\n} }];"
+        "jsCode": "// ============================================================\n// Build Slack notification with concept summary + approval buttons\n// ============================================================\nconst data = $('Parse Concepts Output').first().json;\nconst brief = data.brief;\nconst concepts = data.concept_records;\nconst project_id = data.project_id;\n\nconst conceptSummary = concepts.map((c, i) => \n  `${i + 1}. *${c.concept_name}* (${c.framework} / ${c.format}) — Virality: ${c.virality_score}/10\\n   _\"${c.hook_text}\"_\\n   Pitch: ${c.concept_pitch}`\n).join('\\n\\n');\n\nconst slackBlocks = [\n  {\n    \"type\": \"header\",\n    \"text\": { \"type\": \"plain_text\", \"text\": `Concepts Ready for Review: ${brief.brand_name}` }\n  },\n  {\n    \"type\": \"section\",\n    \"text\": {\n      \"type\": \"mrkdwn\",\n      \"text\": `*${concepts.length} concepts generated for ${brief.client_code}*\\nClient: ${brief.client_name}\\nScripts ordered: ${brief.num_scripts} | Concepts presented: ${concepts.length}\\n\\n${conceptSummary}`\n    }\n  },\n  {\n    \"type\": \"divider\"\n  },\n  {\n    \"type\": \"section\",\n    \"text\": {\n      \"type\": \"mrkdwn\",\n      \"text\": \"Review concepts in Airtable, then approve or reject below.\"\n    }\n  },\n  {\n    \"type\": \"actions\",\n    \"elements\": [\n      {\n        \"type\": \"button\",\n        \"text\": { \"type\": \"plain_text\", \"text\": \"Approve All Concepts\" },\n        \"style\": \"primary\",\n        \"url\": `http://n8n-jeet.duckdns.org:5678/webhook/ugc-concept-approval?project_id=${project_id}&action=pm_approve`\n      },\n      {\n        \"type\": \"button\",\n        \"text\": { \"type\": \"plain_text\", \"text\": \"Review in Airtable\" },\n        \"url\": `https://airtable.com/appvFxwZc9yU8o8pK/Concepts?filter_project_id=${project_id}`\n      }\n    ]\n  }\n];\n\nreturn [{ json: {\n  project_id,\n  brief,\n  concept_count: concepts.length,\n  slack_blocks: JSON.stringify(slackBlocks),\n  slack_text: `${concepts.length} UGC concepts ready for PM review: ${brief.brand_name} (${brief.client_code})`\n} }];"
       },
       "id": "w1-prep-slack",
       "name": "Prepare Slack Notification",
@@ -559,7 +559,7 @@
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.2,
       "position": [7020, 320],
-      "credentials": { "slackOAuth2Api": { "id": "YOUR_SLACK_CREDENTIAL_ID", "name": "Slack account" } },
+      "credentials": { "slackOAuth2Api": { "id": "5Q37UpOjGx4YsbyC", "name": "Slack account" } },
       "onError": "continueRegularOutput"
     },
 
@@ -589,7 +589,7 @@
     {
       "parameters": {
         "select": "user",
-        "user": { "__rl": true, "value": "U06P9F49BJT", "mode": "id" },
+        "user": { "__rl": true, "value": "dakshina@smashed.agency", "mode": "id" },
         "text": "={{ `Phase 1 (Research+Concepts) failed for ${$json.brand_name} (${$json.client_code}). Error: ${$json.error_message}. Node: ${$json.error_node}` }}",
         "otherOptions": {}
       },
@@ -598,7 +598,7 @@
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.2,
       "position": [1340, 780],
-      "credentials": { "slackOAuth2Api": { "id": "YOUR_SLACK_CREDENTIAL_ID", "name": "Slack account" } },
+      "credentials": { "slackOAuth2Api": { "id": "5Q37UpOjGx4YsbyC", "name": "Slack account" } },
       "onError": "continueRegularOutput"
     },
     {

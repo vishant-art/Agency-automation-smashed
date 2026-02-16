@@ -136,7 +136,7 @@
       ],
       "credentials": {
         "googleSheetsOAuth2Api": {
-          "id": "YOUR_GOOGLE_SHEETS_CREDENTIAL_ID",
+          "id": "Aas0vt74gbEuYgmW",
           "name": "Google Sheets account"
         }
       },
@@ -179,7 +179,7 @@
       ],
       "credentials": {
         "clickUpApi": {
-          "id": "YOUR_CLICKUP_API_CREDENTIAL_ID",
+          "id": "UOuIc5uPfQtavQLT",
           "name": "ClickUp API"
         }
       },
@@ -222,7 +222,7 @@
       ],
       "credentials": {
         "clickUpApi": {
-          "id": "YOUR_CLICKUP_API_CREDENTIAL_ID",
+          "id": "UOuIc5uPfQtavQLT",
           "name": "ClickUp API"
         }
       },
@@ -249,7 +249,7 @@
       ],
       "credentials": {
         "clickUpApi": {
-          "id": "YOUR_CLICKUP_API_CREDENTIAL_ID",
+          "id": "UOuIc5uPfQtavQLT",
           "name": "ClickUp API"
         }
       },
@@ -292,7 +292,7 @@
       ],
       "credentials": {
         "clickUpApi": {
-          "id": "YOUR_CLICKUP_API_CREDENTIAL_ID",
+          "id": "UOuIc5uPfQtavQLT",
           "name": "ClickUp API"
         }
       },
@@ -379,7 +379,7 @@
       ],
       "credentials": {
         "clickUpApi": {
-          "id": "YOUR_CLICKUP_API_CREDENTIAL_ID",
+          "id": "UOuIc5uPfQtavQLT",
           "name": "ClickUp API"
         }
       },
@@ -422,7 +422,7 @@
       ],
       "credentials": {
         "slackOAuth2Api": {
-          "id": "YOUR_SLACK_CREDENTIAL_ID",
+          "id": "5Q37UpOjGx4YsbyC",
           "name": "Slack account"
         }
       },
@@ -484,7 +484,7 @@
       ],
       "credentials": {
         "googleSheetsOAuth2Api": {
-          "id": "YOUR_GOOGLE_SHEETS_CREDENTIAL_ID",
+          "id": "Aas0vt74gbEuYgmW",
           "name": "Google Sheets account"
         }
       },
@@ -523,7 +523,7 @@
     },
     {
       "parameters": {
-        "content": "## ERROR HANDLING\nIf any node in the main flow fails, this error branch:\n1. Sends a Slack DM to U06P9F49BJT\n2. Logs the failure to the Onboarding Log sheet\n3. Returns 200 to prevent JotForm retry loops",
+        "content": "## ERROR HANDLING\nIf any node in the main flow fails, this error branch:\n1. Sends a Slack DM to dakshina@smashed.agency\n2. Logs the failure to the Onboarding Log sheet\n3. Returns 200 to prevent JotForm retry loops",
         "height": 200,
         "width": 380,
         "color": 1
@@ -555,7 +555,7 @@
         "select": "user",
         "user": {
           "__rl": true,
-          "value": "U06P9F49BJT",
+          "value": "dakshina@smashed.agency",
           "mode": "id"
         },
         "text": "={{ `❌ Onboarding failed for ${$json.brand_name}. Error: ${$json.error_message}. Node: ${$json.error_node}` }}",
@@ -571,7 +571,7 @@
       ],
       "credentials": {
         "slackOAuth2Api": {
-          "id": "YOUR_SLACK_CREDENTIAL_ID",
+          "id": "5Q37UpOjGx4YsbyC",
           "name": "Slack account"
         }
       },
@@ -617,7 +617,7 @@
       ],
       "credentials": {
         "googleSheetsOAuth2Api": {
-          "id": "YOUR_GOOGLE_SHEETS_CREDENTIAL_ID",
+          "id": "Aas0vt74gbEuYgmW",
           "name": "Google Sheets account"
         }
       },
@@ -677,7 +677,7 @@
       ],
       "credentials": {
         "clickUpApi": {
-          "id": "YOUR_CLICKUP_API_CREDENTIAL_ID",
+          "id": "UOuIc5uPfQtavQLT",
           "name": "ClickUp API"
         }
       },
@@ -757,7 +757,7 @@
       ],
       "credentials": {
         "googleDriveOAuth2Api": {
-          "id": "YOUR_GOOGLE_DRIVE_CREDENTIAL_ID",
+          "id": "ZYBF6pP5UxUqJgVI",
           "name": "Google Drive account"
         }
       },
@@ -784,7 +784,7 @@
       ],
       "credentials": {
         "googleDriveOAuth2Api": {
-          "id": "YOUR_GOOGLE_DRIVE_CREDENTIAL_ID",
+          "id": "ZYBF6pP5UxUqJgVI",
           "name": "Google Drive account"
         }
       },
@@ -811,7 +811,7 @@
       ],
       "credentials": {
         "googleDriveOAuth2Api": {
-          "id": "YOUR_GOOGLE_DRIVE_CREDENTIAL_ID",
+          "id": "ZYBF6pP5UxUqJgVI",
           "name": "Google Drive account"
         }
       },
@@ -838,7 +838,7 @@
       ],
       "credentials": {
         "googleDriveOAuth2Api": {
-          "id": "YOUR_GOOGLE_DRIVE_CREDENTIAL_ID",
+          "id": "ZYBF6pP5UxUqJgVI",
           "name": "Google Drive account"
         }
       },
@@ -908,7 +908,7 @@
       ],
       "credentials": {
         "googleDriveOAuth2Api": {
-          "id": "YOUR_GOOGLE_DRIVE_CREDENTIAL_ID",
+          "id": "ZYBF6pP5UxUqJgVI",
           "name": "Google Drive account"
         }
       },

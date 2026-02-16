@@ -97,7 +97,7 @@
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
       "position": [940, 320],
-      "credentials": { "googleSheetsOAuth2Api": { "id": "YOUR_GOOGLE_SHEETS_CREDENTIAL_ID", "name": "Google Sheets account" } },
+      "credentials": { "googleSheetsOAuth2Api": { "id": "Aas0vt74gbEuYgmW", "name": "Google Sheets account" } },
       "onError": "continueErrorOutput"
     },
     {
@@ -160,7 +160,7 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
       "typeVersion": 1,
       "position": [1860, 540],
-      "credentials": { "openAiApi": { "id": "YOUR_OPENAI_CREDENTIAL_ID", "name": "OpenAI account" } }
+      "credentials": { "openAiApi": { "id": "OUom69v74KTvlioi", "name": "OpenAI account" } }
     },
     {
       "parameters": {
@@ -197,7 +197,7 @@
       "position": [1860, 680],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "YOUR_SERPAPI_CREDENTIAL_ID",
+          "id": "CmIS7AD49M1ajRog",
           "name": "SerpAPI Key"
         }
       }
@@ -241,7 +241,7 @@
       "position": [1960, 780],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "YOUR_SERPAPI_CREDENTIAL_ID",
+          "id": "CmIS7AD49M1ajRog",
           "name": "SerpAPI Key"
         }
       }
@@ -264,7 +264,7 @@
       "position": [2160, 780],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "YOUR_SERPAPI_CREDENTIAL_ID",
+          "id": "CmIS7AD49M1ajRog",
           "name": "SerpAPI Key"
         }
       }
@@ -288,7 +288,7 @@
       "position": [1760, 780],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "YOUR_SERPAPI_CREDENTIAL_ID",
+          "id": "CmIS7AD49M1ajRog",
           "name": "SerpAPI Key"
         }
       }
@@ -311,7 +311,7 @@
       "position": [1860, 880],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "YOUR_SERPAPI_CREDENTIAL_ID",
+          "id": "CmIS7AD49M1ajRog",
           "name": "SerpAPI Key"
         }
       }
@@ -334,7 +334,7 @@
       "position": [2060, 880],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "YOUR_SERPAPI_CREDENTIAL_ID",
+          "id": "CmIS7AD49M1ajRog",
           "name": "SerpAPI Key"
         }
       }
@@ -389,7 +389,7 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
       "typeVersion": 1,
       "position": [2780, 540],
-      "credentials": { "openAiApi": { "id": "YOUR_OPENAI_CREDENTIAL_ID", "name": "OpenAI account" } }
+      "credentials": { "openAiApi": { "id": "OUom69v74KTvlioi", "name": "OpenAI account" } }
     },
 
     {
@@ -441,7 +441,7 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
       "typeVersion": 1,
       "position": [3620, 540],
-      "credentials": { "openAiApi": { "id": "YOUR_OPENAI_CREDENTIAL_ID", "name": "OpenAI account" } }
+      "credentials": { "openAiApi": { "id": "OUom69v74KTvlioi", "name": "OpenAI account" } }
     },
 
     {
@@ -493,7 +493,7 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
       "typeVersion": 1,
       "position": [4380, 540],
-      "credentials": { "openAiApi": { "id": "YOUR_OPENAI_CREDENTIAL_ID", "name": "OpenAI account" } }
+      "credentials": { "openAiApi": { "id": "OUom69v74KTvlioi", "name": "OpenAI account" } }
     },
     {
       "parameters": {
@@ -601,7 +601,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [6140, 320],
-      "credentials": { "googleDriveOAuth2Api": { "id": "YOUR_GOOGLE_DRIVE_CREDENTIAL_ID", "name": "Google Drive account" } },
+      "credentials": { "googleDriveOAuth2Api": { "id": "ZYBF6pP5UxUqJgVI", "name": "Google Drive account" } },
       "onError": "continueRegularOutput"
     },
     {
@@ -653,7 +653,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [7320, 240],
-      "credentials": { "googleDriveOAuth2Api": { "id": "YOUR_GOOGLE_DRIVE_CREDENTIAL_ID", "name": "Google Drive account" } },
+      "credentials": { "googleDriveOAuth2Api": { "id": "ZYBF6pP5UxUqJgVI", "name": "Google Drive account" } },
       "onError": "continueRegularOutput"
     },
     {
@@ -689,7 +689,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [8020, 320],
-      "credentials": { "clickUpApi": { "id": "YOUR_CLICKUP_API_CREDENTIAL_ID", "name": "ClickUp API" } },
+      "credentials": { "clickUpApi": { "id": "UOuIc5uPfQtavQLT", "name": "ClickUp API" } },
       "onError": "continueRegularOutput"
     },
     {
@@ -730,7 +730,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [8960, 240],
-      "credentials": { "clickUpApi": { "id": "YOUR_CLICKUP_API_CREDENTIAL_ID", "name": "ClickUp API" } },
+      "credentials": { "clickUpApi": { "id": "UOuIc5uPfQtavQLT", "name": "ClickUp API" } },
       "onError": "continueRegularOutput"
     },
     {
@@ -767,7 +767,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [9940, 320],
-      "credentials": { "clickUpApi": { "id": "YOUR_CLICKUP_API_CREDENTIAL_ID", "name": "ClickUp API" } },
+      "credentials": { "clickUpApi": { "id": "UOuIc5uPfQtavQLT", "name": "ClickUp API" } },
       "onError": "continueRegularOutput"
     },
     {
@@ -816,7 +816,7 @@
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.2,
       "position": [10720, 320],
-      "credentials": { "slackOAuth2Api": { "id": "YOUR_SLACK_CREDENTIAL_ID", "name": "Slack account" } },
+      "credentials": { "slackOAuth2Api": { "id": "5Q37UpOjGx4YsbyC", "name": "Slack account" } },
       "onError": "continueRegularOutput"
     },
     {
@@ -844,7 +844,7 @@
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
       "position": [11080, 320],
-      "credentials": { "googleSheetsOAuth2Api": { "id": "YOUR_GOOGLE_SHEETS_CREDENTIAL_ID", "name": "Google Sheets account" } },
+      "credentials": { "googleSheetsOAuth2Api": { "id": "Aas0vt74gbEuYgmW", "name": "Google Sheets account" } },
       "onError": "continueRegularOutput"
     },
     {
@@ -886,7 +886,7 @@
     {
       "parameters": {
         "select": "user",
-        "user": { "__rl": true, "value": "U06P9F49BJT", "mode": "id" },
+        "user": { "__rl": true, "value": "dakshina@smashed.agency", "mode": "id" },
         "text": "={{ `❌ Script Agent failed for ${$json.brand_name} (${$json.client_code}). Error: ${$json.error_message}. Node: ${$json.error_node}` }}",
         "otherOptions": {}
       },
@@ -895,7 +895,7 @@
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.2,
       "position": [1340, 780],
-      "credentials": { "slackOAuth2Api": { "id": "YOUR_SLACK_CREDENTIAL_ID", "name": "Slack account" } },
+      "credentials": { "slackOAuth2Api": { "id": "5Q37UpOjGx4YsbyC", "name": "Slack account" } },
       "onError": "continueRegularOutput"
     },
     {
@@ -911,7 +911,7 @@
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
       "position": [1740, 780],
-      "credentials": { "googleSheetsOAuth2Api": { "id": "YOUR_GOOGLE_SHEETS_CREDENTIAL_ID", "name": "Google Sheets account" } },
+      "credentials": { "googleSheetsOAuth2Api": { "id": "Aas0vt74gbEuYgmW", "name": "Google Sheets account" } },
       "onError": "continueRegularOutput"
     },
     {

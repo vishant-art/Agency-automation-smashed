@@ -73,7 +73,7 @@
       "type": "n8n-nodes-base.airtable",
       "typeVersion": 2.1,
       "position": [940, 320],
-      "credentials": { "airtableTokenApi": { "id": "YOUR_AIRTABLE_CREDENTIAL_ID", "name": "Airtable Personal Access Token" } }
+      "credentials": { "airtableTokenApi": { "id": "WelvlJEjoHaI3l9G", "name": "Airtable Personal Access Token" } }
     },
 
     {
@@ -90,7 +90,7 @@
       "type": "n8n-nodes-base.airtable",
       "typeVersion": 2.1,
       "position": [1300, 320],
-      "credentials": { "airtableTokenApi": { "id": "YOUR_AIRTABLE_CREDENTIAL_ID", "name": "Airtable Personal Access Token" } }
+      "credentials": { "airtableTokenApi": { "id": "WelvlJEjoHaI3l9G", "name": "Airtable Personal Access Token" } }
     },
 
     {
@@ -170,7 +170,7 @@
       "type": "n8n-nodes-base.airtable",
       "typeVersion": 2.1,
       "position": [2780, 60],
-      "credentials": { "airtableTokenApi": { "id": "YOUR_AIRTABLE_CREDENTIAL_ID", "name": "Airtable Personal Access Token" } },
+      "credentials": { "airtableTokenApi": { "id": "WelvlJEjoHaI3l9G", "name": "Airtable Personal Access Token" } },
       "onError": "continueRegularOutput"
     },
 
@@ -194,7 +194,7 @@
       "type": "n8n-nodes-base.airtable",
       "typeVersion": 2.1,
       "position": [3140, 60],
-      "credentials": { "airtableTokenApi": { "id": "YOUR_AIRTABLE_CREDENTIAL_ID", "name": "Airtable Personal Access Token" } }
+      "credentials": { "airtableTokenApi": { "id": "WelvlJEjoHaI3l9G", "name": "Airtable Personal Access Token" } }
     },
 
     {
@@ -222,7 +222,7 @@
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.2,
       "position": [3860, 60],
-      "credentials": { "slackOAuth2Api": { "id": "YOUR_SLACK_CREDENTIAL_ID", "name": "Slack account" } },
+      "credentials": { "slackOAuth2Api": { "id": "5Q37UpOjGx4YsbyC", "name": "Slack account" } },
       "onError": "continueRegularOutput"
     },
 
@@ -286,7 +286,7 @@
       "type": "n8n-nodes-base.airtable",
       "typeVersion": 2.1,
       "position": [2780, 320],
-      "credentials": { "airtableTokenApi": { "id": "YOUR_AIRTABLE_CREDENTIAL_ID", "name": "Airtable Personal Access Token" } },
+      "credentials": { "airtableTokenApi": { "id": "WelvlJEjoHaI3l9G", "name": "Airtable Personal Access Token" } },
       "onError": "continueRegularOutput"
     },
 
@@ -302,7 +302,7 @@
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.2,
       "position": [3140, 320],
-      "credentials": { "slackOAuth2Api": { "id": "YOUR_SLACK_CREDENTIAL_ID", "name": "Slack account" } },
+      "credentials": { "slackOAuth2Api": { "id": "5Q37UpOjGx4YsbyC", "name": "Slack account" } },
       "onError": "continueRegularOutput"
     },
 
@@ -366,7 +366,7 @@
       "type": "n8n-nodes-base.airtable",
       "typeVersion": 2.1,
       "position": [2780, 580],
-      "credentials": { "airtableTokenApi": { "id": "YOUR_AIRTABLE_CREDENTIAL_ID", "name": "Airtable Personal Access Token" } },
+      "credentials": { "airtableTokenApi": { "id": "WelvlJEjoHaI3l9G", "name": "Airtable Personal Access Token" } },
       "onError": "continueRegularOutput"
     },
 
@@ -390,7 +390,7 @@
       "type": "n8n-nodes-base.airtable",
       "typeVersion": 2.1,
       "position": [3140, 580],
-      "credentials": { "airtableTokenApi": { "id": "YOUR_AIRTABLE_CREDENTIAL_ID", "name": "Airtable Personal Access Token" } }
+      "credentials": { "airtableTokenApi": { "id": "WelvlJEjoHaI3l9G", "name": "Airtable Personal Access Token" } }
     },
 
     {
@@ -407,7 +407,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "YOUR_N8N_BASE_URL/webhook/ugc-phase3",
+        "url": "http://n8n-jeet.duckdns.org:5678/webhook/ugc-phase3",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ project_id: $json.project_id }) }}",
@@ -433,7 +433,7 @@
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.2,
       "position": [4220, 580],
-      "credentials": { "slackOAuth2Api": { "id": "YOUR_SLACK_CREDENTIAL_ID", "name": "Slack account" } },
+      "credentials": { "slackOAuth2Api": { "id": "5Q37UpOjGx4YsbyC", "name": "Slack account" } },
       "onError": "continueRegularOutput"
     },
 
@@ -497,7 +497,7 @@
       "type": "n8n-nodes-base.airtable",
       "typeVersion": 2.1,
       "position": [2780, 840],
-      "credentials": { "airtableTokenApi": { "id": "YOUR_AIRTABLE_CREDENTIAL_ID", "name": "Airtable Personal Access Token" } },
+      "credentials": { "airtableTokenApi": { "id": "WelvlJEjoHaI3l9G", "name": "Airtable Personal Access Token" } },
       "onError": "continueRegularOutput"
     },
 
@@ -513,7 +513,7 @@
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.2,
       "position": [3140, 840],
-      "credentials": { "slackOAuth2Api": { "id": "YOUR_SLACK_CREDENTIAL_ID", "name": "Slack account" } },
+      "credentials": { "slackOAuth2Api": { "id": "5Q37UpOjGx4YsbyC", "name": "Slack account" } },
       "onError": "continueRegularOutput"
     },
 
