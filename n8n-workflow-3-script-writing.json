@@ -1,5 +1,11 @@
 {
-  "name": "UGC Phase 3 — Script Writing + QA + Airtable Storage",
+  "updatedAt": "2026-02-17T09:42:12.295Z",
+  "createdAt": "2026-02-16T08:01:55.778Z",
+  "id": "iZOxbVl1X2w74Pzi",
+  "name": "UGC Phase 3 \u2014 Script Writing + QA + Airtable Storage",
+  "description": null,
+  "active": true,
+  "isArchived": false,
   "nodes": [
     {
       "parameters": {
@@ -12,9 +18,12 @@
       "name": "Sticky Note - Overview",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [-280, -60]
+      "position": [
+        -280,
+        -60
+      ],
+      "credentials": {}
     },
-
     {
       "parameters": {
         "httpMethod": "POST",
@@ -23,19 +32,27 @@
         "options": {}
       },
       "id": "w3-webhook",
-      "name": "Webhook — Phase 3",
+      "name": "Webhook \u2014 Phase 3",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1.1,
-      "position": [280, 320],
-      "webhookId": "ugc-phase3-webhook"
+      "position": [
+        280,
+        320
+      ],
+      "webhookId": "ugc-phase3-webhook",
+      "credentials": {}
     },
     {
       "parameters": {},
       "id": "w3-manual-trigger",
-      "name": "Manual Trigger — Test",
+      "name": "Manual Trigger \u2014 Test",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
-      "position": [280, -140]
+      "position": [
+        280,
+        -140
+      ],
+      "credentials": {}
     },
     {
       "parameters": {
@@ -45,9 +62,12 @@
       "name": "Set Test Data",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [580, -140]
+      "position": [
+        580,
+        -140
+      ],
+      "credentials": {}
     },
-
     {
       "parameters": {
         "jsCode": "const body = $input.first().json.body || $input.first().json;\nconst project_id = (body.project_id || '').trim();\nif (!project_id) throw new Error('project_id is required');\nreturn [{ json: { project_id } }];"
@@ -56,15 +76,26 @@
       "name": "Extract Project ID",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [580, 320]
+      "position": [
+        580,
+        320
+      ],
+      "credentials": {}
     },
-
     {
       "parameters": {
         "resource": "record",
         "operation": "search",
-        "base": { "__rl": true, "value": "appvFxwZc9yU8o8pK", "mode": "id" },
-        "table": { "__rl": true, "value": "Projects", "mode": "name" },
+        "base": {
+          "__rl": true,
+          "value": "appvFxwZc9yU8o8pK",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "Projects",
+          "mode": "name"
+        },
         "filterByFormula": "=RECORD_ID() = '{{ $json.project_id }}'",
         "options": {}
       },
@@ -72,10 +103,17 @@
       "name": "Fetch Project",
       "type": "n8n-nodes-base.airtable",
       "typeVersion": 2.1,
-      "position": [940, 320],
-      "credentials": { "airtableTokenApi": { "id": "WelvlJEjoHaI3l9G", "name": "Airtable Personal Access Token" } }
+      "position": [
+        940,
+        320
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
     },
-
     {
       "parameters": {
         "jsCode": "// Extract client_code from project record to fetch the brief\nconst project = $input.first().json;\nconst client_code = project.client_code || (project.fields && project.fields.client_code) || '';\nconst project_id = $('Extract Project ID').first().json.project_id;\nif (!client_code) throw new Error('No client_code found in project record');\nreturn [{ json: { client_code, project_id, project } }];"
@@ -84,67 +122,128 @@
       "name": "Extract Client Code",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1300, 320]
+      "position": [
+        1300,
+        320
+      ],
+      "credentials": {}
     },
-
     {
       "parameters": {
         "resource": "record",
         "operation": "search",
-        "base": { "__rl": true, "value": "appvFxwZc9yU8o8pK", "mode": "id" },
-        "table": { "__rl": true, "value": "Concepts", "mode": "name" },
-        "filterByFormula": "=AND({project_id} = '{{ $json.project_id }}', {client_status} = 'Approved')",
+        "base": {
+          "__rl": true,
+          "value": "appvFxwZc9yU8o8pK",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "Concepts",
+          "mode": "name"
+        },
+        "filterByFormula": "=AND(FIND('{{ $('Fetch Project').first().json.client_code }}', ARRAYJOIN({project_id})) > 0, {client_status} = 'Approved')",
         "options": {}
       },
       "id": "w3-fetch-approved-concepts",
       "name": "Fetch Approved Concepts",
       "type": "n8n-nodes-base.airtable",
       "typeVersion": 2.1,
-      "position": [1660, 160],
-      "credentials": { "airtableTokenApi": { "id": "WelvlJEjoHaI3l9G", "name": "Airtable Personal Access Token" } }
+      "position": [
+        1660,
+        160
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
     },
-
     {
       "parameters": {
         "resource": "record",
         "operation": "search",
-        "base": { "__rl": true, "value": "appvFxwZc9yU8o8pK", "mode": "id" },
-        "table": { "__rl": true, "value": "Research", "mode": "name" },
-        "filterByFormula": "={project_id} = '{{ $('Extract Client Code').first().json.project_id }}'",
+        "base": {
+          "__rl": true,
+          "value": "appvFxwZc9yU8o8pK",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "Research",
+          "mode": "name"
+        },
+        "filterByFormula": "=FIND('{{ $('Fetch Project').first().json.client_code }}', ARRAYJOIN({project_id})) > 0",
         "options": {}
       },
       "id": "w3-fetch-research",
       "name": "Fetch Research Data",
       "type": "n8n-nodes-base.airtable",
       "typeVersion": 2.1,
-      "position": [1660, 340],
-      "credentials": { "airtableTokenApi": { "id": "WelvlJEjoHaI3l9G", "name": "Airtable Personal Access Token" } }
+      "position": [
+        1660,
+        340
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
     },
-
     {
       "parameters": {
         "resource": "record",
         "operation": "search",
-        "base": { "__rl": true, "value": "appvFxwZc9yU8o8pK", "mode": "id" },
-        "table": { "__rl": true, "value": "Reference_Videos", "mode": "name" },
-        "filterByFormula": "={project_id} = '{{ $('Extract Client Code').first().json.project_id }}'",
+        "base": {
+          "__rl": true,
+          "value": "appvFxwZc9yU8o8pK",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "Reference_Videos",
+          "mode": "name"
+        },
+        "filterByFormula": "=FIND('{{ $('Fetch Project').first().json.client_code }}', ARRAYJOIN({project_id})) > 0",
         "options": {}
       },
       "id": "w3-fetch-references",
       "name": "Fetch Reference Videos",
       "type": "n8n-nodes-base.airtable",
       "typeVersion": 2.1,
-      "position": [1660, 520],
-      "credentials": { "airtableTokenApi": { "id": "WelvlJEjoHaI3l9G", "name": "Airtable Personal Access Token" } }
+      "position": [
+        1660,
+        520
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
     },
-
     {
       "parameters": {
         "operation": "read",
-        "documentId": { "__rl": true, "value": "1cB4wtyp0l0xwH2Ukw-U93eW9_Ix1lB6EroYs1GyDLCM", "mode": "id" },
-        "sheetName": { "__rl": true, "value": "Client Database", "mode": "name" },
+        "documentId": {
+          "__rl": true,
+          "value": "1cB4wtyp0l0xwH2Ukw-U93eW9_Ix1lB6EroYs1GyDLCM",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Client Database",
+          "mode": "name"
+        },
         "filtersUI": {
-          "values": [{ "lookupColumn": "client_code", "lookupValue": "={{ $('Extract Client Code').first().json.client_code }}" }]
+          "values": [
+            {
+              "lookupColumn": "client_code",
+              "lookupValue": "={{ $('Extract Client Code').first().json.client_code }}"
+            }
+          ]
         },
         "options": {}
       },
@@ -152,11 +251,18 @@
       "name": "Fetch Client Brief",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
-      "position": [1660, 700],
-      "credentials": { "googleSheetsOAuth2Api": { "id": "Aas0vt74gbEuYgmW", "name": "Google Sheets account" } },
+      "position": [
+        1660,
+        700
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "Aas0vt74gbEuYgmW",
+          "name": "Google Sheets account 2 - vishant"
+        }
+      },
       "onError": "continueRegularOutput"
     },
-
     {
       "parameters": {
         "jsCode": "// ============================================================\n// Merge all data sources and build the Writer Prompt\n// Only includes approved concepts (NOT all concepts)\n// ============================================================\n\nconst projectData = $('Extract Client Code').first().json;\nconst project_id = projectData.project_id;\nconst project = projectData.project;\n\n// Get approved concepts\nconst approvedConcepts = $('Fetch Approved Concepts').all().map(item => {\n  const d = item.json;\n  return {\n    id: d.id,\n    concept_name: d.concept_name || d.fields?.concept_name || 'Unnamed',\n    framework: d.framework || d.fields?.framework || 'PAS',\n    hook_type: d.hook_type || d.fields?.hook_type || 'curiosity-gap',\n    hook_text: d.hook_text || d.fields?.hook_text || '',\n    format: d.format || d.fields?.format || 'Talking Head',\n    funnel_stage: d.funnel_stage || d.fields?.funnel_stage || 'TOF',\n    virality_score: d.virality_score || d.fields?.virality_score || 5,\n    concept_pitch: d.concept_pitch || d.fields?.concept_pitch || '',\n    emotional_journey: d.emotional_journey || d.fields?.emotional_journey || '',\n    target_objection: d.target_objection || d.fields?.target_objection || '',\n    platform: d.platform || d.fields?.platform || 'TikTok'\n  };\n});\n\n// Get research data\nconst researchRecords = $('Fetch Research Data').all().map(item => {\n  const d = item.json;\n  return {\n    type: d.research_type || d.fields?.research_type || '',\n    category: d.category || d.fields?.category || '',\n    content: d.content || d.fields?.content || '',\n    source: d.source || d.fields?.source || ''\n  };\n});\n\n// Get reference videos\nconst refRecords = $('Fetch Reference Videos').all().map(item => {\n  const d = item.json;\n  return {\n    url: d.url || d.fields?.url || '',\n    platform: d.platform || d.fields?.platform || '',\n    format: d.format || d.fields?.format || '',\n    hook: d.hook || d.fields?.hook || '',\n    why_it_works: d.why_it_works || d.fields?.why_it_works || '',\n    adaptation_idea: d.adaptation_idea || d.fields?.adaptation_idea || ''\n  };\n});\n\n// Build brief from Google Sheets\nlet brief = {};\ntry {\n  const row = $('Fetch Client Brief').first().json;\n  function c(v) { return v === undefined || v === null ? '' : String(v).trim(); }\n  brief = {\n    client_code: c(row.client_code),\n    brand_name: c(row.brand_name),\n    client_name: c(row.client_name),\n    client_email: c(row.client_email),\n    product_feature: c(row.product_feature),\n    differentiator: c(row.differentiator),\n    target_user: c(row.target_user),\n    biggest_problem: c(row.biggest_problem),\n    main_hesitation: c(row.main_hesitation),\n    selling_proposition: c(row.selling_proposition),\n    brand_personality: c(row.brand_personality),\n    credibility_point: c(row.credibility_point),\n    transformation: c(row.transformation),\n    social_proof: c(row.social_proof),\n    compliance: c(row.compliance),\n    do_not_say: c(row.do_not_say),\n    additional_notes: c(row.additional_notes),\n    num_scripts: parseInt(c(row.num_scripts)) || 3\n  };\n} catch(e) {\n  // Use project data as fallback\n  brief = {\n    brand_name: project.brand_name || project.fields?.brand_name || 'Brand',\n    client_code: project.client_code || project.fields?.client_code || '',\n    client_name: project.client_name || project.fields?.client_name || '',\n    num_scripts: project.num_scripts || project.fields?.num_scripts || 3\n  };\n}\n\n// Build research summary text\nconst researchSummary = researchRecords.map(r => \n  `[${r.type}] (${r.source} | ${r.category}): ${r.content}`\n).join('\\n');\n\n// Build reference summary text\nconst refSummary = refRecords.map(r =>\n  `- ${r.platform} (${r.format}): ${r.url}\\n  Hook: ${r.hook}\\n  Why: ${r.why_it_works}\\n  Adaptation: ${r.adaptation_idea}`\n).join('\\n\\n');\n\n// Build concept deck\nconst conceptDeck = approvedConcepts.map((c, i) =>\n  `CONCEPT ${i + 1}: ${c.concept_name}\\n  Framework: ${c.framework} | Hook Type: ${c.hook_type} | Format: ${c.format}\\n  Funnel: ${c.funnel_stage} | Platform: ${c.platform} | Virality: ${c.virality_score}/10\\n  Hook: \"${c.hook_text}\"\\n  Pitch: ${c.concept_pitch}\\n  Emotional Journey: ${c.emotional_journey}\\n  Target Objection: ${c.target_objection}`\n).join('\\n\\n');\n\nconst numConcepts = approvedConcepts.length;\n\nconst prompt = `Write COMPLETE UGC scripts for the ${numConcepts} CLIENT-APPROVED concepts below.\n\nThese concepts have been reviewed and approved by the PM and the client. Write full scripts for ALL of them.\n\n== CLIENT BRIEF ==\nBrand: ${brief.brand_name}\nProduct: ${brief.product_feature || 'N/A'}\nDifferentiator: ${brief.differentiator || 'N/A'}\nSelling Proposition: ${brief.selling_proposition || 'N/A'}\nTarget: ${brief.target_user || 'N/A'}\nProblem: ${brief.biggest_problem || 'N/A'}\nHesitation: ${brief.main_hesitation || 'N/A'}\nTransformation: ${brief.transformation || 'N/A'}\nPersonality: ${brief.brand_personality || 'N/A'}\nCredibility: ${brief.credibility_point || 'N/A'}\nSocial Proof: ${brief.social_proof || 'N/A'}\nCompliance: ${brief.compliance || 'None'}\nDo NOT Say: ${brief.do_not_say || 'None'}\nNotes: ${brief.additional_notes || 'None'}\n\n== RESEARCH INSIGHTS ==\n${researchSummary || 'Research data available in Airtable.'}\n\n== REFERENCE VIDEOS/ADS ==\n${refSummary || 'Reference videos available in Airtable.'}\n\n== APPROVED CONCEPT DECK ==\n${conceptDeck}\n\n== OUTPUT FORMAT ==\nFor EACH concept (all ${numConcepts}), output this JSON structure:\n{\n  \"scripts\": [\n    {\n      \"script_number\": 1,\n      \"concept_name\": \"from concept deck above\",\n      \"concept_id\": \"will be matched later\",\n      \"framework_used\": \"PAS / BAB / AIDA / etc.\",\n      \"hook_type\": \"controversy / POV / calling-out / etc.\",\n      \"funnel_stage\": \"TOF / MOF / BOF\",\n      \"format\": \"the UGC format\",\n      \"platform\": \"TikTok / Reels / Facebook\",\n      \"hook\": \"Exact opening words (0-3 sec)\",\n      \"hook_reinforcement\": \"Second line that keeps them watching (3-5 sec)\",\n      \"problem\": \"Relate to viewer (5-10 sec)\",\n      \"solution\": \"Natural product discovery (10-18 sec)\",\n      \"proof\": \"Specific proof points (18-25 sec)\",\n      \"cta\": \"Curiosity-driven close (25-30 sec)\",\n      \"full_script\": \"The COMPLETE script as the creator would say it\",\n      \"visual_direction\": \"Second-by-second direction\",\n      \"on_screen_text\": [\"Text overlay 1\", \"Text overlay 2\", \"Text overlay 3\"],\n      \"creator_notes\": \"Tone, energy, pacing, setting\",\n      \"estimated_duration\": \"25 sec\",\n      \"thumbnail_frame\": \"Description of first frame\"\n    }\n  ]\n}\n\nCRITICAL: The 'full_script' must sound like a REAL PERSON. Include filler words, reactions, pauses.\n\nOutput ONLY valid JSON.`;\n\nreturn [{ json: {\n  prompt,\n  brief,\n  project_id,\n  approved_concepts: approvedConcepts,\n  concept_count: numConcepts,\n  revision_count: 0\n} }];"
@@ -165,9 +271,12 @@
       "name": "Build Writer Prompt",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2100, 320]
+      "position": [
+        2100,
+        320
+      ],
+      "credentials": {}
     },
-
     {
       "parameters": {
         "agent": "openAiFunctionsAgent",
@@ -182,32 +291,49 @@
       "name": "Script Writer Agent",
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 1.7,
-      "position": [2500, 320]
+      "position": [
+        2500,
+        320
+      ],
+      "credentials": {}
     },
     {
       "parameters": {
         "model": "gpt-4o",
-        "options": { "temperature": 0.8, "maxTokens": 8000 }
+        "options": {
+          "temperature": 0.8,
+          "maxTokens": 8000
+        }
       },
       "id": "w3-llm-writer",
-      "name": "GPT-4o — Writer",
+      "name": "GPT-4o \u2014 Writer",
       "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
       "typeVersion": 1,
-      "position": [2500, 540],
-      "credentials": { "openAiApi": { "id": "OUom69v74KTvlioi", "name": "OpenAI account" } }
+      "position": [
+        2500,
+        540
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "OUom69v74KTvlioi",
+          "name": "OpenAi account"
+        }
+      }
     },
-
     {
       "parameters": {
-        "jsCode": "// ============================================================\n// Build QA Agent prompt\n// ============================================================\n\nconst writerOutput = $input.first().json.output || $input.first().json.text || JSON.stringify($input.first().json);\nconst promptData = $('Build Writer Prompt').first().json;\nconst brief = promptData.brief;\nconst revisionCount = promptData.revision_count || 0;\n\nconst prompt = `REVIEW THESE UGC SCRIPTS. You are the final quality gate.\n\n== COMPLIANCE RULES (NON-NEGOTIABLE) ==\nCompliance Policy: ${brief.compliance || 'No specific compliance rules'}\nDo NOT Say: ${brief.do_not_say || 'No restrictions'}\n\n== BRAND CONTEXT ==\nBrand: ${brief.brand_name}\nProduct: ${brief.product_feature || 'N/A'}\nTarget: ${brief.target_user || 'N/A'}\nPersonality: ${brief.brand_personality || 'N/A'}\n\n== SCRIPTS TO REVIEW ==\n${writerOutput}\n\n== YOUR REVIEW CHECKLIST ==\n1. COMPLIANCE: Any 'do not say' violations? Unsubstantiated claims?\n2. FRAMEWORK EXECUTION: Is each framework executed correctly?\n3. HOOK QUALITY: Would a real person stop scrolling? Score 1-10.\n4. AUTHENTICITY: Sounds like a real person or like ChatGPT?\n5. AD PACING: Product reveal between 8-18 seconds?\n6. PROOF SPECIFICITY: Numbers, timeframes, names — or vague?\n7. CTA: Creates curiosity or is generic?\n8. DIVERSITY: Different frameworks, hooks, voices across scripts?\n\nOutput this JSON:\n{\n  \"verdict\": \"APPROVED\" or \"NEEDS_REVISION\",\n  \"overall_quality\": 7.5,\n  \"revision_number\": ${revisionCount},\n  \"script_reviews\": [\n    {\n      \"script_number\": 1,\n      \"compliance_pass\": true,\n      \"quality_score\": 8,\n      \"issues\": [],\n      \"revision_notes\": \"\"\n    }\n  ],\n  \"batch_notes\": \"Overall assessment\"\n}\n\nRevision #${revisionCount} of max 2. ${revisionCount >= 2 ? 'FINAL REVIEW — approve with notes if quality is acceptable.' : ''}\nOutput ONLY valid JSON.`;\n\nreturn [{ json: { prompt, brief, writer_output: writerOutput, revision_count: revisionCount, project_id: promptData.project_id, approved_concepts: promptData.approved_concepts } }];"
+        "jsCode": "// ============================================================\n// Build QA Agent prompt\n// ============================================================\n\nconst writerOutput = $input.first().json.output || $input.first().json.text || JSON.stringify($input.first().json);\nconst promptData = $('Build Writer Prompt').first().json;\nconst brief = promptData.brief;\nconst revisionCount = promptData.revision_count || 0;\n\nconst prompt = `REVIEW THESE UGC SCRIPTS. You are the final quality gate.\n\n== COMPLIANCE RULES (NON-NEGOTIABLE) ==\nCompliance Policy: ${brief.compliance || 'No specific compliance rules'}\nDo NOT Say: ${brief.do_not_say || 'No restrictions'}\n\n== BRAND CONTEXT ==\nBrand: ${brief.brand_name}\nProduct: ${brief.product_feature || 'N/A'}\nTarget: ${brief.target_user || 'N/A'}\nPersonality: ${brief.brand_personality || 'N/A'}\n\n== SCRIPTS TO REVIEW ==\n${writerOutput}\n\n== YOUR REVIEW CHECKLIST ==\n1. COMPLIANCE: Any 'do not say' violations? Unsubstantiated claims?\n2. FRAMEWORK EXECUTION: Is each framework executed correctly?\n3. HOOK QUALITY: Would a real person stop scrolling? Score 1-10.\n4. AUTHENTICITY: Sounds like a real person or like ChatGPT?\n5. AD PACING: Product reveal between 8-18 seconds?\n6. PROOF SPECIFICITY: Numbers, timeframes, names \u2014 or vague?\n7. CTA: Creates curiosity or is generic?\n8. DIVERSITY: Different frameworks, hooks, voices across scripts?\n\nOutput this JSON:\n{\n  \"verdict\": \"APPROVED\" or \"NEEDS_REVISION\",\n  \"overall_quality\": 7.5,\n  \"revision_number\": ${revisionCount},\n  \"script_reviews\": [\n    {\n      \"script_number\": 1,\n      \"compliance_pass\": true,\n      \"quality_score\": 8,\n      \"issues\": [],\n      \"revision_notes\": \"\"\n    }\n  ],\n  \"batch_notes\": \"Overall assessment\"\n}\n\nRevision #${revisionCount} of max 2. ${revisionCount >= 2 ? 'FINAL REVIEW \u2014 approve with notes if quality is acceptable.' : ''}\nOutput ONLY valid JSON.`;\n\nreturn [{ json: { prompt, brief, writer_output: writerOutput, revision_count: revisionCount, project_id: promptData.project_id, approved_concepts: promptData.approved_concepts } }];"
       },
       "id": "w3-prep-qa",
       "name": "Build QA Prompt",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2860, 320]
+      "position": [
+        2860,
+        320
+      ],
+      "credentials": {}
     },
-
     {
       "parameters": {
         "agent": "openAiFunctionsAgent",
@@ -222,19 +348,34 @@
       "name": "QA & Compliance Agent",
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 1.7,
-      "position": [3220, 320]
+      "position": [
+        3220,
+        320
+      ],
+      "credentials": {}
     },
     {
       "parameters": {
         "model": "gpt-4o-mini",
-        "options": { "temperature": 0.3, "maxTokens": 3000 }
+        "options": {
+          "temperature": 0.3,
+          "maxTokens": 3000
+        }
       },
       "id": "w3-llm-qa",
-      "name": "GPT-4o-mini — QA",
+      "name": "GPT-4o-mini \u2014 QA",
       "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
       "typeVersion": 1,
-      "position": [3120, 540],
-      "credentials": { "openAiApi": { "id": "OUom69v74KTvlioi", "name": "OpenAI account" } }
+      "position": [
+        3120,
+        540
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "OUom69v74KTvlioi",
+          "name": "OpenAi account"
+        }
+      }
     },
     {
       "parameters": {
@@ -244,33 +385,46 @@
         "jsCode": "const input = JSON.parse($input.first().json.query || '{}');\nconst text = (input.script_text || '').toLowerCase();\nconst forbidden = (input.forbidden_phrases || '').split(',').map(p => p.trim().toLowerCase()).filter(Boolean);\nconst violations = forbidden.filter(phrase => text.includes(phrase));\nreturn JSON.stringify({ violations, has_violations: violations.length > 0, checked_phrases: forbidden.length });"
       },
       "id": "w3-tool-compliance",
-      "name": "Tool — Compliance Check",
+      "name": "Tool \u2014 Compliance Check",
       "type": "@n8n/n8n-nodes-langchain.toolCode",
       "typeVersion": 1.1,
-      "position": [3320, 540]
+      "position": [
+        3320,
+        540
+      ],
+      "credentials": {}
     },
-
     {
       "parameters": {
-        "jsCode": "// ============================================================\n// Check QA Verdict — decision point\n// ============================================================\n\nconst qaOutput = $input.first().json.output || $input.first().json.text || JSON.stringify($input.first().json);\nconst prevData = $('Build QA Prompt').first().json;\nconst writerOutput = prevData.writer_output;\nlet revisionCount = prevData.revision_count || 0;\n\nlet qaResult;\ntry {\n  qaResult = JSON.parse(qaOutput);\n} catch(e) {\n  const match = qaOutput.match(/\\{[\\s\\S]*\\}/);\n  if (match) {\n    try { qaResult = JSON.parse(match[0]); } catch(e2) {\n      qaResult = { verdict: 'APPROVED', batch_notes: 'Could not parse QA response, approving by default.' };\n    }\n  } else {\n    qaResult = { verdict: 'APPROVED', batch_notes: 'Could not parse QA response, approving by default.' };\n  }\n}\n\nconst verdict = (qaResult.verdict || 'APPROVED').toUpperCase();\nconst needsRevision = verdict === 'NEEDS_REVISION' && revisionCount < 2;\n\nreturn [{\n  json: {\n    verdict,\n    needs_revision: needsRevision,\n    revision_count: revisionCount + (needsRevision ? 1 : 0),\n    revision_notes: qaResult.batch_notes || '',\n    script_reviews: qaResult.script_reviews || [],\n    overall_quality: qaResult.overall_quality || 0,\n    writer_output: writerOutput,\n    qa_output: qaOutput,\n    project_id: prevData.project_id,\n    brief: prevData.brief,\n    approved_concepts: prevData.approved_concepts\n  }\n}];"
+        "jsCode": "// ============================================================\n// Check QA Verdict \u2014 decision point\n// ============================================================\n\nconst qaOutput = $input.first().json.output || $input.first().json.text || JSON.stringify($input.first().json);\nconst prevData = $('Build QA Prompt').first().json;\nconst writerOutput = prevData.writer_output;\nlet revisionCount = prevData.revision_count || 0;\n\nlet qaResult;\ntry {\n  qaResult = JSON.parse(qaOutput);\n} catch(e) {\n  const match = qaOutput.match(/\\{[\\s\\S]*\\}/);\n  if (match) {\n    try { qaResult = JSON.parse(match[0]); } catch(e2) {\n      qaResult = { verdict: 'APPROVED', batch_notes: 'Could not parse QA response, approving by default.' };\n    }\n  } else {\n    qaResult = { verdict: 'APPROVED', batch_notes: 'Could not parse QA response, approving by default.' };\n  }\n}\n\nconst verdict = (qaResult.verdict || 'APPROVED').toUpperCase();\nconst needsRevision = verdict === 'NEEDS_REVISION' && revisionCount < 2;\n\nreturn [{\n  json: {\n    verdict,\n    needs_revision: needsRevision,\n    revision_count: revisionCount + (needsRevision ? 1 : 0),\n    revision_notes: qaResult.batch_notes || '',\n    script_reviews: qaResult.script_reviews || [],\n    overall_quality: qaResult.overall_quality || 0,\n    writer_output: writerOutput,\n    qa_output: qaOutput,\n    project_id: prevData.project_id,\n    brief: prevData.brief,\n    approved_concepts: prevData.approved_concepts\n  }\n}];"
       },
       "id": "w3-check-verdict",
       "name": "Check QA Verdict",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [3580, 320]
+      "position": [
+        3580,
+        320
+      ],
+      "credentials": {}
     },
-
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
           "conditions": [
             {
               "id": "revision-check",
               "leftValue": "={{ $json.needs_revision }}",
               "rightValue": true,
-              "operator": { "type": "boolean", "operation": "true" }
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
             }
           ],
           "combinator": "and"
@@ -281,20 +435,26 @@
       "name": "Revision Needed?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [3940, 320]
+      "position": [
+        3940,
+        320
+      ],
+      "credentials": {}
     },
-
     {
       "parameters": {
-        "jsCode": "// ============================================================\n// Route back to Script Writer with revision context\n// ============================================================\n\nconst verdict = $input.first().json;\nconst brief = verdict.brief;\n\nconst revisionFeedback = (verdict.script_reviews || []).map(r =>\n  `Script ${r.script_number}: Score ${r.quality_score}/10${r.issues && r.issues.length ? ' — Issues: ' + r.issues.join(', ') : ''}${r.revision_notes ? ' — Notes: ' + r.revision_notes : ''}`\n).join('\\n');\n\nconst prompt = `REVISION REQUESTED — The QA agent has reviewed your scripts and sent them back.\n\n== QA REVISION NOTES ==\n${verdict.revision_notes}\n\n== SCRIPT-LEVEL FEEDBACK ==\n${revisionFeedback}\n\n== ORIGINAL BRIEF ==\nBrand: ${brief.brand_name} | Product: ${brief.product_feature || 'N/A'}\nDifferentiator: ${brief.differentiator || 'N/A'} | Target: ${brief.target_user || 'N/A'}\nPersonality: ${brief.brand_personality || 'N/A'}\nCompliance: ${brief.compliance || 'None'} | Do NOT Say: ${brief.do_not_say || 'None'}\n\nRewrite the scripts addressing ALL revision notes. Keep what worked. Fix what didn't.\nMaintain the same JSON output format as before.`;\n\nreturn [{ json: {\n  prompt,\n  brief,\n  project_id: verdict.project_id,\n  approved_concepts: verdict.approved_concepts,\n  concept_count: (verdict.approved_concepts || []).length,\n  revision_count: verdict.revision_count\n} }];"
+        "jsCode": "// ============================================================\n// Route back to Script Writer with revision context\n// ============================================================\n\nconst verdict = $input.first().json;\nconst brief = verdict.brief;\n\nconst revisionFeedback = (verdict.script_reviews || []).map(r =>\n  `Script ${r.script_number}: Score ${r.quality_score}/10${r.issues && r.issues.length ? ' \u2014 Issues: ' + r.issues.join(', ') : ''}${r.revision_notes ? ' \u2014 Notes: ' + r.revision_notes : ''}`\n).join('\\n');\n\nconst prompt = `REVISION REQUESTED \u2014 The QA agent has reviewed your scripts and sent them back.\n\n== QA REVISION NOTES ==\n${verdict.revision_notes}\n\n== SCRIPT-LEVEL FEEDBACK ==\n${revisionFeedback}\n\n== ORIGINAL BRIEF ==\nBrand: ${brief.brand_name} | Product: ${brief.product_feature || 'N/A'}\nDifferentiator: ${brief.differentiator || 'N/A'} | Target: ${brief.target_user || 'N/A'}\nPersonality: ${brief.brand_personality || 'N/A'}\nCompliance: ${brief.compliance || 'None'} | Do NOT Say: ${brief.do_not_say || 'None'}\n\nRewrite the scripts addressing ALL revision notes. Keep what worked. Fix what didn't.\nMaintain the same JSON output format as before.`;\n\nreturn [{ json: {\n  prompt,\n  brief,\n  project_id: verdict.project_id,\n  approved_concepts: verdict.approved_concepts,\n  concept_count: (verdict.approved_concepts || []).length,\n  revision_count: verdict.revision_count\n} }];"
       },
       "id": "w3-prep-revision",
       "name": "Prepare Revision",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [4240, 180]
+      "position": [
+        4240,
+        180
+      ],
+      "credentials": {}
     },
-
     {
       "parameters": {
         "jsCode": "// ============================================================\n// Parse approved scripts and store in Airtable\n// Match scripts to concept IDs for linking\n// ============================================================\n\nconst verdictData = $input.first().json;\nconst writerOutput = verdictData.writer_output || '';\nconst project_id = verdictData.project_id;\nconst brief = verdictData.brief;\nconst qaQuality = verdictData.overall_quality || 'N/A';\nconst approvedConcepts = verdictData.approved_concepts || [];\n\n// Parse scripts from writer output\nlet scripts = [];\ntry {\n  const parsed = JSON.parse(writerOutput);\n  scripts = parsed.scripts || [parsed];\n} catch(e) {\n  const match = writerOutput.match(/\\{[\\s\\S]*\\}/);\n  if (match) {\n    try {\n      const parsed = JSON.parse(match[0]);\n      scripts = parsed.scripts || [parsed];\n    } catch(e2) {\n      scripts = [{ script_number: 1, full_script: writerOutput, concept_name: 'Script', format: 'UGC', hook: '', visual_direction: '', on_screen_text: [], creator_notes: '', estimated_duration: '30 sec' }];\n    }\n  }\n}\n\n// Match scripts to concepts by name or index\nconst scriptRecords = scripts.map((s, i) => {\n  const conceptName = s.concept_name || '';\n  const matchedConcept = approvedConcepts.find(c => c.concept_name === conceptName) || approvedConcepts[i] || {};\n\n  return {\n    project_id: project_id,\n    concept_id: matchedConcept.id || '',\n    script_number: s.script_number || (i + 1),\n    hook: s.hook || '',\n    hook_reinforcement: s.hook_reinforcement || '',\n    problem: s.problem || '',\n    solution: s.solution || '',\n    proof: s.proof || '',\n    cta: s.cta || '',\n    full_script: s.full_script || '',\n    visual_direction: s.visual_direction || '',\n    on_screen_text: Array.isArray(s.on_screen_text) ? s.on_screen_text.join(' | ') : (s.on_screen_text || ''),\n    creator_notes: s.creator_notes || '',\n    estimated_duration: s.estimated_duration || '30 sec',\n    thumbnail_frame: s.thumbnail_frame || '',\n    qa_score: qaQuality,\n    pm_status: 'Pending',\n    pm_notes: '',\n    client_status: 'Pending',\n    client_notes: '',\n    overall_status: 'PM Review',\n    version: 1,\n    concept_name: s.concept_name || matchedConcept.concept_name || 'Concept ' + (i + 1),\n    format: s.format || matchedConcept.format || 'UGC'\n  };\n});\n\nreturn [{ json: {\n  project_id,\n  brief,\n  script_records: scriptRecords,\n  script_count: scriptRecords.length,\n  qa_quality: qaQuality,\n  revisions_used: verdictData.revision_count || 0\n} }];"
@@ -303,9 +463,12 @@
       "name": "Parse Scripts for Airtable",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [4240, 460]
+      "position": [
+        4240,
+        460
+      ],
+      "credentials": {}
     },
-
     {
       "parameters": {
         "jsCode": "// Split script records into individual items\nconst data = $input.first().json;\nconst items = data.script_records.map(record => ({ json: record }));\nreturn items;"
@@ -314,105 +477,109 @@
       "name": "Split Script Records",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [4600, 460]
+      "position": [
+        4600,
+        460
+      ],
+      "credentials": {}
     },
-
     {
       "parameters": {
-        "resource": "record",
-        "operation": "create",
-        "base": { "__rl": true, "value": "appvFxwZc9yU8o8pK", "mode": "id" },
-        "table": { "__rl": true, "value": "Scripts", "mode": "name" },
-        "columns": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "project_id": "={{ $json.project_id }}",
-            "concept_id": "={{ $json.concept_id }}",
-            "script_number": "={{ $json.script_number }}",
-            "hook": "={{ $json.hook }}",
-            "hook_reinforcement": "={{ $json.hook_reinforcement }}",
-            "problem": "={{ $json.problem }}",
-            "solution": "={{ $json.solution }}",
-            "proof": "={{ $json.proof }}",
-            "cta": "={{ $json.cta }}",
-            "full_script": "={{ $json.full_script }}",
-            "visual_direction": "={{ $json.visual_direction }}",
-            "on_screen_text": "={{ $json.on_screen_text }}",
-            "creator_notes": "={{ $json.creator_notes }}",
-            "estimated_duration": "={{ $json.estimated_duration }}",
-            "thumbnail_frame": "={{ $json.thumbnail_frame }}",
-            "qa_score": "={{ $json.qa_score }}",
-            "pm_status": "Pending",
-            "pm_notes": "",
-            "client_status": "Pending",
-            "client_notes": "",
-            "overall_status": "PM Review",
-            "version": "={{ $json.version }}"
-          }
-        },
-        "options": { "bulkSize": 10 }
+        "method": "POST",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Scripts",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ fields: { project_id: [$json.project_id], concept_id: [$json.concept_id], script_number: $json.script_number, hook: $json.hook, hook_reinforcement: $json.hook_reinforcement, problem: $json.problem, solution: $json.solution, proof: $json.proof, cta: $json.cta, full_script: $json.full_script, visual_direction: $json.visual_direction, on_screen_text: $json.on_screen_text, creator_notes: $json.creator_notes, estimated_duration: $json.estimated_duration, thumbnail_frame: $json.thumbnail_frame, qa_score: $json.qa_score, version: $json.version, pm_status: \"Pending\", client_status: \"Pending\", overall_status: \"PM Review\" } }) }}",
+        "options": {}
       },
       "id": "w3-store-scripts",
       "name": "Store Scripts in Airtable",
-      "type": "n8n-nodes-base.airtable",
-      "typeVersion": 2.1,
-      "position": [4960, 460],
-      "credentials": { "airtableTokenApi": { "id": "WelvlJEjoHaI3l9G", "name": "Airtable Personal Access Token" } },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4960,
+        460
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
       "onError": "continueRegularOutput"
     },
-
     {
       "parameters": {
-        "resource": "record",
-        "operation": "update",
-        "base": { "__rl": true, "value": "appvFxwZc9yU8o8pK", "mode": "id" },
-        "table": { "__rl": true, "value": "Projects", "mode": "name" },
-        "id": "={{ $('Parse Scripts for Airtable').first().json.project_id }}",
-        "columns": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "status": "Script Review"
-          }
-        },
+        "method": "PATCH",
+        "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Projects/{{ $('Parse Scripts for Airtable').first().json.project_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ fields: { status: 'Script Review' } }) }}",
         "options": {}
       },
       "id": "w3-update-project-script-review",
-      "name": "Update Project — Script Review",
-      "type": "n8n-nodes-base.airtable",
-      "typeVersion": 2.1,
-      "position": [5320, 460],
-      "credentials": { "airtableTokenApi": { "id": "WelvlJEjoHaI3l9G", "name": "Airtable Personal Access Token" } }
+      "name": "Update Project \u2014 Script Review",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5320,
+        460
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
     },
-
     {
       "parameters": {
-        "jsCode": "// ============================================================\n// Build Slack notification for PM script review\n// ============================================================\nconst data = $('Parse Scripts for Airtable').first().json;\nconst brief = data.brief;\nconst scripts = data.script_records;\nconst project_id = data.project_id;\n\nconst scriptSummary = scripts.map((s, i) =>\n  `${i + 1}. *${s.concept_name}* (${s.format})\\n   Hook: _\"${(s.hook || '').substring(0, 60)}...\"_\\n   Duration: ${s.estimated_duration} | QA: ${s.qa_score}/10`\n).join('\\n\\n');\n\nconst slackBlocks = [\n  {\n    \"type\": \"header\",\n    \"text\": { \"type\": \"plain_text\", \"text\": `Scripts Ready for PM Review: ${brief.brand_name || 'Brand'}` }\n  },\n  {\n    \"type\": \"section\",\n    \"text\": {\n      \"type\": \"mrkdwn\",\n      \"text\": `*${scripts.length} scripts written and QA'd for ${brief.client_code || 'project'}*\\nQA Score: ${data.qa_quality}/10 | Revisions used: ${data.revisions_used}\\n\\n${scriptSummary}`\n    }\n  },\n  {\n    \"type\": \"divider\"\n  },\n  {\n    \"type\": \"actions\",\n    \"elements\": [\n      {\n        \"type\": \"button\",\n        \"text\": { \"type\": \"plain_text\", \"text\": \"Review Scripts in Airtable\" },\n        \"style\": \"primary\",\n        \"url\": `https://airtable.com/appvFxwZc9yU8o8pK/Scripts?filter_project_id=${project_id}`\n      },\n      {\n        \"type\": \"button\",\n        \"text\": { \"type\": \"plain_text\", \"text\": \"Approve All & Deliver\" },\n        \"url\": `http://n8n-jeet.duckdns.org:5678/webhook/ugc-delivery?project_id=${project_id}&action=approve`\n      }\n    ]\n  }\n];\n\nreturn [{ json: {\n  project_id,\n  brief,\n  script_count: scripts.length,\n  slack_blocks: JSON.stringify(slackBlocks),\n  slack_text: `${scripts.length} UGC scripts ready for PM review: ${brief.brand_name || 'Brand'} (${brief.client_code || ''}) — QA: ${data.qa_quality}/10`\n} }];"
+        "jsCode": "// ============================================================\n// Build Slack notification for PM script review\n// ============================================================\nconst data = $('Parse Scripts for Airtable').first().json;\nconst brief = data.brief;\nconst scripts = data.script_records;\nconst project_id = data.project_id;\n\nconst scriptSummary = scripts.map((s, i) =>\n  `${i + 1}. *${s.concept_name}* (${s.format})\\n   Hook: _\"${(s.hook || '').substring(0, 60)}...\"_\\n   Duration: ${s.estimated_duration} | QA: ${s.qa_score}/10`\n).join('\\n\\n');\n\nconst slackBlocks = [\n  {\n    \"type\": \"header\",\n    \"text\": { \"type\": \"plain_text\", \"text\": `Scripts Ready for PM Review: ${brief.brand_name || 'Brand'}` }\n  },\n  {\n    \"type\": \"section\",\n    \"text\": {\n      \"type\": \"mrkdwn\",\n      \"text\": `*${scripts.length} scripts written and QA'd for ${brief.client_code || 'project'}*\\nQA Score: ${data.qa_quality}/10 | Revisions used: ${data.revisions_used}\\n\\n${scriptSummary}`\n    }\n  },\n  {\n    \"type\": \"divider\"\n  },\n  {\n    \"type\": \"actions\",\n    \"elements\": [\n      {\n        \"type\": \"button\",\n        \"text\": { \"type\": \"plain_text\", \"text\": \"Review Scripts in Airtable\" },\n        \"style\": \"primary\",\n        \"url\": `https://airtable.com/appvFxwZc9yU8o8pK/Scripts?filter_project_id=${project_id}`\n      },\n      {\n        \"type\": \"button\",\n        \"text\": { \"type\": \"plain_text\", \"text\": \"Approve All & Deliver\" },\n        \"url\": `http://n8n-jeet.duckdns.org:5678/webhook/ugc-delivery?project_id=${project_id}&action=approve`\n      }\n    ]\n  }\n];\n\nreturn [{ json: {\n  project_id,\n  brief,\n  script_count: scripts.length,\n  slack_blocks: JSON.stringify(slackBlocks),\n  slack_text: `${scripts.length} UGC scripts ready for PM review: ${brief.brand_name || 'Brand'} (${brief.client_code || ''}) \u2014 QA: ${data.qa_quality}/10`\n} }];"
       },
       "id": "w3-prep-slack",
       "name": "Prepare Slack Notification",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [5680, 460]
+      "position": [
+        5680,
+        460
+      ],
+      "credentials": {}
     },
-
     {
       "parameters": {
         "select": "channel",
-        "channelId": { "__rl": true, "value": "C0AFBQ5UF0E", "mode": "id" },
+        "channelId": {
+          "__rl": true,
+          "value": "C0AFBQ5UF0E",
+          "mode": "id"
+        },
         "text": "={{ $json.slack_text }}",
         "otherOptions": {
           "blocksUi": "={{ $json.slack_blocks }}"
         }
       },
       "id": "w3-slack-pm",
-      "name": "Notify PM — Scripts Ready",
+      "name": "Notify PM \u2014 Scripts Ready",
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.2,
-      "position": [6040, 460],
-      "credentials": { "slackApi": { "id": "5Q37UpOjGx4YsbyC", "name": "Slack API" } },
+      "position": [
+        6040,
+        460
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "5Q37UpOjGx4YsbyC",
+          "name": "Slack account"
+        }
+      },
       "onError": "continueRegularOutput"
     },
-
     {
       "parameters": {
         "respondWith": "json",
@@ -423,9 +590,12 @@
       "name": "Respond to Webhook",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [6400, 460]
+      "position": [
+        6400,
+        460
+      ],
+      "credentials": {}
     },
-
     {
       "parameters": {
         "jsCode": "const err = $input.first().json;\nlet project_id = 'N/A';\ntry { project_id = $('Extract Project ID').first().json.project_id; } catch(e) {}\nreturn [{ json: { project_id, error_message: err.error?.message || err.message || 'Unknown', error_node: err.error?.node?.name || 'Unknown', timestamp: new Date().toISOString() } }];"
@@ -434,12 +604,20 @@
       "name": "Handle Error",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [940, 780]
+      "position": [
+        940,
+        780
+      ],
+      "credentials": {}
     },
     {
       "parameters": {
         "select": "user",
-        "user": { "__rl": true, "value": "dakshina@smashed.agency", "mode": "id" },
+        "user": {
+          "__rl": true,
+          "value": "U06P9F49BJT",
+          "mode": "id"
+        },
         "text": "={{ `Phase 3 (Script Writing) failed for project ${$json.project_id}. Error: ${$json.error_message}. Node: ${$json.error_node}` }}",
         "otherOptions": {}
       },
@@ -447,126 +625,1411 @@
       "name": "Error Slack DM",
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.2,
-      "position": [1340, 780],
-      "credentials": { "slackApi": { "id": "5Q37UpOjGx4YsbyC", "name": "Slack API" } },
+      "position": [
+        1340,
+        780
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "5Q37UpOjGx4YsbyC",
+          "name": "Slack account"
+        }
+      },
       "onError": "continueRegularOutput"
     },
     {
       "parameters": {
         "respondWith": "json",
         "responseBody": "={{ JSON.stringify({ status: 'error', phase: 'script_writing', message: $json.error_message, project_id: $json.project_id }) }}",
-        "options": { "responseCode": 200 }
+        "options": {
+          "responseCode": 200
+        }
       },
       "id": "w3-error-respond",
       "name": "Respond 200 on Error",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [1740, 780]
+      "position": [
+        1740,
+        780
+      ],
+      "credentials": {}
     }
   ],
-
   "connections": {
-    "Webhook — Phase 3": {
-      "main": [[{ "node": "Extract Project ID", "type": "main", "index": 0 }]]
+    "Webhook \u2014 Phase 3": {
+      "main": [
+        [
+          {
+            "node": "Extract Project ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
-    "Manual Trigger — Test": {
-      "main": [[{ "node": "Set Test Data", "type": "main", "index": 0 }]]
+    "Manual Trigger \u2014 Test": {
+      "main": [
+        [
+          {
+            "node": "Set Test Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Set Test Data": {
-      "main": [[{ "node": "Extract Project ID", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Extract Project ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Extract Project ID": {
-      "main": [[{ "node": "Fetch Project", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Fetch Project",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Fetch Project": {
-      "main": [[{ "node": "Extract Client Code", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Extract Client Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Extract Client Code": {
-      "main": [[
-        { "node": "Fetch Approved Concepts", "type": "main", "index": 0 },
-        { "node": "Fetch Research Data", "type": "main", "index": 0 },
-        { "node": "Fetch Reference Videos", "type": "main", "index": 0 },
-        { "node": "Fetch Client Brief", "type": "main", "index": 0 }
-      ]]
+      "main": [
+        [
+          {
+            "node": "Fetch Approved Concepts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Fetch Approved Concepts": {
-      "main": [[{ "node": "Build Writer Prompt", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Fetch Research Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Fetch Research Data": {
-      "main": [[{ "node": "Build Writer Prompt", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Fetch Reference Videos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Fetch Reference Videos": {
-      "main": [[{ "node": "Build Writer Prompt", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Fetch Client Brief",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Fetch Client Brief": {
-      "main": [[{ "node": "Build Writer Prompt", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Build Writer Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Build Writer Prompt": {
-      "main": [[{ "node": "Script Writer Agent", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Script Writer Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
-    "GPT-4o — Writer": {
-      "ai_languageModel": [[{ "node": "Script Writer Agent", "type": "ai_languageModel", "index": 0 }]]
+    "GPT-4o \u2014 Writer": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Script Writer Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Script Writer Agent": {
-      "main": [[{ "node": "Build QA Prompt", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Build QA Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Build QA Prompt": {
-      "main": [[{ "node": "QA & Compliance Agent", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "QA & Compliance Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
-    "GPT-4o-mini — QA": {
-      "ai_languageModel": [[{ "node": "QA & Compliance Agent", "type": "ai_languageModel", "index": 0 }]]
+    "GPT-4o-mini \u2014 QA": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "QA & Compliance Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
     },
-    "Tool — Compliance Check": {
-      "ai_tool": [[{ "node": "QA & Compliance Agent", "type": "ai_tool", "index": 0 }]]
+    "Tool \u2014 Compliance Check": {
+      "ai_tool": [
+        [
+          {
+            "node": "QA & Compliance Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
     },
     "QA & Compliance Agent": {
-      "main": [[{ "node": "Check QA Verdict", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Check QA Verdict",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Check QA Verdict": {
-      "main": [[{ "node": "Revision Needed?", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Revision Needed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Revision Needed?": {
       "main": [
-        [{ "node": "Prepare Revision", "type": "main", "index": 0 }],
-        [{ "node": "Parse Scripts for Airtable", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Prepare Revision",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Parse Scripts for Airtable",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Prepare Revision": {
-      "main": [[{ "node": "Build Writer Prompt", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Build Writer Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Parse Scripts for Airtable": {
-      "main": [[{ "node": "Split Script Records", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Split Script Records",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Split Script Records": {
-      "main": [[{ "node": "Store Scripts in Airtable", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Store Scripts in Airtable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Store Scripts in Airtable": {
-      "main": [[{ "node": "Update Project — Script Review", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Update Project \u2014 Script Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
-    "Update Project — Script Review": {
-      "main": [[{ "node": "Prepare Slack Notification", "type": "main", "index": 0 }]]
+    "Update Project \u2014 Script Review": {
+      "main": [
+        [
+          {
+            "node": "Prepare Slack Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Prepare Slack Notification": {
-      "main": [[{ "node": "Notify PM — Scripts Ready", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Notify PM \u2014 Scripts Ready",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
-    "Notify PM — Scripts Ready": {
-      "main": [[{ "node": "Respond to Webhook", "type": "main", "index": 0 }]]
+    "Notify PM \u2014 Scripts Ready": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Handle Error": {
-      "main": [[{ "node": "Error Slack DM", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Error Slack DM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Error Slack DM": {
-      "main": [[{ "node": "Respond 200 on Error", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Respond 200 on Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
-
-  "settings": { "executionOrder": "v1" },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
   "staticData": null,
-  "tags": [
-    { "name": "AI Agents", "id": "6" },
-    { "name": "UGC", "id": "2" },
-    { "name": "Phase 3", "id": "13" }
-  ],
+  "meta": null,
+  "pinData": null,
+  "versionId": "1451ccbb-660a-4bc6-a416-2245bcdda566",
+  "activeVersionId": "1451ccbb-660a-4bc6-a416-2245bcdda566",
+  "versionCounter": 37,
   "triggerCount": 1,
-  "pinData": {}
+  "shared": [
+    {
+      "updatedAt": "2026-02-16T08:01:55.780Z",
+      "createdAt": "2026-02-16T08:01:55.780Z",
+      "role": "workflow:owner",
+      "workflowId": "iZOxbVl1X2w74Pzi",
+      "projectId": "AD8mXtbIf5cdYNIV",
+      "project": {
+        "updatedAt": "2026-01-26T04:34:53.263Z",
+        "createdAt": "2026-01-26T04:34:35.063Z",
+        "id": "AD8mXtbIf5cdYNIV",
+        "name": "SenseInfo Tech <senseinfotechno@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "ed50a507-d93d-45c3-9412-d80babb81dd0",
+        "projectRelations": [
+          {
+            "updatedAt": "2026-01-26T04:34:35.063Z",
+            "createdAt": "2026-01-26T04:34:35.063Z",
+            "userId": "ed50a507-d93d-45c3-9412-d80babb81dd0",
+            "projectId": "AD8mXtbIf5cdYNIV",
+            "user": {
+              "updatedAt": "2026-02-16T19:22:13.000Z",
+              "createdAt": "2026-01-26T04:34:34.578Z",
+              "id": "ed50a507-d93d-45c3-9412-d80babb81dd0",
+              "email": "senseinfotechno@gmail.com",
+              "firstName": "SenseInfo",
+              "lastName": "Tech",
+              "personalizationAnswers": {
+                "version": "v4",
+                "personalization_survey_submitted_at": "2026-01-26T04:35:01.423Z",
+                "personalization_survey_n8n_version": "2.4.6",
+                "companySize": "<20",
+                "companyType": "saas",
+                "role": "business-owner",
+                "reportedSource": "google"
+              },
+              "settings": {
+                "userActivated": true,
+                "firstSuccessfulWorkflowId": "T2U_raVAJPmEIai1EY6TF",
+                "userActivatedAt": 1769404953077,
+                "easyAIWorkflowOnboarded": true,
+                "npsSurvey": {
+                  "waitingForResponse": true,
+                  "ignoredCount": 2,
+                  "lastShownAt": 1770721963325
+                }
+              },
+              "disabled": false,
+              "mfaEnabled": false,
+              "lastActiveAt": "2026-02-16",
+              "isPending": false
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-02-17T09:42:12.298Z",
+    "createdAt": "2026-02-17T09:42:12.298Z",
+    "versionId": "1451ccbb-660a-4bc6-a416-2245bcdda566",
+    "workflowId": "iZOxbVl1X2w74Pzi",
+    "nodes": [
+      {
+        "parameters": {
+          "content": "## WORKFLOW 3: SCRIPT WRITING\n\nWebhook POST /ugc-phase3 with { project_id }\n1. Read ONLY approved concepts from Airtable\n2. Read research data from Airtable\n3. Read reference videos from Airtable\n4. Fetch brief from Google Sheets\n5. Build Writer Prompt (only approved concepts)\n6. Script Writer Agent runs\n7. QA Agent runs\n8. If NEEDS_REVISION: loop back (max 2 cycles)\n9. If APPROVED: parse + store in Airtable Scripts table\n10. Update Project status to Script Review\n11. Slack PM with script summary + review button\n\nKey difference from original: ONLY writes scripts for\nclient-approved concepts, saving significant token cost.",
+          "height": 500,
+          "width": 500,
+          "color": 7
+        },
+        "id": "w3-sticky-overview",
+        "name": "Sticky Note - Overview",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          -280,
+          -60
+        ],
+        "credentials": {}
+      },
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "ugc-phase3",
+          "responseMode": "lastNode",
+          "options": {}
+        },
+        "id": "w3-webhook",
+        "name": "Webhook \u2014 Phase 3",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 1.1,
+        "position": [
+          280,
+          320
+        ],
+        "webhookId": "ugc-phase3-webhook",
+        "credentials": {}
+      },
+      {
+        "parameters": {},
+        "id": "w3-manual-trigger",
+        "name": "Manual Trigger \u2014 Test",
+        "type": "n8n-nodes-base.manualTrigger",
+        "typeVersion": 1,
+        "position": [
+          280,
+          -140
+        ],
+        "credentials": {}
+      },
+      {
+        "parameters": {
+          "jsCode": "return [{ json: { body: { project_id: 'rec_TEST_123' } } }];"
+        },
+        "id": "w3-test-data",
+        "name": "Set Test Data",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          580,
+          -140
+        ],
+        "credentials": {}
+      },
+      {
+        "parameters": {
+          "jsCode": "const body = $input.first().json.body || $input.first().json;\nconst project_id = (body.project_id || '').trim();\nif (!project_id) throw new Error('project_id is required');\nreturn [{ json: { project_id } }];"
+        },
+        "id": "w3-extract-id",
+        "name": "Extract Project ID",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          580,
+          320
+        ],
+        "credentials": {}
+      },
+      {
+        "parameters": {
+          "resource": "record",
+          "operation": "search",
+          "base": {
+            "__rl": true,
+            "value": "appvFxwZc9yU8o8pK",
+            "mode": "id"
+          },
+          "table": {
+            "__rl": true,
+            "value": "Projects",
+            "mode": "name"
+          },
+          "filterByFormula": "=RECORD_ID() = '{{ $json.project_id }}'",
+          "options": {}
+        },
+        "id": "w3-fetch-project",
+        "name": "Fetch Project",
+        "type": "n8n-nodes-base.airtable",
+        "typeVersion": 2.1,
+        "position": [
+          940,
+          320
+        ],
+        "credentials": {
+          "airtableTokenApi": {
+            "id": "WelvlJEjoHaI3l9G",
+            "name": "Airtable Personal Access Token account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "// Extract client_code from project record to fetch the brief\nconst project = $input.first().json;\nconst client_code = project.client_code || (project.fields && project.fields.client_code) || '';\nconst project_id = $('Extract Project ID').first().json.project_id;\nif (!client_code) throw new Error('No client_code found in project record');\nreturn [{ json: { client_code, project_id, project } }];"
+        },
+        "id": "w3-extract-client-code",
+        "name": "Extract Client Code",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1300,
+          320
+        ],
+        "credentials": {}
+      },
+      {
+        "parameters": {
+          "resource": "record",
+          "operation": "search",
+          "base": {
+            "__rl": true,
+            "value": "appvFxwZc9yU8o8pK",
+            "mode": "id"
+          },
+          "table": {
+            "__rl": true,
+            "value": "Concepts",
+            "mode": "name"
+          },
+          "filterByFormula": "=AND(FIND('{{ $('Fetch Project').first().json.client_code }}', ARRAYJOIN({project_id})) > 0, {client_status} = 'Approved')",
+          "options": {}
+        },
+        "id": "w3-fetch-approved-concepts",
+        "name": "Fetch Approved Concepts",
+        "type": "n8n-nodes-base.airtable",
+        "typeVersion": 2.1,
+        "position": [
+          1660,
+          160
+        ],
+        "credentials": {
+          "airtableTokenApi": {
+            "id": "WelvlJEjoHaI3l9G",
+            "name": "Airtable Personal Access Token account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "resource": "record",
+          "operation": "search",
+          "base": {
+            "__rl": true,
+            "value": "appvFxwZc9yU8o8pK",
+            "mode": "id"
+          },
+          "table": {
+            "__rl": true,
+            "value": "Research",
+            "mode": "name"
+          },
+          "filterByFormula": "=FIND('{{ $('Fetch Project').first().json.client_code }}', ARRAYJOIN({project_id})) > 0",
+          "options": {}
+        },
+        "id": "w3-fetch-research",
+        "name": "Fetch Research Data",
+        "type": "n8n-nodes-base.airtable",
+        "typeVersion": 2.1,
+        "position": [
+          1660,
+          340
+        ],
+        "credentials": {
+          "airtableTokenApi": {
+            "id": "WelvlJEjoHaI3l9G",
+            "name": "Airtable Personal Access Token account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "resource": "record",
+          "operation": "search",
+          "base": {
+            "__rl": true,
+            "value": "appvFxwZc9yU8o8pK",
+            "mode": "id"
+          },
+          "table": {
+            "__rl": true,
+            "value": "Reference_Videos",
+            "mode": "name"
+          },
+          "filterByFormula": "=FIND('{{ $('Fetch Project').first().json.client_code }}', ARRAYJOIN({project_id})) > 0",
+          "options": {}
+        },
+        "id": "w3-fetch-references",
+        "name": "Fetch Reference Videos",
+        "type": "n8n-nodes-base.airtable",
+        "typeVersion": 2.1,
+        "position": [
+          1660,
+          520
+        ],
+        "credentials": {
+          "airtableTokenApi": {
+            "id": "WelvlJEjoHaI3l9G",
+            "name": "Airtable Personal Access Token account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "operation": "read",
+          "documentId": {
+            "__rl": true,
+            "value": "1cB4wtyp0l0xwH2Ukw-U93eW9_Ix1lB6EroYs1GyDLCM",
+            "mode": "id"
+          },
+          "sheetName": {
+            "__rl": true,
+            "value": "Client Database",
+            "mode": "name"
+          },
+          "filtersUI": {
+            "values": [
+              {
+                "lookupColumn": "client_code",
+                "lookupValue": "={{ $('Extract Client Code').first().json.client_code }}"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "w3-fetch-brief",
+        "name": "Fetch Client Brief",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 4.5,
+        "position": [
+          1660,
+          700
+        ],
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "Aas0vt74gbEuYgmW",
+            "name": "Google Sheets account 2 - vishant"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "// ============================================================\n// Merge all data sources and build the Writer Prompt\n// Only includes approved concepts (NOT all concepts)\n// ============================================================\n\nconst projectData = $('Extract Client Code').first().json;\nconst project_id = projectData.project_id;\nconst project = projectData.project;\n\n// Get approved concepts\nconst approvedConcepts = $('Fetch Approved Concepts').all().map(item => {\n  const d = item.json;\n  return {\n    id: d.id,\n    concept_name: d.concept_name || d.fields?.concept_name || 'Unnamed',\n    framework: d.framework || d.fields?.framework || 'PAS',\n    hook_type: d.hook_type || d.fields?.hook_type || 'curiosity-gap',\n    hook_text: d.hook_text || d.fields?.hook_text || '',\n    format: d.format || d.fields?.format || 'Talking Head',\n    funnel_stage: d.funnel_stage || d.fields?.funnel_stage || 'TOF',\n    virality_score: d.virality_score || d.fields?.virality_score || 5,\n    concept_pitch: d.concept_pitch || d.fields?.concept_pitch || '',\n    emotional_journey: d.emotional_journey || d.fields?.emotional_journey || '',\n    target_objection: d.target_objection || d.fields?.target_objection || '',\n    platform: d.platform || d.fields?.platform || 'TikTok'\n  };\n});\n\n// Get research data\nconst researchRecords = $('Fetch Research Data').all().map(item => {\n  const d = item.json;\n  return {\n    type: d.research_type || d.fields?.research_type || '',\n    category: d.category || d.fields?.category || '',\n    content: d.content || d.fields?.content || '',\n    source: d.source || d.fields?.source || ''\n  };\n});\n\n// Get reference videos\nconst refRecords = $('Fetch Reference Videos').all().map(item => {\n  const d = item.json;\n  return {\n    url: d.url || d.fields?.url || '',\n    platform: d.platform || d.fields?.platform || '',\n    format: d.format || d.fields?.format || '',\n    hook: d.hook || d.fields?.hook || '',\n    why_it_works: d.why_it_works || d.fields?.why_it_works || '',\n    adaptation_idea: d.adaptation_idea || d.fields?.adaptation_idea || ''\n  };\n});\n\n// Build brief from Google Sheets\nlet brief = {};\ntry {\n  const row = $('Fetch Client Brief').first().json;\n  function c(v) { return v === undefined || v === null ? '' : String(v).trim(); }\n  brief = {\n    client_code: c(row.client_code),\n    brand_name: c(row.brand_name),\n    client_name: c(row.client_name),\n    client_email: c(row.client_email),\n    product_feature: c(row.product_feature),\n    differentiator: c(row.differentiator),\n    target_user: c(row.target_user),\n    biggest_problem: c(row.biggest_problem),\n    main_hesitation: c(row.main_hesitation),\n    selling_proposition: c(row.selling_proposition),\n    brand_personality: c(row.brand_personality),\n    credibility_point: c(row.credibility_point),\n    transformation: c(row.transformation),\n    social_proof: c(row.social_proof),\n    compliance: c(row.compliance),\n    do_not_say: c(row.do_not_say),\n    additional_notes: c(row.additional_notes),\n    num_scripts: parseInt(c(row.num_scripts)) || 3\n  };\n} catch(e) {\n  // Use project data as fallback\n  brief = {\n    brand_name: project.brand_name || project.fields?.brand_name || 'Brand',\n    client_code: project.client_code || project.fields?.client_code || '',\n    client_name: project.client_name || project.fields?.client_name || '',\n    num_scripts: project.num_scripts || project.fields?.num_scripts || 3\n  };\n}\n\n// Build research summary text\nconst researchSummary = researchRecords.map(r => \n  `[${r.type}] (${r.source} | ${r.category}): ${r.content}`\n).join('\\n');\n\n// Build reference summary text\nconst refSummary = refRecords.map(r =>\n  `- ${r.platform} (${r.format}): ${r.url}\\n  Hook: ${r.hook}\\n  Why: ${r.why_it_works}\\n  Adaptation: ${r.adaptation_idea}`\n).join('\\n\\n');\n\n// Build concept deck\nconst conceptDeck = approvedConcepts.map((c, i) =>\n  `CONCEPT ${i + 1}: ${c.concept_name}\\n  Framework: ${c.framework} | Hook Type: ${c.hook_type} | Format: ${c.format}\\n  Funnel: ${c.funnel_stage} | Platform: ${c.platform} | Virality: ${c.virality_score}/10\\n  Hook: \"${c.hook_text}\"\\n  Pitch: ${c.concept_pitch}\\n  Emotional Journey: ${c.emotional_journey}\\n  Target Objection: ${c.target_objection}`\n).join('\\n\\n');\n\nconst numConcepts = approvedConcepts.length;\n\nconst prompt = `Write COMPLETE UGC scripts for the ${numConcepts} CLIENT-APPROVED concepts below.\n\nThese concepts have been reviewed and approved by the PM and the client. Write full scripts for ALL of them.\n\n== CLIENT BRIEF ==\nBrand: ${brief.brand_name}\nProduct: ${brief.product_feature || 'N/A'}\nDifferentiator: ${brief.differentiator || 'N/A'}\nSelling Proposition: ${brief.selling_proposition || 'N/A'}\nTarget: ${brief.target_user || 'N/A'}\nProblem: ${brief.biggest_problem || 'N/A'}\nHesitation: ${brief.main_hesitation || 'N/A'}\nTransformation: ${brief.transformation || 'N/A'}\nPersonality: ${brief.brand_personality || 'N/A'}\nCredibility: ${brief.credibility_point || 'N/A'}\nSocial Proof: ${brief.social_proof || 'N/A'}\nCompliance: ${brief.compliance || 'None'}\nDo NOT Say: ${brief.do_not_say || 'None'}\nNotes: ${brief.additional_notes || 'None'}\n\n== RESEARCH INSIGHTS ==\n${researchSummary || 'Research data available in Airtable.'}\n\n== REFERENCE VIDEOS/ADS ==\n${refSummary || 'Reference videos available in Airtable.'}\n\n== APPROVED CONCEPT DECK ==\n${conceptDeck}\n\n== OUTPUT FORMAT ==\nFor EACH concept (all ${numConcepts}), output this JSON structure:\n{\n  \"scripts\": [\n    {\n      \"script_number\": 1,\n      \"concept_name\": \"from concept deck above\",\n      \"concept_id\": \"will be matched later\",\n      \"framework_used\": \"PAS / BAB / AIDA / etc.\",\n      \"hook_type\": \"controversy / POV / calling-out / etc.\",\n      \"funnel_stage\": \"TOF / MOF / BOF\",\n      \"format\": \"the UGC format\",\n      \"platform\": \"TikTok / Reels / Facebook\",\n      \"hook\": \"Exact opening words (0-3 sec)\",\n      \"hook_reinforcement\": \"Second line that keeps them watching (3-5 sec)\",\n      \"problem\": \"Relate to viewer (5-10 sec)\",\n      \"solution\": \"Natural product discovery (10-18 sec)\",\n      \"proof\": \"Specific proof points (18-25 sec)\",\n      \"cta\": \"Curiosity-driven close (25-30 sec)\",\n      \"full_script\": \"The COMPLETE script as the creator would say it\",\n      \"visual_direction\": \"Second-by-second direction\",\n      \"on_screen_text\": [\"Text overlay 1\", \"Text overlay 2\", \"Text overlay 3\"],\n      \"creator_notes\": \"Tone, energy, pacing, setting\",\n      \"estimated_duration\": \"25 sec\",\n      \"thumbnail_frame\": \"Description of first frame\"\n    }\n  ]\n}\n\nCRITICAL: The 'full_script' must sound like a REAL PERSON. Include filler words, reactions, pauses.\n\nOutput ONLY valid JSON.`;\n\nreturn [{ json: {\n  prompt,\n  brief,\n  project_id,\n  approved_concepts: approvedConcepts,\n  concept_count: numConcepts,\n  revision_count: 0\n} }];"
+        },
+        "id": "w3-build-writer-prompt",
+        "name": "Build Writer Prompt",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2100,
+          320
+        ],
+        "credentials": {}
+      },
+      {
+        "parameters": {
+          "agent": "openAiFunctionsAgent",
+          "promptType": "define",
+          "text": "={{ $json.prompt }}",
+          "options": {
+            "systemMessage": "You are an elite UGC script writer with 500+ scripts that have generated millions in revenue. You write DIRECT RESPONSE AD SCRIPTS disguised as organic creator content.\n\nCRITICAL: REFERENCE VIDEO/AD ADAPTATION\nEach concept comes with a reference. Understand WHY it works, then adapt that FORMAT and ENERGY to the client's product.\n\nFRAMEWORK EXECUTION:\n- PAS: Open with pain, TWIST THE KNIFE, THEN solve.\n- BAB: Paint the ugly before, paint the dream after, bridge with product.\n- Curiosity Gap: Open a loop, hold it open, close at CTA.\n- Feel-Felt-Found: 'I felt the same way. Then I found...'\n- SLAP: Rapid fire. 15 seconds flat.\n- Star-Story-Solution: Character-driven narrative.\n\nHOOK ENGINEERING:\n- Controversy: 'I'm going to get hate for this but...'\n- POV: 'POV: it's 6am and your skin actually looks good'\n- Calling-out: 'If you have [specific trait], you NEED to see this'\n- Negative: 'The one thing I hate about this product...' (then flip)\n- Story: 'So last week something happened...'\n\nAD PACING:\n- 0-1 sec: PATTERN INTERRUPT\n- 1-3 sec: HOOK DELIVERY\n- 3-5 sec: HOOK REINFORCEMENT\n- 5-12 sec: STORY/PROBLEM\n- 12-20 sec: PRODUCT REVEAL (discovery, NOT a pitch)\n- 20-25 sec: PROOF STACKING\n- 25-30 sec: CTA (curiosity, not 'Buy now')\n\nPERFORMANCE TECHNIQUES: Specificity, sensory language, open loops, future pacing, embedded commands, social proof weaving, objection inoculation.\n\nCREATOR VOICE: Match to target audience (Gen Z, Millennial, Expert, Mom, Fitness). Each script must feel like a DIFFERENT creator.\n\nRULES:\n- Never violate compliance or 'do not say' phrases\n- Include natural speech: fillers, reactions, pauses [beat]\n- Output ONLY valid JSON\n- Every script states its framework",
+            "maxIterations": 3
+          }
+        },
+        "id": "w3-agent-writer",
+        "name": "Script Writer Agent",
+        "type": "@n8n/n8n-nodes-langchain.agent",
+        "typeVersion": 1.7,
+        "position": [
+          2500,
+          320
+        ],
+        "credentials": {}
+      },
+      {
+        "parameters": {
+          "model": "gpt-4o",
+          "options": {
+            "temperature": 0.8,
+            "maxTokens": 8000
+          }
+        },
+        "id": "w3-llm-writer",
+        "name": "GPT-4o \u2014 Writer",
+        "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+        "typeVersion": 1,
+        "position": [
+          2500,
+          540
+        ],
+        "credentials": {
+          "openAiApi": {
+            "id": "OUom69v74KTvlioi",
+            "name": "OpenAi account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "// ============================================================\n// Build QA Agent prompt\n// ============================================================\n\nconst writerOutput = $input.first().json.output || $input.first().json.text || JSON.stringify($input.first().json);\nconst promptData = $('Build Writer Prompt').first().json;\nconst brief = promptData.brief;\nconst revisionCount = promptData.revision_count || 0;\n\nconst prompt = `REVIEW THESE UGC SCRIPTS. You are the final quality gate.\n\n== COMPLIANCE RULES (NON-NEGOTIABLE) ==\nCompliance Policy: ${brief.compliance || 'No specific compliance rules'}\nDo NOT Say: ${brief.do_not_say || 'No restrictions'}\n\n== BRAND CONTEXT ==\nBrand: ${brief.brand_name}\nProduct: ${brief.product_feature || 'N/A'}\nTarget: ${brief.target_user || 'N/A'}\nPersonality: ${brief.brand_personality || 'N/A'}\n\n== SCRIPTS TO REVIEW ==\n${writerOutput}\n\n== YOUR REVIEW CHECKLIST ==\n1. COMPLIANCE: Any 'do not say' violations? Unsubstantiated claims?\n2. FRAMEWORK EXECUTION: Is each framework executed correctly?\n3. HOOK QUALITY: Would a real person stop scrolling? Score 1-10.\n4. AUTHENTICITY: Sounds like a real person or like ChatGPT?\n5. AD PACING: Product reveal between 8-18 seconds?\n6. PROOF SPECIFICITY: Numbers, timeframes, names \u2014 or vague?\n7. CTA: Creates curiosity or is generic?\n8. DIVERSITY: Different frameworks, hooks, voices across scripts?\n\nOutput this JSON:\n{\n  \"verdict\": \"APPROVED\" or \"NEEDS_REVISION\",\n  \"overall_quality\": 7.5,\n  \"revision_number\": ${revisionCount},\n  \"script_reviews\": [\n    {\n      \"script_number\": 1,\n      \"compliance_pass\": true,\n      \"quality_score\": 8,\n      \"issues\": [],\n      \"revision_notes\": \"\"\n    }\n  ],\n  \"batch_notes\": \"Overall assessment\"\n}\n\nRevision #${revisionCount} of max 2. ${revisionCount >= 2 ? 'FINAL REVIEW \u2014 approve with notes if quality is acceptable.' : ''}\nOutput ONLY valid JSON.`;\n\nreturn [{ json: { prompt, brief, writer_output: writerOutput, revision_count: revisionCount, project_id: promptData.project_id, approved_concepts: promptData.approved_concepts } }];"
+        },
+        "id": "w3-prep-qa",
+        "name": "Build QA Prompt",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2860,
+          320
+        ],
+        "credentials": {}
+      },
+      {
+        "parameters": {
+          "agent": "openAiFunctionsAgent",
+          "promptType": "define",
+          "text": "={{ $json.prompt }}",
+          "options": {
+            "systemMessage": "You are the QA Lead at a UGC agency who has reviewed 2,000+ scripts. Nothing ships without your sign-off.\n\nEVALUATE ON 3 LEVELS:\n\n1. COMPLIANCE (Zero tolerance): Check 'do not say' phrases and semantic equivalents. Check unsubstantiated claims. ANY violation = NEEDS_REVISION.\n\n2. FRAMEWORK EXECUTION: Correct framework structure? Hook matches type? Pacing right? CTA uses curiosity?\n\n3. PERFORMANCE PREDICTION: Thumb-stop test, authenticity test, skip test, differentiation test, proof specificity, emotional arc, CTA strength.\n\nSCORING: 9-10 = Exceptional. 7-8 = Strong. 5-6 = Mediocre, needs revision. 3-4 = Weak. 1-2 = Unusable.\n\nYou MUST output valid JSON only. Verdict must be exactly 'APPROVED' or 'NEEDS_REVISION'.",
+            "maxIterations": 5
+          }
+        },
+        "id": "w3-agent-qa",
+        "name": "QA & Compliance Agent",
+        "type": "@n8n/n8n-nodes-langchain.agent",
+        "typeVersion": 1.7,
+        "position": [
+          3220,
+          320
+        ],
+        "credentials": {}
+      },
+      {
+        "parameters": {
+          "model": "gpt-4o-mini",
+          "options": {
+            "temperature": 0.3,
+            "maxTokens": 3000
+          }
+        },
+        "id": "w3-llm-qa",
+        "name": "GPT-4o-mini \u2014 QA",
+        "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+        "typeVersion": 1,
+        "position": [
+          3120,
+          540
+        ],
+        "credentials": {
+          "openAiApi": {
+            "id": "OUom69v74KTvlioi",
+            "name": "OpenAi account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "name": "compliance_check",
+          "description": "Checks if a script text contains any forbidden phrases. Input: JSON with 'script_text' and 'forbidden_phrases' (comma-separated). Returns violations found.",
+          "language": "javaScript",
+          "jsCode": "const input = JSON.parse($input.first().json.query || '{}');\nconst text = (input.script_text || '').toLowerCase();\nconst forbidden = (input.forbidden_phrases || '').split(',').map(p => p.trim().toLowerCase()).filter(Boolean);\nconst violations = forbidden.filter(phrase => text.includes(phrase));\nreturn JSON.stringify({ violations, has_violations: violations.length > 0, checked_phrases: forbidden.length });"
+        },
+        "id": "w3-tool-compliance",
+        "name": "Tool \u2014 Compliance Check",
+        "type": "@n8n/n8n-nodes-langchain.toolCode",
+        "typeVersion": 1.1,
+        "position": [
+          3320,
+          540
+        ],
+        "credentials": {}
+      },
+      {
+        "parameters": {
+          "jsCode": "// ============================================================\n// Check QA Verdict \u2014 decision point\n// ============================================================\n\nconst qaOutput = $input.first().json.output || $input.first().json.text || JSON.stringify($input.first().json);\nconst prevData = $('Build QA Prompt').first().json;\nconst writerOutput = prevData.writer_output;\nlet revisionCount = prevData.revision_count || 0;\n\nlet qaResult;\ntry {\n  qaResult = JSON.parse(qaOutput);\n} catch(e) {\n  const match = qaOutput.match(/\\{[\\s\\S]*\\}/);\n  if (match) {\n    try { qaResult = JSON.parse(match[0]); } catch(e2) {\n      qaResult = { verdict: 'APPROVED', batch_notes: 'Could not parse QA response, approving by default.' };\n    }\n  } else {\n    qaResult = { verdict: 'APPROVED', batch_notes: 'Could not parse QA response, approving by default.' };\n  }\n}\n\nconst verdict = (qaResult.verdict || 'APPROVED').toUpperCase();\nconst needsRevision = verdict === 'NEEDS_REVISION' && revisionCount < 2;\n\nreturn [{\n  json: {\n    verdict,\n    needs_revision: needsRevision,\n    revision_count: revisionCount + (needsRevision ? 1 : 0),\n    revision_notes: qaResult.batch_notes || '',\n    script_reviews: qaResult.script_reviews || [],\n    overall_quality: qaResult.overall_quality || 0,\n    writer_output: writerOutput,\n    qa_output: qaOutput,\n    project_id: prevData.project_id,\n    brief: prevData.brief,\n    approved_concepts: prevData.approved_concepts\n  }\n}];"
+        },
+        "id": "w3-check-verdict",
+        "name": "Check QA Verdict",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          3580,
+          320
+        ],
+        "credentials": {}
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict"
+            },
+            "conditions": [
+              {
+                "id": "revision-check",
+                "leftValue": "={{ $json.needs_revision }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true"
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "w3-if-revise",
+        "name": "Revision Needed?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          3940,
+          320
+        ],
+        "credentials": {}
+      },
+      {
+        "parameters": {
+          "jsCode": "// ============================================================\n// Route back to Script Writer with revision context\n// ============================================================\n\nconst verdict = $input.first().json;\nconst brief = verdict.brief;\n\nconst revisionFeedback = (verdict.script_reviews || []).map(r =>\n  `Script ${r.script_number}: Score ${r.quality_score}/10${r.issues && r.issues.length ? ' \u2014 Issues: ' + r.issues.join(', ') : ''}${r.revision_notes ? ' \u2014 Notes: ' + r.revision_notes : ''}`\n).join('\\n');\n\nconst prompt = `REVISION REQUESTED \u2014 The QA agent has reviewed your scripts and sent them back.\n\n== QA REVISION NOTES ==\n${verdict.revision_notes}\n\n== SCRIPT-LEVEL FEEDBACK ==\n${revisionFeedback}\n\n== ORIGINAL BRIEF ==\nBrand: ${brief.brand_name} | Product: ${brief.product_feature || 'N/A'}\nDifferentiator: ${brief.differentiator || 'N/A'} | Target: ${brief.target_user || 'N/A'}\nPersonality: ${brief.brand_personality || 'N/A'}\nCompliance: ${brief.compliance || 'None'} | Do NOT Say: ${brief.do_not_say || 'None'}\n\nRewrite the scripts addressing ALL revision notes. Keep what worked. Fix what didn't.\nMaintain the same JSON output format as before.`;\n\nreturn [{ json: {\n  prompt,\n  brief,\n  project_id: verdict.project_id,\n  approved_concepts: verdict.approved_concepts,\n  concept_count: (verdict.approved_concepts || []).length,\n  revision_count: verdict.revision_count\n} }];"
+        },
+        "id": "w3-prep-revision",
+        "name": "Prepare Revision",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          4240,
+          180
+        ],
+        "credentials": {}
+      },
+      {
+        "parameters": {
+          "jsCode": "// ============================================================\n// Parse approved scripts and store in Airtable\n// Match scripts to concept IDs for linking\n// ============================================================\n\nconst verdictData = $input.first().json;\nconst writerOutput = verdictData.writer_output || '';\nconst project_id = verdictData.project_id;\nconst brief = verdictData.brief;\nconst qaQuality = verdictData.overall_quality || 'N/A';\nconst approvedConcepts = verdictData.approved_concepts || [];\n\n// Parse scripts from writer output\nlet scripts = [];\ntry {\n  const parsed = JSON.parse(writerOutput);\n  scripts = parsed.scripts || [parsed];\n} catch(e) {\n  const match = writerOutput.match(/\\{[\\s\\S]*\\}/);\n  if (match) {\n    try {\n      const parsed = JSON.parse(match[0]);\n      scripts = parsed.scripts || [parsed];\n    } catch(e2) {\n      scripts = [{ script_number: 1, full_script: writerOutput, concept_name: 'Script', format: 'UGC', hook: '', visual_direction: '', on_screen_text: [], creator_notes: '', estimated_duration: '30 sec' }];\n    }\n  }\n}\n\n// Match scripts to concepts by name or index\nconst scriptRecords = scripts.map((s, i) => {\n  const conceptName = s.concept_name || '';\n  const matchedConcept = approvedConcepts.find(c => c.concept_name === conceptName) || approvedConcepts[i] || {};\n\n  return {\n    project_id: project_id,\n    concept_id: matchedConcept.id || '',\n    script_number: s.script_number || (i + 1),\n    hook: s.hook || '',\n    hook_reinforcement: s.hook_reinforcement || '',\n    problem: s.problem || '',\n    solution: s.solution || '',\n    proof: s.proof || '',\n    cta: s.cta || '',\n    full_script: s.full_script || '',\n    visual_direction: s.visual_direction || '',\n    on_screen_text: Array.isArray(s.on_screen_text) ? s.on_screen_text.join(' | ') : (s.on_screen_text || ''),\n    creator_notes: s.creator_notes || '',\n    estimated_duration: s.estimated_duration || '30 sec',\n    thumbnail_frame: s.thumbnail_frame || '',\n    qa_score: qaQuality,\n    pm_status: 'Pending',\n    pm_notes: '',\n    client_status: 'Pending',\n    client_notes: '',\n    overall_status: 'PM Review',\n    version: 1,\n    concept_name: s.concept_name || matchedConcept.concept_name || 'Concept ' + (i + 1),\n    format: s.format || matchedConcept.format || 'UGC'\n  };\n});\n\nreturn [{ json: {\n  project_id,\n  brief,\n  script_records: scriptRecords,\n  script_count: scriptRecords.length,\n  qa_quality: qaQuality,\n  revisions_used: verdictData.revision_count || 0\n} }];"
+        },
+        "id": "w3-parse-scripts",
+        "name": "Parse Scripts for Airtable",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          4240,
+          460
+        ],
+        "credentials": {}
+      },
+      {
+        "parameters": {
+          "jsCode": "// Split script records into individual items\nconst data = $input.first().json;\nconst items = data.script_records.map(record => ({ json: record }));\nreturn items;"
+        },
+        "id": "w3-split-scripts",
+        "name": "Split Script Records",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          4600,
+          460
+        ],
+        "credentials": {}
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Scripts",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "airtableTokenApi",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ fields: { project_id: [$json.project_id], concept_id: [$json.concept_id], script_number: $json.script_number, hook: $json.hook, hook_reinforcement: $json.hook_reinforcement, problem: $json.problem, solution: $json.solution, proof: $json.proof, cta: $json.cta, full_script: $json.full_script, visual_direction: $json.visual_direction, on_screen_text: $json.on_screen_text, creator_notes: $json.creator_notes, estimated_duration: $json.estimated_duration, thumbnail_frame: $json.thumbnail_frame, qa_score: $json.qa_score, version: $json.version, pm_status: \"Pending\", client_status: \"Pending\", overall_status: \"PM Review\" } }) }}",
+          "options": {}
+        },
+        "id": "w3-store-scripts",
+        "name": "Store Scripts in Airtable",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          4960,
+          460
+        ],
+        "credentials": {
+          "airtableTokenApi": {
+            "id": "WelvlJEjoHaI3l9G",
+            "name": "Airtable Personal Access Token account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "method": "PATCH",
+          "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Projects/{{ $('Parse Scripts for Airtable').first().json.project_id }}",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "airtableTokenApi",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ fields: { status: 'Script Review' } }) }}",
+          "options": {}
+        },
+        "id": "w3-update-project-script-review",
+        "name": "Update Project \u2014 Script Review",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          5320,
+          460
+        ],
+        "credentials": {
+          "airtableTokenApi": {
+            "id": "WelvlJEjoHaI3l9G",
+            "name": "Airtable Personal Access Token account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "// ============================================================\n// Build Slack notification for PM script review\n// ============================================================\nconst data = $('Parse Scripts for Airtable').first().json;\nconst brief = data.brief;\nconst scripts = data.script_records;\nconst project_id = data.project_id;\n\nconst scriptSummary = scripts.map((s, i) =>\n  `${i + 1}. *${s.concept_name}* (${s.format})\\n   Hook: _\"${(s.hook || '').substring(0, 60)}...\"_\\n   Duration: ${s.estimated_duration} | QA: ${s.qa_score}/10`\n).join('\\n\\n');\n\nconst slackBlocks = [\n  {\n    \"type\": \"header\",\n    \"text\": { \"type\": \"plain_text\", \"text\": `Scripts Ready for PM Review: ${brief.brand_name || 'Brand'}` }\n  },\n  {\n    \"type\": \"section\",\n    \"text\": {\n      \"type\": \"mrkdwn\",\n      \"text\": `*${scripts.length} scripts written and QA'd for ${brief.client_code || 'project'}*\\nQA Score: ${data.qa_quality}/10 | Revisions used: ${data.revisions_used}\\n\\n${scriptSummary}`\n    }\n  },\n  {\n    \"type\": \"divider\"\n  },\n  {\n    \"type\": \"actions\",\n    \"elements\": [\n      {\n        \"type\": \"button\",\n        \"text\": { \"type\": \"plain_text\", \"text\": \"Review Scripts in Airtable\" },\n        \"style\": \"primary\",\n        \"url\": `https://airtable.com/appvFxwZc9yU8o8pK/Scripts?filter_project_id=${project_id}`\n      },\n      {\n        \"type\": \"button\",\n        \"text\": { \"type\": \"plain_text\", \"text\": \"Approve All & Deliver\" },\n        \"url\": `http://n8n-jeet.duckdns.org:5678/webhook/ugc-delivery?project_id=${project_id}&action=approve`\n      }\n    ]\n  }\n];\n\nreturn [{ json: {\n  project_id,\n  brief,\n  script_count: scripts.length,\n  slack_blocks: JSON.stringify(slackBlocks),\n  slack_text: `${scripts.length} UGC scripts ready for PM review: ${brief.brand_name || 'Brand'} (${brief.client_code || ''}) \u2014 QA: ${data.qa_quality}/10`\n} }];"
+        },
+        "id": "w3-prep-slack",
+        "name": "Prepare Slack Notification",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          5680,
+          460
+        ],
+        "credentials": {}
+      },
+      {
+        "parameters": {
+          "select": "channel",
+          "channelId": {
+            "__rl": true,
+            "value": "C0AFBQ5UF0E",
+            "mode": "id"
+          },
+          "text": "={{ $json.slack_text }}",
+          "otherOptions": {
+            "blocksUi": "={{ $json.slack_blocks }}"
+          }
+        },
+        "id": "w3-slack-pm",
+        "name": "Notify PM \u2014 Scripts Ready",
+        "type": "n8n-nodes-base.slack",
+        "typeVersion": 2.2,
+        "position": [
+          6040,
+          460
+        ],
+        "credentials": {
+          "slackApi": {
+            "id": "5Q37UpOjGx4YsbyC",
+            "name": "Slack account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{ JSON.stringify({ status: 'success', phase: 'script_writing', project_id: $json.project_id, scripts_generated: $json.script_count, message: 'Scripts written, QA passed, stored in Airtable. PM notified for review.' }) }}",
+          "options": {}
+        },
+        "id": "w3-respond",
+        "name": "Respond to Webhook",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.1,
+        "position": [
+          6400,
+          460
+        ],
+        "credentials": {}
+      },
+      {
+        "parameters": {
+          "jsCode": "const err = $input.first().json;\nlet project_id = 'N/A';\ntry { project_id = $('Extract Project ID').first().json.project_id; } catch(e) {}\nreturn [{ json: { project_id, error_message: err.error?.message || err.message || 'Unknown', error_node: err.error?.node?.name || 'Unknown', timestamp: new Date().toISOString() } }];"
+        },
+        "id": "w3-error-handler",
+        "name": "Handle Error",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          940,
+          780
+        ],
+        "credentials": {}
+      },
+      {
+        "parameters": {
+          "select": "user",
+          "user": {
+            "__rl": true,
+            "value": "U06P9F49BJT",
+            "mode": "id"
+          },
+          "text": "={{ `Phase 3 (Script Writing) failed for project ${$json.project_id}. Error: ${$json.error_message}. Node: ${$json.error_node}` }}",
+          "otherOptions": {}
+        },
+        "id": "w3-error-slack",
+        "name": "Error Slack DM",
+        "type": "n8n-nodes-base.slack",
+        "typeVersion": 2.2,
+        "position": [
+          1340,
+          780
+        ],
+        "credentials": {
+          "slackApi": {
+            "id": "5Q37UpOjGx4YsbyC",
+            "name": "Slack account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{ JSON.stringify({ status: 'error', phase: 'script_writing', message: $json.error_message, project_id: $json.project_id }) }}",
+          "options": {
+            "responseCode": 200
+          }
+        },
+        "id": "w3-error-respond",
+        "name": "Respond 200 on Error",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.1,
+        "position": [
+          1740,
+          780
+        ],
+        "credentials": {}
+      }
+    ],
+    "connections": {
+      "Webhook \u2014 Phase 3": {
+        "main": [
+          [
+            {
+              "node": "Extract Project ID",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Manual Trigger \u2014 Test": {
+        "main": [
+          [
+            {
+              "node": "Set Test Data",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Set Test Data": {
+        "main": [
+          [
+            {
+              "node": "Extract Project ID",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Extract Project ID": {
+        "main": [
+          [
+            {
+              "node": "Fetch Project",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Fetch Project": {
+        "main": [
+          [
+            {
+              "node": "Extract Client Code",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Extract Client Code": {
+        "main": [
+          [
+            {
+              "node": "Fetch Approved Concepts",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Fetch Approved Concepts": {
+        "main": [
+          [
+            {
+              "node": "Fetch Research Data",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Fetch Research Data": {
+        "main": [
+          [
+            {
+              "node": "Fetch Reference Videos",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Fetch Reference Videos": {
+        "main": [
+          [
+            {
+              "node": "Fetch Client Brief",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Fetch Client Brief": {
+        "main": [
+          [
+            {
+              "node": "Build Writer Prompt",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build Writer Prompt": {
+        "main": [
+          [
+            {
+              "node": "Script Writer Agent",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "GPT-4o \u2014 Writer": {
+        "ai_languageModel": [
+          [
+            {
+              "node": "Script Writer Agent",
+              "type": "ai_languageModel",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Script Writer Agent": {
+        "main": [
+          [
+            {
+              "node": "Build QA Prompt",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build QA Prompt": {
+        "main": [
+          [
+            {
+              "node": "QA & Compliance Agent",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "GPT-4o-mini \u2014 QA": {
+        "ai_languageModel": [
+          [
+            {
+              "node": "QA & Compliance Agent",
+              "type": "ai_languageModel",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Tool \u2014 Compliance Check": {
+        "ai_tool": [
+          [
+            {
+              "node": "QA & Compliance Agent",
+              "type": "ai_tool",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "QA & Compliance Agent": {
+        "main": [
+          [
+            {
+              "node": "Check QA Verdict",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Check QA Verdict": {
+        "main": [
+          [
+            {
+              "node": "Revision Needed?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Revision Needed?": {
+        "main": [
+          [
+            {
+              "node": "Prepare Revision",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Parse Scripts for Airtable",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prepare Revision": {
+        "main": [
+          [
+            {
+              "node": "Build Writer Prompt",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Parse Scripts for Airtable": {
+        "main": [
+          [
+            {
+              "node": "Split Script Records",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Split Script Records": {
+        "main": [
+          [
+            {
+              "node": "Store Scripts in Airtable",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Store Scripts in Airtable": {
+        "main": [
+          [
+            {
+              "node": "Update Project \u2014 Script Review",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Update Project \u2014 Script Review": {
+        "main": [
+          [
+            {
+              "node": "Prepare Slack Notification",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prepare Slack Notification": {
+        "main": [
+          [
+            {
+              "node": "Notify PM \u2014 Scripts Ready",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Notify PM \u2014 Scripts Ready": {
+        "main": [
+          [
+            {
+              "node": "Respond to Webhook",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Handle Error": {
+        "main": [
+          [
+            {
+              "node": "Error Slack DM",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Error Slack DM": {
+        "main": [
+          [
+            {
+              "node": "Respond 200 on Error",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "SenseInfo Tech",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-02-17T09:42:12.406Z",
+        "id": 83,
+        "workflowId": "iZOxbVl1X2w74Pzi",
+        "versionId": "1451ccbb-660a-4bc6-a416-2245bcdda566",
+        "event": "activated",
+        "userId": "ed50a507-d93d-45c3-9412-d80babb81dd0"
+      }
+    ]
+  }
 }

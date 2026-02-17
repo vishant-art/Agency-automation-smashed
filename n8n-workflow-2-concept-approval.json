@@ -1,5 +1,11 @@
 {
-  "name": "UGC Phase 2 — Concept Approval (PM + Client)",
+  "updatedAt": "2026-02-17T09:37:14.245Z",
+  "createdAt": "2026-02-16T08:01:54.249Z",
+  "id": "U2bxLckriORGZIyU",
+  "name": "UGC Phase 2 \u2014 Concept Approval (PM + Client)",
+  "description": null,
+  "active": true,
+  "isArchived": false,
   "nodes": [
     {
       "parameters": {
@@ -12,9 +18,12 @@
       "name": "Sticky Note - Overview",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [-280, -60]
+      "position": [
+        -280,
+        -60
+      ],
+      "credentials": {}
     },
-
     {
       "parameters": {
         "httpMethod": "POST",
@@ -23,19 +32,27 @@
         "options": {}
       },
       "id": "w2-webhook",
-      "name": "Webhook — Concept Approval",
+      "name": "Webhook \u2014 Concept Approval",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1.1,
-      "position": [280, 320],
-      "webhookId": "ugc-concept-approval-webhook"
+      "position": [
+        280,
+        320
+      ],
+      "webhookId": "ugc-concept-approval-webhook",
+      "credentials": {}
     },
     {
       "parameters": {},
       "id": "w2-manual-trigger",
-      "name": "Manual Trigger — Test",
+      "name": "Manual Trigger \u2014 Test",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
-      "position": [280, -140]
+      "position": [
+        280,
+        -140
+      ],
+      "credentials": {}
     },
     {
       "parameters": {
@@ -45,9 +62,12 @@
       "name": "Set Test Data",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [580, -140]
+      "position": [
+        580,
+        -140
+      ],
+      "credentials": {}
     },
-
     {
       "parameters": {
         "jsCode": "// ============================================================\n// Extract and validate approval payload\n// ============================================================\nconst body = $input.first().json.body || $input.first().json;\nconst project_id = (body.project_id || '').trim();\nconst action = (body.action || '').trim().toLowerCase();\nconst concept_ids = body.concept_ids || [];\nconst notes = (body.notes || '').trim();\n\nif (!project_id) throw new Error('project_id is required');\nif (!['pm_approve', 'pm_reject', 'client_approve', 'client_reject'].includes(action)) {\n  throw new Error('action must be one of: pm_approve, pm_reject, client_approve, client_reject');\n}\n\nreturn [{ json: { project_id, action, concept_ids, notes } }];"
@@ -56,15 +76,26 @@
       "name": "Extract Approval Payload",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [580, 320]
+      "position": [
+        580,
+        320
+      ],
+      "credentials": {}
     },
-
     {
       "parameters": {
         "resource": "record",
         "operation": "search",
-        "base": { "__rl": true, "value": "appvFxwZc9yU8o8pK", "mode": "id" },
-        "table": { "__rl": true, "value": "Projects", "mode": "name" },
+        "base": {
+          "__rl": true,
+          "value": "appvFxwZc9yU8o8pK",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "Projects",
+          "mode": "name"
+        },
         "filterByFormula": "=RECORD_ID() = '{{ $json.project_id }}'",
         "options": {}
       },
@@ -72,27 +103,49 @@
       "name": "Fetch Project from Airtable",
       "type": "n8n-nodes-base.airtable",
       "typeVersion": 2.1,
-      "position": [940, 320],
-      "credentials": { "airtableTokenApi": { "id": "WelvlJEjoHaI3l9G", "name": "Airtable Personal Access Token" } }
+      "position": [
+        940,
+        320
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
     },
-
     {
       "parameters": {
         "resource": "record",
         "operation": "search",
-        "base": { "__rl": true, "value": "appvFxwZc9yU8o8pK", "mode": "id" },
-        "table": { "__rl": true, "value": "Concepts", "mode": "name" },
-        "filterByFormula": "={project_id} = '{{ $('Extract Approval Payload').first().json.project_id }}'",
+        "base": {
+          "__rl": true,
+          "value": "appvFxwZc9yU8o8pK",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "Concepts",
+          "mode": "name"
+        },
+        "filterByFormula": "=FIND('{{ $('Fetch Project from Airtable').first().json.client_code }}', ARRAYJOIN({project_id})) > 0",
         "options": {}
       },
       "id": "w2-fetch-concepts",
       "name": "Fetch Concepts from Airtable",
       "type": "n8n-nodes-base.airtable",
       "typeVersion": 2.1,
-      "position": [1300, 320],
-      "credentials": { "airtableTokenApi": { "id": "WelvlJEjoHaI3l9G", "name": "Airtable Personal Access Token" } }
+      "position": [
+        1300,
+        320
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
     },
-
     {
       "parameters": {
         "jsCode": "// ============================================================\n// Merge project + concepts + payload into single context\n// ============================================================\nconst payload = $('Extract Approval Payload').first().json;\nconst project = $('Fetch Project from Airtable').first().json;\nconst concepts = $input.all().map(item => item.json);\n\nreturn [{ json: {\n  ...payload,\n  project,\n  concepts,\n  concept_count: concepts.length\n} }];"
@@ -101,28 +154,47 @@
       "name": "Merge Context",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1660, 320]
+      "position": [
+        1660,
+        320
+      ],
+      "credentials": {}
     },
-
     {
       "parameters": {
+        "dataType": "string",
+        "value1": "={{ $json.action }}",
         "rules": {
-          "values": [
-            { "outputIndex": 0, "conditions": { "conditions": [{ "leftValue": "={{ $json.action }}", "rightValue": "pm_approve", "operator": { "type": "string", "operation": "equals" } }], "combinator": "and" } },
-            { "outputIndex": 1, "conditions": { "conditions": [{ "leftValue": "={{ $json.action }}", "rightValue": "pm_reject", "operator": { "type": "string", "operation": "equals" } }], "combinator": "and" } },
-            { "outputIndex": 2, "conditions": { "conditions": [{ "leftValue": "={{ $json.action }}", "rightValue": "client_approve", "operator": { "type": "string", "operation": "equals" } }], "combinator": "and" } },
-            { "outputIndex": 3, "conditions": { "conditions": [{ "leftValue": "={{ $json.action }}", "rightValue": "client_reject", "operator": { "type": "string", "operation": "equals" } }], "combinator": "and" } }
+          "rules": [
+            {
+              "value2": "pm_approve",
+              "output": 0
+            },
+            {
+              "value2": "pm_reject",
+              "output": 1
+            },
+            {
+              "value2": "client_approve",
+              "output": 2
+            },
+            {
+              "value2": "client_reject",
+              "output": 3
+            }
           ]
         },
-        "options": { "fallbackOutput": "extra" }
+        "fallbackOutput": 4
       },
       "id": "w2-switch-action",
       "name": "Route by Action",
       "type": "n8n-nodes-base.switch",
-      "typeVersion": 3.2,
-      "position": [2020, 320]
+      "typeVersion": 2,
+      "position": [
+        2020,
+        320
+      ]
     },
-
     {
       "parameters": {
         "content": "## PM APPROVE BRANCH\nUpdate approved concepts -> Update project status\n-> Notify client for review",
@@ -134,9 +206,12 @@
       "name": "Sticky Note - PM Approve",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [2380, -120]
+      "position": [
+        2380,
+        -120
+      ],
+      "credentials": {}
     },
-
     {
       "parameters": {
         "jsCode": "// ============================================================\n// PM Approve: Determine which concepts are approved vs rejected\n// If concept_ids is empty, approve ALL concepts\n// ============================================================\nconst data = $input.first().json;\nconst concept_ids = data.concept_ids || [];\nconst notes = data.notes;\nconst concepts = data.concepts;\n\nconst approvedConcepts = concept_ids.length > 0\n  ? concepts.filter(c => concept_ids.includes(c.id))\n  : concepts;\nconst rejectedConcepts = concept_ids.length > 0\n  ? concepts.filter(c => !concept_ids.includes(c.id))\n  : [];\n\nconst items = [];\n\n// Approved concepts\nfor (const c of approvedConcepts) {\n  items.push({ json: {\n    record_id: c.id,\n    pm_status: 'Approved',\n    pm_notes: notes,\n    overall_status: 'Client Review',\n    _action: 'update_concept'\n  }});\n}\n\n// Rejected concepts\nfor (const c of rejectedConcepts) {\n  items.push({ json: {\n    record_id: c.id,\n    pm_status: 'Rejected',\n    pm_notes: notes || 'Not selected by PM',\n    overall_status: 'PM Review',\n    _action: 'update_concept'\n  }});\n}\n\nreturn items;"
@@ -145,58 +220,66 @@
       "name": "Prepare PM Approvals",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2420, 60]
+      "position": [
+        2420,
+        60
+      ],
+      "credentials": {}
     },
-
     {
       "parameters": {
-        "resource": "record",
-        "operation": "update",
-        "base": { "__rl": true, "value": "appvFxwZc9yU8o8pK", "mode": "id" },
-        "table": { "__rl": true, "value": "Concepts", "mode": "name" },
-        "id": "={{ $json.record_id }}",
-        "columns": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "pm_status": "={{ $json.pm_status }}",
-            "pm_notes": "={{ $json.pm_notes }}",
-            "overall_status": "={{ $json.overall_status }}"
-          }
-        },
-        "options": { "bulkSize": 10 }
+        "method": "PATCH",
+        "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Concepts/{{ $json.record_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ fields: { pm_status: $json.pm_status, pm_notes: $json.pm_notes || '', overall_status: $json.overall_status } }) }}",
+        "options": {}
       },
       "id": "w2-update-concepts-pm",
-      "name": "Update Concepts — PM Decision",
-      "type": "n8n-nodes-base.airtable",
-      "typeVersion": 2.1,
-      "position": [2780, 60],
-      "credentials": { "airtableTokenApi": { "id": "WelvlJEjoHaI3l9G", "name": "Airtable Personal Access Token" } },
+      "name": "Update Concepts \u2014 PM Decision",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2780,
+        60
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
       "onError": "continueRegularOutput"
     },
-
     {
       "parameters": {
-        "resource": "record",
-        "operation": "update",
-        "base": { "__rl": true, "value": "appvFxwZc9yU8o8pK", "mode": "id" },
-        "table": { "__rl": true, "value": "Projects", "mode": "name" },
-        "id": "={{ $('Merge Context').first().json.project_id }}",
-        "columns": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "status": "Client Review"
-          }
-        },
+        "method": "PATCH",
+        "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Projects/{{ $('Merge Context').first().json.project_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ fields: { status: 'Client Review' } }) }}",
         "options": {}
       },
       "id": "w2-update-project-client-review",
-      "name": "Update Project — Client Review",
-      "type": "n8n-nodes-base.airtable",
-      "typeVersion": 2.1,
-      "position": [3140, 60],
-      "credentials": { "airtableTokenApi": { "id": "WelvlJEjoHaI3l9G", "name": "Airtable Personal Access Token" } }
+      "name": "Update Project \u2014 Client Review",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3140,
+        60
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
     },
-
     {
       "parameters": {
         "jsCode": "// ============================================================\n// Build Slack notification for client concept review\n// ============================================================\nconst data = $('Merge Context').first().json;\nconst project = data.project;\nconst concepts = data.concepts.filter(c => {\n  const ids = data.concept_ids || [];\n  return ids.length === 0 || ids.includes(c.id);\n});\n\nconst conceptSummary = concepts.map((c, i) =>\n  `${i + 1}. *${c.concept_name || c.fields?.concept_name || 'Concept'}*\\n   _\"${c.hook_text || c.fields?.hook_text || ''}\"_\\n   ${c.concept_pitch || c.fields?.concept_pitch || ''}`\n).join('\\n\\n');\n\nconst brandName = project.brand_name || project.fields?.brand_name || 'Client';\nconst clientEmail = project.client_email || project.fields?.client_email || '';\nconst clientName = project.client_name || project.fields?.client_name || 'Client';\nconst projectId = data.project_id;\n\nconst slackBlocks = [\n  {\n    \"type\": \"header\",\n    \"text\": { \"type\": \"plain_text\", \"text\": `Client Review: ${brandName} Concepts` }\n  },\n  {\n    \"type\": \"section\",\n    \"text\": {\n      \"type\": \"mrkdwn\",\n      \"text\": `PM has approved *${concepts.length} concepts* for ${brandName}.\\nClient: ${clientName} (${clientEmail})\\n\\n*Approved Concepts:*\\n\\n${conceptSummary}\\n\\nConcepts are ready for client review. Share the Airtable view link with the client.`\n    }\n  },\n  {\n    \"type\": \"actions\",\n    \"elements\": [\n      {\n        \"type\": \"button\",\n        \"text\": { \"type\": \"plain_text\", \"text\": \"Client Airtable View\" },\n        \"url\": `https://airtable.com/appvFxwZc9yU8o8pK/Concepts?filter_project_id=${projectId}`\n      }\n    ]\n  }\n];\n\nreturn [{ json: {\n  project_id: projectId,\n  slack_blocks: JSON.stringify(slackBlocks),\n  slack_text: `PM approved ${concepts.length} concepts for ${brandName}. Ready for client review.`,\n  client_email: clientEmail,\n  client_name: clientName,\n  brand_name: brandName,\n  approved_count: concepts.length\n} }];"
@@ -205,27 +288,41 @@
       "name": "Prepare Client Review Notification",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [3500, 60]
+      "position": [
+        3500,
+        60
+      ],
+      "credentials": {}
     },
-
     {
       "parameters": {
         "select": "channel",
-        "channelId": { "__rl": true, "value": "C0AG86W1XT2", "mode": "id" },
+        "channelId": {
+          "__rl": true,
+          "value": "C0AG86W1XT2",
+          "mode": "id"
+        },
         "text": "={{ $json.slack_text }}",
         "otherOptions": {
           "blocksUi": "={{ $json.slack_blocks }}"
         }
       },
       "id": "w2-slack-client-review",
-      "name": "Slack — Client Review Ready",
+      "name": "Slack \u2014 Client Review Ready",
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.2,
-      "position": [3860, 60],
-      "credentials": { "slackApi": { "id": "5Q37UpOjGx4YsbyC", "name": "Slack API" } },
+      "position": [
+        3860,
+        60
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "5Q37UpOjGx4YsbyC",
+          "name": "Slack account"
+        }
+      },
       "onError": "continueRegularOutput"
     },
-
     {
       "parameters": {
         "respondWith": "json",
@@ -233,12 +330,15 @@
         "options": {}
       },
       "id": "w2-respond-pm-approve",
-      "name": "Respond — PM Approve",
+      "name": "Respond \u2014 PM Approve",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [4220, 60]
+      "position": [
+        4220,
+        60
+      ],
+      "credentials": {}
     },
-
     {
       "parameters": {
         "content": "## PM REJECT BRANCH\nUpdate concepts with revision status\n-> Store PM notes -> Notify strategist team",
@@ -250,9 +350,12 @@
       "name": "Sticky Note - PM Reject",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [2380, 200]
+      "position": [
+        2380,
+        200
+      ],
+      "credentials": {}
     },
-
     {
       "parameters": {
         "jsCode": "// ============================================================\n// PM Reject: Mark all concepts as needing revision\n// ============================================================\nconst data = $input.first().json;\nconst concepts = data.concepts;\nconst notes = data.notes;\n\nconst items = concepts.map(c => ({ json: {\n  record_id: c.id,\n  pm_status: 'Revision',\n  pm_notes: notes,\n  overall_status: 'PM Review'\n}}));\n\nreturn items;"
@@ -261,51 +364,66 @@
       "name": "Prepare PM Rejections",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2420, 320]
+      "position": [
+        2420,
+        320
+      ],
+      "credentials": {}
     },
-
     {
       "parameters": {
-        "resource": "record",
-        "operation": "update",
-        "base": { "__rl": true, "value": "appvFxwZc9yU8o8pK", "mode": "id" },
-        "table": { "__rl": true, "value": "Concepts", "mode": "name" },
-        "id": "={{ $json.record_id }}",
-        "columns": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "pm_status": "={{ $json.pm_status }}",
-            "pm_notes": "={{ $json.pm_notes }}",
-            "overall_status": "={{ $json.overall_status }}"
-          }
-        },
-        "options": { "bulkSize": 10 }
+        "method": "PATCH",
+        "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Concepts/{{ $json.record_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ fields: { pm_status: $json.pm_status, pm_notes: $json.pm_notes || '', overall_status: $json.overall_status } }) }}",
+        "options": {}
       },
       "id": "w2-update-concepts-pm-reject",
-      "name": "Update Concepts — PM Revision",
-      "type": "n8n-nodes-base.airtable",
-      "typeVersion": 2.1,
-      "position": [2780, 320],
-      "credentials": { "airtableTokenApi": { "id": "WelvlJEjoHaI3l9G", "name": "Airtable Personal Access Token" } },
+      "name": "Update Concepts \u2014 PM Revision",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2780,
+        320
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
       "onError": "continueRegularOutput"
     },
-
     {
       "parameters": {
         "select": "channel",
-        "channelId": { "__rl": true, "value": "C0AG86W1XT2", "mode": "id" },
+        "channelId": {
+          "__rl": true,
+          "value": "C0AG86W1XT2",
+          "mode": "id"
+        },
         "text": "={{ `PM rejected concepts for ${$('Merge Context').first().json.project.brand_name || 'project'}. Revision notes: ${$('Merge Context').first().json.notes || 'No notes provided'}. Please review and update concepts in Airtable.` }}",
         "otherOptions": {}
       },
       "id": "w2-slack-pm-reject",
-      "name": "Slack — Revision Needed",
+      "name": "Slack \u2014 Revision Needed",
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.2,
-      "position": [3140, 320],
-      "credentials": { "slackApi": { "id": "5Q37UpOjGx4YsbyC", "name": "Slack API" } },
+      "position": [
+        3140,
+        320
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "5Q37UpOjGx4YsbyC",
+          "name": "Slack account"
+        }
+      },
       "onError": "continueRegularOutput"
     },
-
     {
       "parameters": {
         "respondWith": "json",
@@ -313,12 +431,15 @@
         "options": {}
       },
       "id": "w2-respond-pm-reject",
-      "name": "Respond — PM Reject",
+      "name": "Respond \u2014 PM Reject",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [3500, 320]
+      "position": [
+        3500,
+        320
+      ],
+      "credentials": {}
     },
-
     {
       "parameters": {
         "content": "## CLIENT APPROVE BRANCH\nUpdate concepts -> Update project status to Scripting\n-> Auto-trigger Workflow 3 (Script Writing)\n-> Notify team",
@@ -330,9 +451,12 @@
       "name": "Sticky Note - Client Approve",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [2380, 460]
+      "position": [
+        2380,
+        460
+      ],
+      "credentials": {}
     },
-
     {
       "parameters": {
         "jsCode": "// ============================================================\n// Client Approve: Determine which concepts client approved\n// If concept_ids is empty, approve all PM-approved concepts\n// ============================================================\nconst data = $input.first().json;\nconst concept_ids = data.concept_ids || [];\nconst notes = data.notes;\nconst concepts = data.concepts;\n\n// Only consider concepts that PM already approved\nconst pmApproved = concepts.filter(c => {\n  const status = c.pm_status || (c.fields && c.fields.pm_status);\n  return status === 'Approved';\n});\n\nconst approvedConcepts = concept_ids.length > 0\n  ? pmApproved.filter(c => concept_ids.includes(c.id))\n  : pmApproved;\nconst rejectedConcepts = concept_ids.length > 0\n  ? pmApproved.filter(c => !concept_ids.includes(c.id))\n  : [];\n\nconst items = [];\n\nfor (const c of approvedConcepts) {\n  items.push({ json: {\n    record_id: c.id,\n    client_status: 'Approved',\n    client_notes: notes || '',\n    overall_status: 'Approved'\n  }});\n}\n\nfor (const c of rejectedConcepts) {\n  items.push({ json: {\n    record_id: c.id,\n    client_status: 'Rejected',\n    client_notes: notes || 'Not selected by client',\n    overall_status: 'Client Review'\n  }});\n}\n\nreturn items;"
@@ -341,58 +465,66 @@
       "name": "Prepare Client Approvals",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2420, 580]
+      "position": [
+        2420,
+        580
+      ],
+      "credentials": {}
     },
-
     {
       "parameters": {
-        "resource": "record",
-        "operation": "update",
-        "base": { "__rl": true, "value": "appvFxwZc9yU8o8pK", "mode": "id" },
-        "table": { "__rl": true, "value": "Concepts", "mode": "name" },
-        "id": "={{ $json.record_id }}",
-        "columns": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "client_status": "={{ $json.client_status }}",
-            "client_notes": "={{ $json.client_notes }}",
-            "overall_status": "={{ $json.overall_status }}"
-          }
-        },
-        "options": { "bulkSize": 10 }
+        "method": "PATCH",
+        "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Concepts/{{ $json.record_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ fields: { client_status: $json.client_status, client_notes: $json.client_notes || '', overall_status: $json.overall_status } }) }}",
+        "options": {}
       },
       "id": "w2-update-concepts-client",
-      "name": "Update Concepts — Client Decision",
-      "type": "n8n-nodes-base.airtable",
-      "typeVersion": 2.1,
-      "position": [2780, 580],
-      "credentials": { "airtableTokenApi": { "id": "WelvlJEjoHaI3l9G", "name": "Airtable Personal Access Token" } },
+      "name": "Update Concepts \u2014 Client Decision",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2780,
+        580
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
       "onError": "continueRegularOutput"
     },
-
     {
       "parameters": {
-        "resource": "record",
-        "operation": "update",
-        "base": { "__rl": true, "value": "appvFxwZc9yU8o8pK", "mode": "id" },
-        "table": { "__rl": true, "value": "Projects", "mode": "name" },
-        "id": "={{ $('Merge Context').first().json.project_id }}",
-        "columns": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "status": "Scripting"
-          }
-        },
+        "method": "PATCH",
+        "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Projects/{{ $('Merge Context').first().json.project_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ fields: { status: 'Scripting' } }) }}",
         "options": {}
       },
       "id": "w2-update-project-scripting",
-      "name": "Update Project — Scripting",
-      "type": "n8n-nodes-base.airtable",
-      "typeVersion": 2.1,
-      "position": [3140, 580],
-      "credentials": { "airtableTokenApi": { "id": "WelvlJEjoHaI3l9G", "name": "Airtable Personal Access Token" } }
+      "name": "Update Project \u2014 Scripting",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3140,
+        580
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
     },
-
     {
       "parameters": {
         "jsCode": "// ============================================================\n// Count approved concepts and prepare to trigger Workflow 3\n// ============================================================\nconst data = $('Merge Context').first().json;\nconst concept_ids = data.concept_ids || [];\nconst concepts = data.concepts;\nconst pmApproved = concepts.filter(c => {\n  const status = c.pm_status || (c.fields && c.fields.pm_status);\n  return status === 'Approved';\n});\nconst approvedCount = concept_ids.length > 0\n  ? pmApproved.filter(c => concept_ids.includes(c.id)).length\n  : pmApproved.length;\n\nreturn [{ json: {\n  project_id: data.project_id,\n  approved_count: approvedCount,\n  brand_name: data.project.brand_name || data.project.fields?.brand_name || 'Brand'\n} }];"
@@ -401,9 +533,12 @@
       "name": "Prepare Workflow 3 Trigger",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [3500, 580]
+      "position": [
+        3500,
+        580
+      ],
+      "credentials": {}
     },
-
     {
       "parameters": {
         "method": "POST",
@@ -411,32 +546,48 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ project_id: $json.project_id }) }}",
-        "options": { "timeout": 300000 }
+        "options": {
+          "timeout": 300000
+        }
       },
       "id": "w2-trigger-wf3",
-      "name": "Trigger Workflow 3 — Script Writing",
+      "name": "Trigger Workflow 3 \u2014 Script Writing",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [3860, 580],
-      "onError": "continueRegularOutput"
+      "position": [
+        3860,
+        580
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {}
     },
-
     {
       "parameters": {
         "select": "channel",
-        "channelId": { "__rl": true, "value": "C0AG86W1XT2", "mode": "id" },
+        "channelId": {
+          "__rl": true,
+          "value": "C0AG86W1XT2",
+          "mode": "id"
+        },
         "text": "={{ `Client approved ${$('Prepare Workflow 3 Trigger').first().json.approved_count} concepts for ${$('Prepare Workflow 3 Trigger').first().json.brand_name}. Script writing started automatically.` }}",
         "otherOptions": {}
       },
       "id": "w2-slack-client-approve",
-      "name": "Slack — Scripts Starting",
+      "name": "Slack \u2014 Scripts Starting",
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.2,
-      "position": [4220, 580],
-      "credentials": { "slackApi": { "id": "5Q37UpOjGx4YsbyC", "name": "Slack API" } },
+      "position": [
+        4220,
+        580
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "5Q37UpOjGx4YsbyC",
+          "name": "Slack account"
+        }
+      },
       "onError": "continueRegularOutput"
     },
-
     {
       "parameters": {
         "respondWith": "json",
@@ -444,12 +595,15 @@
         "options": {}
       },
       "id": "w2-respond-client-approve",
-      "name": "Respond — Client Approve",
+      "name": "Respond \u2014 Client Approve",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [4580, 580]
+      "position": [
+        4580,
+        580
+      ],
+      "credentials": {}
     },
-
     {
       "parameters": {
         "content": "## CLIENT REJECT BRANCH\nUpdate concepts -> Store client notes\n-> Notify PM with client feedback",
@@ -461,9 +615,12 @@
       "name": "Sticky Note - Client Reject",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [2380, 740]
+      "position": [
+        2380,
+        740
+      ],
+      "credentials": {}
     },
-
     {
       "parameters": {
         "jsCode": "// ============================================================\n// Client Reject: Mark concepts as rejected/revision\n// ============================================================\nconst data = $input.first().json;\nconst concepts = data.concepts;\nconst notes = data.notes;\n\nconst pmApproved = concepts.filter(c => {\n  const status = c.pm_status || (c.fields && c.fields.pm_status);\n  return status === 'Approved';\n});\n\nconst items = pmApproved.map(c => ({ json: {\n  record_id: c.id,\n  client_status: 'Revision',\n  client_notes: notes || 'Client requested changes',\n  overall_status: 'Client Review'\n}}));\n\nreturn items;"
@@ -472,51 +629,66 @@
       "name": "Prepare Client Rejections",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2420, 840]
+      "position": [
+        2420,
+        840
+      ],
+      "credentials": {}
     },
-
     {
       "parameters": {
-        "resource": "record",
-        "operation": "update",
-        "base": { "__rl": true, "value": "appvFxwZc9yU8o8pK", "mode": "id" },
-        "table": { "__rl": true, "value": "Concepts", "mode": "name" },
-        "id": "={{ $json.record_id }}",
-        "columns": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "client_status": "={{ $json.client_status }}",
-            "client_notes": "={{ $json.client_notes }}",
-            "overall_status": "={{ $json.overall_status }}"
-          }
-        },
-        "options": { "bulkSize": 10 }
+        "method": "PATCH",
+        "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Concepts/{{ $json.record_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ fields: { client_status: $json.client_status, client_notes: $json.client_notes || '', overall_status: $json.overall_status } }) }}",
+        "options": {}
       },
       "id": "w2-update-concepts-client-reject",
-      "name": "Update Concepts — Client Revision",
-      "type": "n8n-nodes-base.airtable",
-      "typeVersion": 2.1,
-      "position": [2780, 840],
-      "credentials": { "airtableTokenApi": { "id": "WelvlJEjoHaI3l9G", "name": "Airtable Personal Access Token" } },
+      "name": "Update Concepts \u2014 Client Revision",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2780,
+        840
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
       "onError": "continueRegularOutput"
     },
-
     {
       "parameters": {
         "select": "channel",
-        "channelId": { "__rl": true, "value": "C0AG86W1XT2", "mode": "id" },
+        "channelId": {
+          "__rl": true,
+          "value": "C0AG86W1XT2",
+          "mode": "id"
+        },
         "text": "={{ `Client requested revisions on concepts for ${$('Merge Context').first().json.project.brand_name || 'project'}. Client feedback: ${$('Merge Context').first().json.notes || 'No specific notes'}. Please review in Airtable and update concepts.` }}",
         "otherOptions": {}
       },
       "id": "w2-slack-client-reject",
-      "name": "Slack — Client Feedback",
+      "name": "Slack \u2014 Client Feedback",
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.2,
-      "position": [3140, 840],
-      "credentials": { "slackApi": { "id": "5Q37UpOjGx4YsbyC", "name": "Slack API" } },
+      "position": [
+        3140,
+        840
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "5Q37UpOjGx4YsbyC",
+          "name": "Slack account"
+        }
+      },
       "onError": "continueRegularOutput"
     },
-
     {
       "parameters": {
         "respondWith": "json",
@@ -524,121 +696,1452 @@
         "options": {}
       },
       "id": "w2-respond-client-reject",
-      "name": "Respond — Client Reject",
+      "name": "Respond \u2014 Client Reject",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [3500, 840]
+      "position": [
+        3500,
+        840
+      ],
+      "credentials": {}
     },
-
     {
       "parameters": {
         "respondWith": "json",
         "responseBody": "={{ JSON.stringify({ status: 'error', message: 'Unknown action. Use pm_approve, pm_reject, client_approve, or client_reject.' }) }}",
-        "options": { "responseCode": 400 }
+        "options": {
+          "responseCode": 400
+        }
       },
       "id": "w2-respond-fallback",
-      "name": "Respond — Invalid Action",
+      "name": "Respond \u2014 Invalid Action",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [2420, 1060]
+      "position": [
+        2420,
+        1060
+      ],
+      "credentials": {}
     }
   ],
-
   "connections": {
-    "Webhook — Concept Approval": {
-      "main": [[{ "node": "Extract Approval Payload", "type": "main", "index": 0 }]]
+    "Webhook \u2014 Concept Approval": {
+      "main": [
+        [
+          {
+            "node": "Extract Approval Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
-    "Manual Trigger — Test": {
-      "main": [[{ "node": "Set Test Data", "type": "main", "index": 0 }]]
+    "Manual Trigger \u2014 Test": {
+      "main": [
+        [
+          {
+            "node": "Set Test Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Set Test Data": {
-      "main": [[{ "node": "Extract Approval Payload", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Extract Approval Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Extract Approval Payload": {
-      "main": [[{ "node": "Fetch Project from Airtable", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Fetch Project from Airtable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Fetch Project from Airtable": {
-      "main": [[{ "node": "Fetch Concepts from Airtable", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Fetch Concepts from Airtable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Fetch Concepts from Airtable": {
-      "main": [[{ "node": "Merge Context", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Merge Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Merge Context": {
-      "main": [[{ "node": "Route by Action", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Route by Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Route by Action": {
       "main": [
-        [{ "node": "Prepare PM Approvals", "type": "main", "index": 0 }],
-        [{ "node": "Prepare PM Rejections", "type": "main", "index": 0 }],
-        [{ "node": "Prepare Client Approvals", "type": "main", "index": 0 }],
-        [{ "node": "Prepare Client Rejections", "type": "main", "index": 0 }],
-        [{ "node": "Respond — Invalid Action", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Prepare PM Approvals",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare PM Rejections",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Client Approvals",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Client Rejections",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond \u2014 Invalid Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
-
     "Prepare PM Approvals": {
-      "main": [[{ "node": "Update Concepts — PM Decision", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Update Concepts \u2014 PM Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
-    "Update Concepts — PM Decision": {
-      "main": [[{ "node": "Update Project — Client Review", "type": "main", "index": 0 }]]
+    "Update Concepts \u2014 PM Decision": {
+      "main": [
+        [
+          {
+            "node": "Update Project \u2014 Client Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
-    "Update Project — Client Review": {
-      "main": [[{ "node": "Prepare Client Review Notification", "type": "main", "index": 0 }]]
+    "Update Project \u2014 Client Review": {
+      "main": [
+        [
+          {
+            "node": "Prepare Client Review Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Prepare Client Review Notification": {
-      "main": [[{ "node": "Slack — Client Review Ready", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Slack \u2014 Client Review Ready",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
-    "Slack — Client Review Ready": {
-      "main": [[{ "node": "Respond — PM Approve", "type": "main", "index": 0 }]]
+    "Slack \u2014 Client Review Ready": {
+      "main": [
+        [
+          {
+            "node": "Respond \u2014 PM Approve",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
-
     "Prepare PM Rejections": {
-      "main": [[{ "node": "Update Concepts — PM Revision", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Update Concepts \u2014 PM Revision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
-    "Update Concepts — PM Revision": {
-      "main": [[{ "node": "Slack — Revision Needed", "type": "main", "index": 0 }]]
+    "Update Concepts \u2014 PM Revision": {
+      "main": [
+        [
+          {
+            "node": "Slack \u2014 Revision Needed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
-    "Slack — Revision Needed": {
-      "main": [[{ "node": "Respond — PM Reject", "type": "main", "index": 0 }]]
+    "Slack \u2014 Revision Needed": {
+      "main": [
+        [
+          {
+            "node": "Respond \u2014 PM Reject",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
-
     "Prepare Client Approvals": {
-      "main": [[{ "node": "Update Concepts — Client Decision", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Update Concepts \u2014 Client Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
-    "Update Concepts — Client Decision": {
-      "main": [[{ "node": "Update Project — Scripting", "type": "main", "index": 0 }]]
+    "Update Concepts \u2014 Client Decision": {
+      "main": [
+        [
+          {
+            "node": "Update Project \u2014 Scripting",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
-    "Update Project — Scripting": {
-      "main": [[{ "node": "Prepare Workflow 3 Trigger", "type": "main", "index": 0 }]]
+    "Update Project \u2014 Scripting": {
+      "main": [
+        [
+          {
+            "node": "Prepare Workflow 3 Trigger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Prepare Workflow 3 Trigger": {
-      "main": [[{ "node": "Trigger Workflow 3 — Script Writing", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Trigger Workflow 3 \u2014 Script Writing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
-    "Trigger Workflow 3 — Script Writing": {
-      "main": [[{ "node": "Slack — Scripts Starting", "type": "main", "index": 0 }]]
+    "Trigger Workflow 3 \u2014 Script Writing": {
+      "main": [
+        [
+          {
+            "node": "Slack \u2014 Scripts Starting",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
-    "Slack — Scripts Starting": {
-      "main": [[{ "node": "Respond — Client Approve", "type": "main", "index": 0 }]]
+    "Slack \u2014 Scripts Starting": {
+      "main": [
+        [
+          {
+            "node": "Respond \u2014 Client Approve",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
-
     "Prepare Client Rejections": {
-      "main": [[{ "node": "Update Concepts — Client Revision", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Update Concepts \u2014 Client Revision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
-    "Update Concepts — Client Revision": {
-      "main": [[{ "node": "Slack — Client Feedback", "type": "main", "index": 0 }]]
+    "Update Concepts \u2014 Client Revision": {
+      "main": [
+        [
+          {
+            "node": "Slack \u2014 Client Feedback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
-    "Slack — Client Feedback": {
-      "main": [[{ "node": "Respond — Client Reject", "type": "main", "index": 0 }]]
+    "Slack \u2014 Client Feedback": {
+      "main": [
+        [
+          {
+            "node": "Respond \u2014 Client Reject",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
-
-  "settings": { "executionOrder": "v1" },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
   "staticData": null,
-  "tags": [
-    { "name": "UGC", "id": "2" },
-    { "name": "Approval", "id": "11" },
-    { "name": "Phase 2", "id": "12" }
-  ],
+  "meta": null,
+  "pinData": null,
+  "versionId": "e67789bf-0aa5-48a2-af94-90fcaa712618",
+  "activeVersionId": "e67789bf-0aa5-48a2-af94-90fcaa712618",
+  "versionCounter": 29,
   "triggerCount": 1,
-  "pinData": {}
+  "shared": [
+    {
+      "updatedAt": "2026-02-16T08:01:54.251Z",
+      "createdAt": "2026-02-16T08:01:54.251Z",
+      "role": "workflow:owner",
+      "workflowId": "U2bxLckriORGZIyU",
+      "projectId": "AD8mXtbIf5cdYNIV",
+      "project": {
+        "updatedAt": "2026-01-26T04:34:53.263Z",
+        "createdAt": "2026-01-26T04:34:35.063Z",
+        "id": "AD8mXtbIf5cdYNIV",
+        "name": "SenseInfo Tech <senseinfotechno@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "ed50a507-d93d-45c3-9412-d80babb81dd0",
+        "projectRelations": [
+          {
+            "updatedAt": "2026-01-26T04:34:35.063Z",
+            "createdAt": "2026-01-26T04:34:35.063Z",
+            "userId": "ed50a507-d93d-45c3-9412-d80babb81dd0",
+            "projectId": "AD8mXtbIf5cdYNIV",
+            "user": {
+              "updatedAt": "2026-02-16T19:22:13.000Z",
+              "createdAt": "2026-01-26T04:34:34.578Z",
+              "id": "ed50a507-d93d-45c3-9412-d80babb81dd0",
+              "email": "senseinfotechno@gmail.com",
+              "firstName": "SenseInfo",
+              "lastName": "Tech",
+              "personalizationAnswers": {
+                "version": "v4",
+                "personalization_survey_submitted_at": "2026-01-26T04:35:01.423Z",
+                "personalization_survey_n8n_version": "2.4.6",
+                "companySize": "<20",
+                "companyType": "saas",
+                "role": "business-owner",
+                "reportedSource": "google"
+              },
+              "settings": {
+                "userActivated": true,
+                "firstSuccessfulWorkflowId": "T2U_raVAJPmEIai1EY6TF",
+                "userActivatedAt": 1769404953077,
+                "easyAIWorkflowOnboarded": true,
+                "npsSurvey": {
+                  "waitingForResponse": true,
+                  "ignoredCount": 2,
+                  "lastShownAt": 1770721963325
+                }
+              },
+              "disabled": false,
+              "mfaEnabled": false,
+              "lastActiveAt": "2026-02-16",
+              "isPending": false
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-02-17T09:37:14.247Z",
+    "createdAt": "2026-02-17T09:37:14.247Z",
+    "versionId": "e67789bf-0aa5-48a2-af94-90fcaa712618",
+    "workflowId": "U2bxLckriORGZIyU",
+    "nodes": [
+      {
+        "parameters": {
+          "content": "## WORKFLOW 2: CONCEPT APPROVAL GATES\n\nWebhook POST /ugc-concept-approval\nPayload: { project_id, action, concept_ids, notes }\n\nActions:\n- pm_approve: PM approves concepts -> notify client\n- pm_reject: PM rejects -> notify strategist team\n- client_approve: Client approves -> trigger Workflow 3\n- client_reject: Client rejects -> notify PM\n\nThis workflow handles the multi-stage approval\nflow that saves tokens by only writing scripts\nfor approved concepts.",
+          "height": 380,
+          "width": 460,
+          "color": 7
+        },
+        "id": "w2-sticky-overview",
+        "name": "Sticky Note - Overview",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          -280,
+          -60
+        ],
+        "credentials": {}
+      },
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "ugc-concept-approval",
+          "responseMode": "lastNode",
+          "options": {}
+        },
+        "id": "w2-webhook",
+        "name": "Webhook \u2014 Concept Approval",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 1.1,
+        "position": [
+          280,
+          320
+        ],
+        "webhookId": "ugc-concept-approval-webhook",
+        "credentials": {}
+      },
+      {
+        "parameters": {},
+        "id": "w2-manual-trigger",
+        "name": "Manual Trigger \u2014 Test",
+        "type": "n8n-nodes-base.manualTrigger",
+        "typeVersion": 1,
+        "position": [
+          280,
+          -140
+        ],
+        "credentials": {}
+      },
+      {
+        "parameters": {
+          "jsCode": "return [{ json: { body: { project_id: 'rec_TEST_123', action: 'pm_approve', concept_ids: [], notes: 'All looks great' } } }];"
+        },
+        "id": "w2-test-data",
+        "name": "Set Test Data",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          580,
+          -140
+        ],
+        "credentials": {}
+      },
+      {
+        "parameters": {
+          "jsCode": "// ============================================================\n// Extract and validate approval payload\n// ============================================================\nconst body = $input.first().json.body || $input.first().json;\nconst project_id = (body.project_id || '').trim();\nconst action = (body.action || '').trim().toLowerCase();\nconst concept_ids = body.concept_ids || [];\nconst notes = (body.notes || '').trim();\n\nif (!project_id) throw new Error('project_id is required');\nif (!['pm_approve', 'pm_reject', 'client_approve', 'client_reject'].includes(action)) {\n  throw new Error('action must be one of: pm_approve, pm_reject, client_approve, client_reject');\n}\n\nreturn [{ json: { project_id, action, concept_ids, notes } }];"
+        },
+        "id": "w2-extract-payload",
+        "name": "Extract Approval Payload",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          580,
+          320
+        ],
+        "credentials": {}
+      },
+      {
+        "parameters": {
+          "resource": "record",
+          "operation": "search",
+          "base": {
+            "__rl": true,
+            "value": "appvFxwZc9yU8o8pK",
+            "mode": "id"
+          },
+          "table": {
+            "__rl": true,
+            "value": "Projects",
+            "mode": "name"
+          },
+          "filterByFormula": "=RECORD_ID() = '{{ $json.project_id }}'",
+          "options": {}
+        },
+        "id": "w2-fetch-project",
+        "name": "Fetch Project from Airtable",
+        "type": "n8n-nodes-base.airtable",
+        "typeVersion": 2.1,
+        "position": [
+          940,
+          320
+        ],
+        "credentials": {
+          "airtableTokenApi": {
+            "id": "WelvlJEjoHaI3l9G",
+            "name": "Airtable Personal Access Token account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "resource": "record",
+          "operation": "search",
+          "base": {
+            "__rl": true,
+            "value": "appvFxwZc9yU8o8pK",
+            "mode": "id"
+          },
+          "table": {
+            "__rl": true,
+            "value": "Concepts",
+            "mode": "name"
+          },
+          "filterByFormula": "=FIND('{{ $('Fetch Project from Airtable').first().json.client_code }}', ARRAYJOIN({project_id})) > 0",
+          "options": {}
+        },
+        "id": "w2-fetch-concepts",
+        "name": "Fetch Concepts from Airtable",
+        "type": "n8n-nodes-base.airtable",
+        "typeVersion": 2.1,
+        "position": [
+          1300,
+          320
+        ],
+        "credentials": {
+          "airtableTokenApi": {
+            "id": "WelvlJEjoHaI3l9G",
+            "name": "Airtable Personal Access Token account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "// ============================================================\n// Merge project + concepts + payload into single context\n// ============================================================\nconst payload = $('Extract Approval Payload').first().json;\nconst project = $('Fetch Project from Airtable').first().json;\nconst concepts = $input.all().map(item => item.json);\n\nreturn [{ json: {\n  ...payload,\n  project,\n  concepts,\n  concept_count: concepts.length\n} }];"
+        },
+        "id": "w2-merge-data",
+        "name": "Merge Context",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1660,
+          320
+        ],
+        "credentials": {}
+      },
+      {
+        "parameters": {
+          "dataType": "string",
+          "value1": "={{ $json.action }}",
+          "rules": {
+            "rules": [
+              {
+                "value2": "pm_approve",
+                "output": 0
+              },
+              {
+                "value2": "pm_reject",
+                "output": 1
+              },
+              {
+                "value2": "client_approve",
+                "output": 2
+              },
+              {
+                "value2": "client_reject",
+                "output": 3
+              }
+            ]
+          },
+          "fallbackOutput": 4
+        },
+        "id": "w2-switch-action",
+        "name": "Route by Action",
+        "type": "n8n-nodes-base.switch",
+        "typeVersion": 2,
+        "position": [
+          2020,
+          320
+        ]
+      },
+      {
+        "parameters": {
+          "content": "## PM APPROVE BRANCH\nUpdate approved concepts -> Update project status\n-> Notify client for review",
+          "height": 120,
+          "width": 400,
+          "color": 3
+        },
+        "id": "w2-sticky-pm-approve",
+        "name": "Sticky Note - PM Approve",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          2380,
+          -120
+        ],
+        "credentials": {}
+      },
+      {
+        "parameters": {
+          "jsCode": "// ============================================================\n// PM Approve: Determine which concepts are approved vs rejected\n// If concept_ids is empty, approve ALL concepts\n// ============================================================\nconst data = $input.first().json;\nconst concept_ids = data.concept_ids || [];\nconst notes = data.notes;\nconst concepts = data.concepts;\n\nconst approvedConcepts = concept_ids.length > 0\n  ? concepts.filter(c => concept_ids.includes(c.id))\n  : concepts;\nconst rejectedConcepts = concept_ids.length > 0\n  ? concepts.filter(c => !concept_ids.includes(c.id))\n  : [];\n\nconst items = [];\n\n// Approved concepts\nfor (const c of approvedConcepts) {\n  items.push({ json: {\n    record_id: c.id,\n    pm_status: 'Approved',\n    pm_notes: notes,\n    overall_status: 'Client Review',\n    _action: 'update_concept'\n  }});\n}\n\n// Rejected concepts\nfor (const c of rejectedConcepts) {\n  items.push({ json: {\n    record_id: c.id,\n    pm_status: 'Rejected',\n    pm_notes: notes || 'Not selected by PM',\n    overall_status: 'PM Review',\n    _action: 'update_concept'\n  }});\n}\n\nreturn items;"
+        },
+        "id": "w2-pm-approve-prep",
+        "name": "Prepare PM Approvals",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2420,
+          60
+        ],
+        "credentials": {}
+      },
+      {
+        "parameters": {
+          "method": "PATCH",
+          "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Concepts/{{ $json.record_id }}",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "airtableTokenApi",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ fields: { pm_status: $json.pm_status, pm_notes: $json.pm_notes || '', overall_status: $json.overall_status } }) }}",
+          "options": {}
+        },
+        "id": "w2-update-concepts-pm",
+        "name": "Update Concepts \u2014 PM Decision",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          2780,
+          60
+        ],
+        "credentials": {
+          "airtableTokenApi": {
+            "id": "WelvlJEjoHaI3l9G",
+            "name": "Airtable Personal Access Token account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "method": "PATCH",
+          "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Projects/{{ $('Merge Context').first().json.project_id }}",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "airtableTokenApi",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ fields: { status: 'Client Review' } }) }}",
+          "options": {}
+        },
+        "id": "w2-update-project-client-review",
+        "name": "Update Project \u2014 Client Review",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          3140,
+          60
+        ],
+        "credentials": {
+          "airtableTokenApi": {
+            "id": "WelvlJEjoHaI3l9G",
+            "name": "Airtable Personal Access Token account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "// ============================================================\n// Build Slack notification for client concept review\n// ============================================================\nconst data = $('Merge Context').first().json;\nconst project = data.project;\nconst concepts = data.concepts.filter(c => {\n  const ids = data.concept_ids || [];\n  return ids.length === 0 || ids.includes(c.id);\n});\n\nconst conceptSummary = concepts.map((c, i) =>\n  `${i + 1}. *${c.concept_name || c.fields?.concept_name || 'Concept'}*\\n   _\"${c.hook_text || c.fields?.hook_text || ''}\"_\\n   ${c.concept_pitch || c.fields?.concept_pitch || ''}`\n).join('\\n\\n');\n\nconst brandName = project.brand_name || project.fields?.brand_name || 'Client';\nconst clientEmail = project.client_email || project.fields?.client_email || '';\nconst clientName = project.client_name || project.fields?.client_name || 'Client';\nconst projectId = data.project_id;\n\nconst slackBlocks = [\n  {\n    \"type\": \"header\",\n    \"text\": { \"type\": \"plain_text\", \"text\": `Client Review: ${brandName} Concepts` }\n  },\n  {\n    \"type\": \"section\",\n    \"text\": {\n      \"type\": \"mrkdwn\",\n      \"text\": `PM has approved *${concepts.length} concepts* for ${brandName}.\\nClient: ${clientName} (${clientEmail})\\n\\n*Approved Concepts:*\\n\\n${conceptSummary}\\n\\nConcepts are ready for client review. Share the Airtable view link with the client.`\n    }\n  },\n  {\n    \"type\": \"actions\",\n    \"elements\": [\n      {\n        \"type\": \"button\",\n        \"text\": { \"type\": \"plain_text\", \"text\": \"Client Airtable View\" },\n        \"url\": `https://airtable.com/appvFxwZc9yU8o8pK/Concepts?filter_project_id=${projectId}`\n      }\n    ]\n  }\n];\n\nreturn [{ json: {\n  project_id: projectId,\n  slack_blocks: JSON.stringify(slackBlocks),\n  slack_text: `PM approved ${concepts.length} concepts for ${brandName}. Ready for client review.`,\n  client_email: clientEmail,\n  client_name: clientName,\n  brand_name: brandName,\n  approved_count: concepts.length\n} }];"
+        },
+        "id": "w2-pm-approve-notify-prep",
+        "name": "Prepare Client Review Notification",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          3500,
+          60
+        ],
+        "credentials": {}
+      },
+      {
+        "parameters": {
+          "select": "channel",
+          "channelId": {
+            "__rl": true,
+            "value": "C0AG86W1XT2",
+            "mode": "id"
+          },
+          "text": "={{ $json.slack_text }}",
+          "otherOptions": {
+            "blocksUi": "={{ $json.slack_blocks }}"
+          }
+        },
+        "id": "w2-slack-client-review",
+        "name": "Slack \u2014 Client Review Ready",
+        "type": "n8n-nodes-base.slack",
+        "typeVersion": 2.2,
+        "position": [
+          3860,
+          60
+        ],
+        "credentials": {
+          "slackApi": {
+            "id": "5Q37UpOjGx4YsbyC",
+            "name": "Slack account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{ JSON.stringify({ status: 'success', action: 'pm_approve', project_id: $json.project_id, approved_concepts: $json.approved_count, message: 'Concepts approved by PM. Client notified for review.' }) }}",
+          "options": {}
+        },
+        "id": "w2-respond-pm-approve",
+        "name": "Respond \u2014 PM Approve",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.1,
+        "position": [
+          4220,
+          60
+        ],
+        "credentials": {}
+      },
+      {
+        "parameters": {
+          "content": "## PM REJECT BRANCH\nUpdate concepts with revision status\n-> Store PM notes -> Notify strategist team",
+          "height": 120,
+          "width": 400,
+          "color": 1
+        },
+        "id": "w2-sticky-pm-reject",
+        "name": "Sticky Note - PM Reject",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          2380,
+          200
+        ],
+        "credentials": {}
+      },
+      {
+        "parameters": {
+          "jsCode": "// ============================================================\n// PM Reject: Mark all concepts as needing revision\n// ============================================================\nconst data = $input.first().json;\nconst concepts = data.concepts;\nconst notes = data.notes;\n\nconst items = concepts.map(c => ({ json: {\n  record_id: c.id,\n  pm_status: 'Revision',\n  pm_notes: notes,\n  overall_status: 'PM Review'\n}}));\n\nreturn items;"
+        },
+        "id": "w2-pm-reject-prep",
+        "name": "Prepare PM Rejections",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2420,
+          320
+        ],
+        "credentials": {}
+      },
+      {
+        "parameters": {
+          "method": "PATCH",
+          "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Concepts/{{ $json.record_id }}",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "airtableTokenApi",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ fields: { pm_status: $json.pm_status, pm_notes: $json.pm_notes || '', overall_status: $json.overall_status } }) }}",
+          "options": {}
+        },
+        "id": "w2-update-concepts-pm-reject",
+        "name": "Update Concepts \u2014 PM Revision",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          2780,
+          320
+        ],
+        "credentials": {
+          "airtableTokenApi": {
+            "id": "WelvlJEjoHaI3l9G",
+            "name": "Airtable Personal Access Token account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "select": "channel",
+          "channelId": {
+            "__rl": true,
+            "value": "C0AG86W1XT2",
+            "mode": "id"
+          },
+          "text": "={{ `PM rejected concepts for ${$('Merge Context').first().json.project.brand_name || 'project'}. Revision notes: ${$('Merge Context').first().json.notes || 'No notes provided'}. Please review and update concepts in Airtable.` }}",
+          "otherOptions": {}
+        },
+        "id": "w2-slack-pm-reject",
+        "name": "Slack \u2014 Revision Needed",
+        "type": "n8n-nodes-base.slack",
+        "typeVersion": 2.2,
+        "position": [
+          3140,
+          320
+        ],
+        "credentials": {
+          "slackApi": {
+            "id": "5Q37UpOjGx4YsbyC",
+            "name": "Slack account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{ JSON.stringify({ status: 'success', action: 'pm_reject', project_id: $('Merge Context').first().json.project_id, message: 'Concepts sent back for revision. Strategist team notified.' }) }}",
+          "options": {}
+        },
+        "id": "w2-respond-pm-reject",
+        "name": "Respond \u2014 PM Reject",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.1,
+        "position": [
+          3500,
+          320
+        ],
+        "credentials": {}
+      },
+      {
+        "parameters": {
+          "content": "## CLIENT APPROVE BRANCH\nUpdate concepts -> Update project status to Scripting\n-> Auto-trigger Workflow 3 (Script Writing)\n-> Notify team",
+          "height": 120,
+          "width": 450,
+          "color": 3
+        },
+        "id": "w2-sticky-client-approve",
+        "name": "Sticky Note - Client Approve",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          2380,
+          460
+        ],
+        "credentials": {}
+      },
+      {
+        "parameters": {
+          "jsCode": "// ============================================================\n// Client Approve: Determine which concepts client approved\n// If concept_ids is empty, approve all PM-approved concepts\n// ============================================================\nconst data = $input.first().json;\nconst concept_ids = data.concept_ids || [];\nconst notes = data.notes;\nconst concepts = data.concepts;\n\n// Only consider concepts that PM already approved\nconst pmApproved = concepts.filter(c => {\n  const status = c.pm_status || (c.fields && c.fields.pm_status);\n  return status === 'Approved';\n});\n\nconst approvedConcepts = concept_ids.length > 0\n  ? pmApproved.filter(c => concept_ids.includes(c.id))\n  : pmApproved;\nconst rejectedConcepts = concept_ids.length > 0\n  ? pmApproved.filter(c => !concept_ids.includes(c.id))\n  : [];\n\nconst items = [];\n\nfor (const c of approvedConcepts) {\n  items.push({ json: {\n    record_id: c.id,\n    client_status: 'Approved',\n    client_notes: notes || '',\n    overall_status: 'Approved'\n  }});\n}\n\nfor (const c of rejectedConcepts) {\n  items.push({ json: {\n    record_id: c.id,\n    client_status: 'Rejected',\n    client_notes: notes || 'Not selected by client',\n    overall_status: 'Client Review'\n  }});\n}\n\nreturn items;"
+        },
+        "id": "w2-client-approve-prep",
+        "name": "Prepare Client Approvals",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2420,
+          580
+        ],
+        "credentials": {}
+      },
+      {
+        "parameters": {
+          "method": "PATCH",
+          "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Concepts/{{ $json.record_id }}",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "airtableTokenApi",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ fields: { client_status: $json.client_status, client_notes: $json.client_notes || '', overall_status: $json.overall_status } }) }}",
+          "options": {}
+        },
+        "id": "w2-update-concepts-client",
+        "name": "Update Concepts \u2014 Client Decision",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          2780,
+          580
+        ],
+        "credentials": {
+          "airtableTokenApi": {
+            "id": "WelvlJEjoHaI3l9G",
+            "name": "Airtable Personal Access Token account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "method": "PATCH",
+          "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Projects/{{ $('Merge Context').first().json.project_id }}",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "airtableTokenApi",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ fields: { status: 'Scripting' } }) }}",
+          "options": {}
+        },
+        "id": "w2-update-project-scripting",
+        "name": "Update Project \u2014 Scripting",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          3140,
+          580
+        ],
+        "credentials": {
+          "airtableTokenApi": {
+            "id": "WelvlJEjoHaI3l9G",
+            "name": "Airtable Personal Access Token account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "// ============================================================\n// Count approved concepts and prepare to trigger Workflow 3\n// ============================================================\nconst data = $('Merge Context').first().json;\nconst concept_ids = data.concept_ids || [];\nconst concepts = data.concepts;\nconst pmApproved = concepts.filter(c => {\n  const status = c.pm_status || (c.fields && c.fields.pm_status);\n  return status === 'Approved';\n});\nconst approvedCount = concept_ids.length > 0\n  ? pmApproved.filter(c => concept_ids.includes(c.id)).length\n  : pmApproved.length;\n\nreturn [{ json: {\n  project_id: data.project_id,\n  approved_count: approvedCount,\n  brand_name: data.project.brand_name || data.project.fields?.brand_name || 'Brand'\n} }];"
+        },
+        "id": "w2-prep-trigger-wf3",
+        "name": "Prepare Workflow 3 Trigger",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          3500,
+          580
+        ],
+        "credentials": {}
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "http://n8n-jeet.duckdns.org:5678/webhook/ugc-phase3",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ project_id: $json.project_id }) }}",
+          "options": {
+            "timeout": 300000
+          }
+        },
+        "id": "w2-trigger-wf3",
+        "name": "Trigger Workflow 3 \u2014 Script Writing",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          3860,
+          580
+        ],
+        "onError": "continueRegularOutput",
+        "credentials": {}
+      },
+      {
+        "parameters": {
+          "select": "channel",
+          "channelId": {
+            "__rl": true,
+            "value": "C0AG86W1XT2",
+            "mode": "id"
+          },
+          "text": "={{ `Client approved ${$('Prepare Workflow 3 Trigger').first().json.approved_count} concepts for ${$('Prepare Workflow 3 Trigger').first().json.brand_name}. Script writing started automatically.` }}",
+          "otherOptions": {}
+        },
+        "id": "w2-slack-client-approve",
+        "name": "Slack \u2014 Scripts Starting",
+        "type": "n8n-nodes-base.slack",
+        "typeVersion": 2.2,
+        "position": [
+          4220,
+          580
+        ],
+        "credentials": {
+          "slackApi": {
+            "id": "5Q37UpOjGx4YsbyC",
+            "name": "Slack account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{ JSON.stringify({ status: 'success', action: 'client_approve', project_id: $('Prepare Workflow 3 Trigger').first().json.project_id, approved_concepts: $('Prepare Workflow 3 Trigger').first().json.approved_count, message: 'Client approved concepts. Script writing workflow triggered.' }) }}",
+          "options": {}
+        },
+        "id": "w2-respond-client-approve",
+        "name": "Respond \u2014 Client Approve",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.1,
+        "position": [
+          4580,
+          580
+        ],
+        "credentials": {}
+      },
+      {
+        "parameters": {
+          "content": "## CLIENT REJECT BRANCH\nUpdate concepts -> Store client notes\n-> Notify PM with client feedback",
+          "height": 120,
+          "width": 400,
+          "color": 1
+        },
+        "id": "w2-sticky-client-reject",
+        "name": "Sticky Note - Client Reject",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          2380,
+          740
+        ],
+        "credentials": {}
+      },
+      {
+        "parameters": {
+          "jsCode": "// ============================================================\n// Client Reject: Mark concepts as rejected/revision\n// ============================================================\nconst data = $input.first().json;\nconst concepts = data.concepts;\nconst notes = data.notes;\n\nconst pmApproved = concepts.filter(c => {\n  const status = c.pm_status || (c.fields && c.fields.pm_status);\n  return status === 'Approved';\n});\n\nconst items = pmApproved.map(c => ({ json: {\n  record_id: c.id,\n  client_status: 'Revision',\n  client_notes: notes || 'Client requested changes',\n  overall_status: 'Client Review'\n}}));\n\nreturn items;"
+        },
+        "id": "w2-client-reject-prep",
+        "name": "Prepare Client Rejections",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2420,
+          840
+        ],
+        "credentials": {}
+      },
+      {
+        "parameters": {
+          "method": "PATCH",
+          "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Concepts/{{ $json.record_id }}",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "airtableTokenApi",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ fields: { client_status: $json.client_status, client_notes: $json.client_notes || '', overall_status: $json.overall_status } }) }}",
+          "options": {}
+        },
+        "id": "w2-update-concepts-client-reject",
+        "name": "Update Concepts \u2014 Client Revision",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          2780,
+          840
+        ],
+        "credentials": {
+          "airtableTokenApi": {
+            "id": "WelvlJEjoHaI3l9G",
+            "name": "Airtable Personal Access Token account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "select": "channel",
+          "channelId": {
+            "__rl": true,
+            "value": "C0AG86W1XT2",
+            "mode": "id"
+          },
+          "text": "={{ `Client requested revisions on concepts for ${$('Merge Context').first().json.project.brand_name || 'project'}. Client feedback: ${$('Merge Context').first().json.notes || 'No specific notes'}. Please review in Airtable and update concepts.` }}",
+          "otherOptions": {}
+        },
+        "id": "w2-slack-client-reject",
+        "name": "Slack \u2014 Client Feedback",
+        "type": "n8n-nodes-base.slack",
+        "typeVersion": 2.2,
+        "position": [
+          3140,
+          840
+        ],
+        "credentials": {
+          "slackApi": {
+            "id": "5Q37UpOjGx4YsbyC",
+            "name": "Slack account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{ JSON.stringify({ status: 'success', action: 'client_reject', project_id: $('Merge Context').first().json.project_id, message: 'Client feedback stored. PM notified for concept revision.' }) }}",
+          "options": {}
+        },
+        "id": "w2-respond-client-reject",
+        "name": "Respond \u2014 Client Reject",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.1,
+        "position": [
+          3500,
+          840
+        ],
+        "credentials": {}
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{ JSON.stringify({ status: 'error', message: 'Unknown action. Use pm_approve, pm_reject, client_approve, or client_reject.' }) }}",
+          "options": {
+            "responseCode": 400
+          }
+        },
+        "id": "w2-respond-fallback",
+        "name": "Respond \u2014 Invalid Action",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.1,
+        "position": [
+          2420,
+          1060
+        ],
+        "credentials": {}
+      }
+    ],
+    "connections": {
+      "Webhook \u2014 Concept Approval": {
+        "main": [
+          [
+            {
+              "node": "Extract Approval Payload",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Manual Trigger \u2014 Test": {
+        "main": [
+          [
+            {
+              "node": "Set Test Data",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Set Test Data": {
+        "main": [
+          [
+            {
+              "node": "Extract Approval Payload",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Extract Approval Payload": {
+        "main": [
+          [
+            {
+              "node": "Fetch Project from Airtable",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Fetch Project from Airtable": {
+        "main": [
+          [
+            {
+              "node": "Fetch Concepts from Airtable",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Fetch Concepts from Airtable": {
+        "main": [
+          [
+            {
+              "node": "Merge Context",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Merge Context": {
+        "main": [
+          [
+            {
+              "node": "Route by Action",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Route by Action": {
+        "main": [
+          [
+            {
+              "node": "Prepare PM Approvals",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Prepare PM Rejections",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Prepare Client Approvals",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Prepare Client Rejections",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Respond \u2014 Invalid Action",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prepare PM Approvals": {
+        "main": [
+          [
+            {
+              "node": "Update Concepts \u2014 PM Decision",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Update Concepts \u2014 PM Decision": {
+        "main": [
+          [
+            {
+              "node": "Update Project \u2014 Client Review",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Update Project \u2014 Client Review": {
+        "main": [
+          [
+            {
+              "node": "Prepare Client Review Notification",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prepare Client Review Notification": {
+        "main": [
+          [
+            {
+              "node": "Slack \u2014 Client Review Ready",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Slack \u2014 Client Review Ready": {
+        "main": [
+          [
+            {
+              "node": "Respond \u2014 PM Approve",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prepare PM Rejections": {
+        "main": [
+          [
+            {
+              "node": "Update Concepts \u2014 PM Revision",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Update Concepts \u2014 PM Revision": {
+        "main": [
+          [
+            {
+              "node": "Slack \u2014 Revision Needed",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Slack \u2014 Revision Needed": {
+        "main": [
+          [
+            {
+              "node": "Respond \u2014 PM Reject",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prepare Client Approvals": {
+        "main": [
+          [
+            {
+              "node": "Update Concepts \u2014 Client Decision",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Update Concepts \u2014 Client Decision": {
+        "main": [
+          [
+            {
+              "node": "Update Project \u2014 Scripting",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Update Project \u2014 Scripting": {
+        "main": [
+          [
+            {
+              "node": "Prepare Workflow 3 Trigger",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prepare Workflow 3 Trigger": {
+        "main": [
+          [
+            {
+              "node": "Trigger Workflow 3 \u2014 Script Writing",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Trigger Workflow 3 \u2014 Script Writing": {
+        "main": [
+          [
+            {
+              "node": "Slack \u2014 Scripts Starting",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Slack \u2014 Scripts Starting": {
+        "main": [
+          [
+            {
+              "node": "Respond \u2014 Client Approve",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prepare Client Rejections": {
+        "main": [
+          [
+            {
+              "node": "Update Concepts \u2014 Client Revision",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Update Concepts \u2014 Client Revision": {
+        "main": [
+          [
+            {
+              "node": "Slack \u2014 Client Feedback",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Slack \u2014 Client Feedback": {
+        "main": [
+          [
+            {
+              "node": "Respond \u2014 Client Reject",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "SenseInfo Tech",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-02-17T09:37:14.340Z",
+        "id": 79,
+        "workflowId": "U2bxLckriORGZIyU",
+        "versionId": "e67789bf-0aa5-48a2-af94-90fcaa712618",
+        "event": "activated",
+        "userId": "ed50a507-d93d-45c3-9412-d80babb81dd0"
+      }
+    ]
+  }
 }

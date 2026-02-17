@@ -1,20 +1,26 @@
 {
-  "name": "UGC Client Onboarding — Smashed Agency",
+  "updatedAt": "2026-02-17T09:37:10.064Z",
+  "createdAt": "2026-02-11T21:48:13.996Z",
+  "id": "ZJfWCoCYf9c0O8tdywMTj",
+  "name": "UGC Client Onboarding \u2014 Smashed Agency",
+  "description": null,
+  "active": true,
+  "isArchived": false,
   "nodes": [
     {
       "parameters": {
-        "content": "## 1. TRIGGER\nWebhook receives JotForm POST at /ugc-onboarding\nJotForm sends data in inconsistent formats — the Code node handles all parsing.",
+        "content": "## 1. TRIGGER\nWebhook receives JotForm POST at /ugc-onboarding\nJotForm sends data in inconsistent formats \u2014 the Code node handles all parsing.",
         "height": 180,
         "width": 320,
         "color": 4
       },
-      "id": "sticky-trigger",
+      "id": "65cd0cb0-6576-412f-ac97-655bbebce635",
       "name": "Sticky Note - Trigger",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        240,
-        80
+        24320,
+        8480
       ]
     },
     {
@@ -24,13 +30,13 @@
         "responseMode": "lastNode",
         "options": {}
       },
-      "id": "node-webhook",
-      "name": "Webhook — JotForm",
+      "id": "1c8bebc5-6a7d-4e11-b830-6bebd0f67192",
+      "name": "Webhook \u2014 JotForm",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1.1,
       "position": [
-        280,
-        320
+        24368,
+        8720
       ],
       "webhookId": "ugc-onboarding-webhook"
     },
@@ -41,42 +47,42 @@
         "width": 340,
         "color": 6
       },
-      "id": "sticky-parse",
+      "id": "588c63e7-4645-4fe7-81aa-b98a916df18f",
       "name": "Sticky Note - Parse",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        640,
-        80
+        24720,
+        8480
       ]
     },
     {
       "parameters": {
-        "jsCode": "// ============================================================\n// Parse JotForm & Generate Client Code\n// Handles multiple JotForm data formats\n// ============================================================\n\nconst body = $input.first().json.body || $input.first().json;\n\n// --- STRATEGY 1: rawRequest JSON string ---\nlet parsed = null;\ntry {\n  if (body.rawRequest && typeof body.rawRequest === 'string') {\n    parsed = JSON.parse(body.rawRequest);\n  } else if (body.rawRequest && typeof body.rawRequest === 'object') {\n    parsed = body.rawRequest;\n  }\n} catch (e) {\n  parsed = null;\n}\n\n// --- STRATEGY 2: q-prefixed fields (q1_whatIs, q2_email, etc.) ---\nfunction fromQFields(b) {\n  const qMap = {};\n  for (const key of Object.keys(b)) {\n    if (/^q\\d+/.test(key)) {\n      qMap[key] = b[key];\n    }\n  }\n  if (Object.keys(qMap).length === 0) return null;\n\n  // Sort by question number\n  const sorted = Object.entries(qMap).sort((a, b) => {\n    const numA = parseInt(a[0].match(/^q(\\d+)/)[1]);\n    const numB = parseInt(b[0].match(/^q(\\d+)/)[1]);\n    return numA - numB;\n  });\n\n  // Map by order (best-effort mapping based on form field order)\n  const fieldOrder = [\n    'client_name', 'client_email', 'whatsapp_number', 'brand_name', 'website_url',\n    'product_feature', 'differentiator', 'competitors', 'competitor_strengths',\n    'target_user', 'biggest_problem', 'main_hesitation',\n    'social_proof', 'selling_proposition', 'brand_personality', 'credibility_point', 'transformation',\n    'best_concepts', 'compliance', 'reference_ads', 'available_assets', 'do_not_say', 'additional_notes', 'num_scripts'\n  ];\n\n  const result = {};\n  sorted.forEach(([key, val], i) => {\n    if (i < fieldOrder.length) {\n      result[fieldOrder[i]] = val;\n    }\n  });\n  return result;\n}\n\n// --- STRATEGY 3: Direct field names ---\nfunction fromDirectFields(b) {\n  const directFields = [\n    'client_name', 'client_email', 'whatsapp_number', 'brand_name', 'website_url',\n    'product_feature', 'differentiator', 'competitors', 'competitor_strengths',\n    'target_user', 'biggest_problem', 'main_hesitation',\n    'social_proof', 'selling_proposition', 'brand_personality', 'credibility_point', 'transformation',\n    'best_concepts', 'compliance', 'reference_ads', 'available_assets', 'do_not_say', 'additional_notes', 'num_scripts'\n  ];\n  const found = {};\n  let count = 0;\n  for (const f of directFields) {\n    if (b[f] !== undefined) {\n      found[f] = b[f];\n      count++;\n    }\n  }\n  return count > 0 ? found : null;\n}\n\n// Resolve data source\nlet data = parsed || fromQFields(body) || fromDirectFields(body) || body;\n\n// --- HELPER: Clean a field value ---\nfunction clean(val) {\n  if (val === undefined || val === null) return '';\n  if (Array.isArray(val)) return val.map(v => String(v).trim()).filter(Boolean).join(', ');\n  if (typeof val === 'object') {\n    // Handle name object: { first, last } or { prefix, first, middle, last }\n    if (val.first || val.last) {\n      return [val.prefix, val.first, val.middle, val.last].filter(Boolean).map(s => String(s).trim()).join(' ');\n    }\n    // Handle phone object: { area, phone } or { countryCode, area, phone }\n    if (val.phone !== undefined) {\n      const parts = [val.countryCode, val.area, val.phone].filter(Boolean).map(s => String(s).replace(/[\\s\\-()]/g, ''));\n      return parts.join('');\n    }\n    return JSON.stringify(val);\n  }\n  return String(val).trim();\n}\n\n// --- Extract and clean all 23 fields ---\nconst client_name = clean(data.client_name || data.clientName || data.name);\nconst client_email = clean(data.client_email || data.clientEmail || data.email);\nconst whatsapp_number = clean(data.whatsapp_number || data.whatsappNumber || data.whatsapp || data.phone);\nconst brand_name = clean(data.brand_name || data.brandName || data.brand);\nconst website_url = clean(data.website_url || data.websiteUrl || data.website);\nconst product_feature = clean(data.product_feature || data.productFeature);\nconst differentiator = clean(data.differentiator);\nconst competitors = clean(data.competitors);\nconst competitor_strengths = clean(data.competitor_strengths || data.competitorStrengths);\nconst target_user = clean(data.target_user || data.targetUser);\nconst biggest_problem = clean(data.biggest_problem || data.biggestProblem);\nconst main_hesitation = clean(data.main_hesitation || data.mainHesitation);\nconst social_proof = clean(data.social_proof || data.socialProof);\nconst selling_proposition = clean(data.selling_proposition || data.sellingProposition);\nconst brand_personality = clean(data.brand_personality || data.brandPersonality);\nconst credibility_point = clean(data.credibility_point || data.credibilityPoint);\nconst transformation = clean(data.transformation);\nconst best_concepts = clean(data.best_concepts || data.bestConcepts);\nconst compliance = clean(data.compliance);\nconst reference_ads = clean(data.reference_ads || data.referenceAds);\nconst available_assets = clean(data.available_assets || data.availableAssets);\nconst do_not_say = clean(data.do_not_say || data.doNotSay);\nconst additional_notes = clean(data.additional_notes || data.additionalNotes);\nconst num_scripts = parseInt(clean(data.num_scripts || data.numScripts || data.number_of_scripts || data.script_count)) || 0;\n\n// --- Generate Client Code ---\n// Rules: first 3 chars of brand name (uppercase), skip \"The\" prefix, strip special chars\nfunction generateClientCode(brandName) {\n  let name = brandName.trim();\n  // Remove leading \"The \" (case-insensitive)\n  name = name.replace(/^the\\s+/i, '');\n  // Remove special characters, keep letters and spaces\n  name = name.replace(/[^a-zA-Z\\s]/g, '');\n  // Take first 3 alphabetic characters of concatenated name (no spaces)\n  // Examples: 'Yaan Man' → YAA, 'Supafuelz' → SUP, 'The Pain Company' → (skip The) → PAI\n  const concat = name.replace(/\\s+/g, '');\n  const code = (concat.substring(0, 3) || 'XXX').toUpperCase();\n\n  // Add date: MMDD\n  const now = new Date();\n  const mm = String(now.getMonth() + 1).padStart(2, '0');\n  const dd = String(now.getDate()).padStart(2, '0');\n  return `${code}-${mm}${dd}`;\n}\n\nconst client_code = generateClientCode(brand_name);\n\n// Start date: today in DD/MM/YYYY\nconst now = new Date();\nconst start_date = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;\n\nreturn [{\n  json: {\n    client_code,\n    brand_name,\n    client_name,\n    client_email,\n    whatsapp_number,\n    website_url,\n    product_feature,\n    differentiator,\n    competitors,\n    competitor_strengths,\n    target_user,\n    biggest_problem,\n    main_hesitation,\n    social_proof,\n    selling_proposition,\n    brand_personality,\n    credibility_point,\n    transformation,\n    best_concepts,\n    compliance,\n    reference_ads,\n    available_assets,\n    do_not_say,\n    additional_notes,\n    num_scripts,\n    status: 'Onboarding',\n    start_date,\n    folder_name: `${brand_name} - UGC`,\n    list_name: `${brand_name} - UGC Pipeline`,\n    channel_name: `${brand_name} - UGC`\n  }\n}];"
+        "jsCode": "// ============================================================\n// Parse JotForm & Generate Client Code\n// Handles multiple JotForm data formats\n// ============================================================\n\nconst body = $input.first().json.body || $input.first().json;\n\n// --- STRATEGY 1: rawRequest JSON string ---\nlet parsed = null;\ntry {\n  if (body.rawRequest && typeof body.rawRequest === 'string') {\n    parsed = JSON.parse(body.rawRequest);\n  } else if (body.rawRequest && typeof body.rawRequest === 'object') {\n    parsed = body.rawRequest;\n  }\n} catch (e) {\n  parsed = null;\n}\n\n// --- STRATEGY 2: q-prefixed fields (q1_whatIs, q2_email, etc.) ---\nfunction fromQFields(b) {\n  const qMap = {};\n  for (const key of Object.keys(b)) {\n    if (/^q\\d+/.test(key)) {\n      qMap[key] = b[key];\n    }\n  }\n  if (Object.keys(qMap).length === 0) return null;\n\n  // Sort by question number\n  const sorted = Object.entries(qMap).sort((a, b) => {\n    const numA = parseInt(a[0].match(/^q(\\d+)/)[1]);\n    const numB = parseInt(b[0].match(/^q(\\d+)/)[1]);\n    return numA - numB;\n  });\n\n  // Map by order (best-effort mapping based on form field order)\n  const fieldOrder = [\n    'client_name', 'client_email', 'whatsapp_number', 'brand_name', 'website_url',\n    'product_feature', 'differentiator', 'competitors', 'competitor_strengths',\n    'target_user', 'biggest_problem', 'main_hesitation',\n    'social_proof', 'selling_proposition', 'brand_personality', 'credibility_point', 'transformation',\n    'best_concepts', 'compliance', 'reference_ads', 'available_assets', 'do_not_say', 'additional_notes', 'num_scripts'\n  ];\n\n  const result = {};\n  sorted.forEach(([key, val], i) => {\n    if (i < fieldOrder.length) {\n      result[fieldOrder[i]] = val;\n    }\n  });\n  return result;\n}\n\n// --- STRATEGY 3: Direct field names ---\nfunction fromDirectFields(b) {\n  const directFields = [\n    'client_name', 'client_email', 'whatsapp_number', 'brand_name', 'website_url',\n    'product_feature', 'differentiator', 'competitors', 'competitor_strengths',\n    'target_user', 'biggest_problem', 'main_hesitation',\n    'social_proof', 'selling_proposition', 'brand_personality', 'credibility_point', 'transformation',\n    'best_concepts', 'compliance', 'reference_ads', 'available_assets', 'do_not_say', 'additional_notes', 'num_scripts'\n  ];\n  const found = {};\n  let count = 0;\n  for (const f of directFields) {\n    if (b[f] !== undefined) {\n      found[f] = b[f];\n      count++;\n    }\n  }\n  return count > 0 ? found : null;\n}\n\n// Resolve data source\nlet data = parsed || fromQFields(body) || fromDirectFields(body) || body;\n\n// --- HELPER: Clean a field value ---\nfunction clean(val) {\n  if (val === undefined || val === null) return '';\n  if (Array.isArray(val)) return val.map(v => String(v).trim()).filter(Boolean).join(', ');\n  if (typeof val === 'object') {\n    // Handle name object: { first, last } or { prefix, first, middle, last }\n    if (val.first || val.last) {\n      return [val.prefix, val.first, val.middle, val.last].filter(Boolean).map(s => String(s).trim()).join(' ');\n    }\n    // Handle phone object: { area, phone } or { countryCode, area, phone }\n    if (val.phone !== undefined) {\n      const parts = [val.countryCode, val.area, val.phone].filter(Boolean).map(s => String(s).replace(/[\\s\\-()]/g, ''));\n      return parts.join('');\n    }\n    return JSON.stringify(val);\n  }\n  return String(val).trim();\n}\n\n// --- Extract and clean all 23 fields ---\nconst client_name = clean(data.client_name || data.clientName || data.name);\nconst client_email = clean(data.client_email || data.clientEmail || data.email);\nconst whatsapp_number = clean(data.whatsapp_number || data.whatsappNumber || data.whatsapp || data.phone);\nconst brand_name = clean(data.brand_name || data.brandName || data.brand);\nconst website_url = clean(data.website_url || data.websiteUrl || data.website);\nconst product_feature = clean(data.product_feature || data.productFeature);\nconst differentiator = clean(data.differentiator);\nconst competitors = clean(data.competitors);\nconst competitor_strengths = clean(data.competitor_strengths || data.competitorStrengths);\nconst target_user = clean(data.target_user || data.targetUser);\nconst biggest_problem = clean(data.biggest_problem || data.biggestProblem);\nconst main_hesitation = clean(data.main_hesitation || data.mainHesitation);\nconst social_proof = clean(data.social_proof || data.socialProof);\nconst selling_proposition = clean(data.selling_proposition || data.sellingProposition);\nconst brand_personality = clean(data.brand_personality || data.brandPersonality);\nconst credibility_point = clean(data.credibility_point || data.credibilityPoint);\nconst transformation = clean(data.transformation);\nconst best_concepts = clean(data.best_concepts || data.bestConcepts);\nconst compliance = clean(data.compliance);\nconst reference_ads = clean(data.reference_ads || data.referenceAds);\nconst available_assets = clean(data.available_assets || data.availableAssets);\nconst do_not_say = clean(data.do_not_say || data.doNotSay);\nconst additional_notes = clean(data.additional_notes || data.additionalNotes);\nconst num_scripts = parseInt(clean(data.num_scripts || data.numScripts || data.number_of_scripts || data.script_count)) || 0;\n\n// --- Generate Client Code ---\n// Rules: first 3 chars of brand name (uppercase), skip \"The\" prefix, strip special chars\nfunction generateClientCode(brandName) {\n  let name = brandName.trim();\n  // Remove leading \"The \" (case-insensitive)\n  name = name.replace(/^the\\s+/i, '');\n  // Remove special characters, keep letters and spaces\n  name = name.replace(/[^a-zA-Z\\s]/g, '');\n  // Take first 3 alphabetic characters of concatenated name (no spaces)\n  // Examples: 'Yaan Man' \u2192 YAA, 'Supafuelz' \u2192 SUP, 'The Pain Company' \u2192 (skip The) \u2192 PAI\n  const concat = name.replace(/\\s+/g, '');\n  const code = (concat.substring(0, 3) || 'XXX').toUpperCase();\n\n  // Add date: MMDD\n  const now = new Date();\n  const mm = String(now.getMonth() + 1).padStart(2, '0');\n  const dd = String(now.getDate()).padStart(2, '0');\n  return `${code}-${mm}${dd}`;\n}\n\nconst client_code = generateClientCode(brand_name);\n\n// Start date: today in DD/MM/YYYY\nconst now = new Date();\nconst start_date = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;\n\nreturn [{\n  json: {\n    client_code,\n    brand_name,\n    client_name,\n    client_email,\n    whatsapp_number,\n    website_url,\n    product_feature,\n    differentiator,\n    competitors,\n    competitor_strengths,\n    target_user,\n    biggest_problem,\n    main_hesitation,\n    social_proof,\n    selling_proposition,\n    brand_personality,\n    credibility_point,\n    transformation,\n    best_concepts,\n    compliance,\n    reference_ads,\n    available_assets,\n    do_not_say,\n    additional_notes,\n    num_scripts,\n    status: 'Onboarding',\n    start_date,\n    folder_name: `${brand_name} - UGC`,\n    list_name: `${brand_name} - UGC Pipeline`,\n    channel_name: `${brand_name} - UGC`\n  }\n}];"
       },
-      "id": "node-parse",
+      "id": "326cc7ff-5a27-4c0b-9c0c-f145cddd2e38",
       "name": "Parse JotForm & Generate Client Code",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        680,
-        320
+        24768,
+        8720
       ]
     },
     {
       "parameters": {
-        "content": "## 3. GOOGLE SHEETS — Client Database\nAppends a row with all 28 columns (A–AB) to the main client database sheet.\nPlaceholder document ID — replace with your actual Google Sheet ID.",
+        "content": "## 3. GOOGLE SHEETS \u2014 Client Database\nAppends a row with all 28 columns (A\u2013AB) to the main client database sheet.\nPlaceholder document ID \u2014 replace with your actual Google Sheet ID.",
         "height": 180,
         "width": 340,
         "color": 3
       },
-      "id": "sticky-sheets-db",
+      "id": "2bfd1981-731f-49ea-8af7-09cff11c141d",
       "name": "Sticky Note - Client DB",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        1060,
-        80
+        25152,
+        8480
       ]
     },
     {
@@ -93,69 +99,43 @@
           "mode": "name"
         },
         "columns": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "client_code": "={{ $json.client_code }}",
-            "brand_name": "={{ $json.brand_name }}",
-            "client_name": "={{ $json.client_name }}",
-            "client_email": "={{ $json.client_email }}",
-            "whatsapp_number": "={{ $json.whatsapp_number }}",
-            "website_url": "={{ $json.website_url }}",
-            "product_feature": "={{ $json.product_feature }}",
-            "differentiator": "={{ $json.differentiator }}",
-            "competitors": "={{ $json.competitors }}",
-            "competitor_strengths": "={{ $json.competitor_strengths }}",
-            "target_user": "={{ $json.target_user }}",
-            "biggest_problem": "={{ $json.biggest_problem }}",
-            "main_hesitation": "={{ $json.main_hesitation }}",
-            "social_proof": "={{ $json.social_proof }}",
-            "selling_proposition": "={{ $json.selling_proposition }}",
-            "brand_personality": "={{ $json.brand_personality }}",
-            "credibility_point": "={{ $json.credibility_point }}",
-            "transformation": "={{ $json.transformation }}",
-            "best_concepts": "={{ $json.best_concepts }}",
-            "compliance": "={{ $json.compliance }}",
-            "reference_ads": "={{ $json.reference_ads }}",
-            "available_assets": "={{ $json.available_assets }}",
-            "do_not_say": "={{ $json.do_not_say }}",
-            "additional_notes": "={{ $json.additional_notes }}",
-            "status": "Onboarding",
-            "start_date": "={{ $json.start_date }}",
-            "num_scripts": "={{ $json.num_scripts }}"
-          }
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": []
         },
         "options": {}
       },
-      "id": "node-sheets-db",
+      "id": "8828f091-8868-4d1c-845d-d58ccf3bfc94",
       "name": "Add to Client Database",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
       "position": [
-        1100,
-        320
+        25184,
+        8720
       ],
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "Aas0vt74gbEuYgmW",
-          "name": "Google Sheets account"
+          "name": "Google Sheets account 2 - vishant"
         }
       },
       "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "content": "## 4. CLICKUP — Create Folder (HTTP Request)\nPOST /api/v2/space/90165772240/folder\nCreates \"[Brand] - UGC\" folder. Uses HTTP Request to bypass n8n ClickUp node dropdown issues.",
+        "content": "## 4. CLICKUP \u2014 Create Folder (HTTP Request)\nPOST /api/v2/space/90165772240/folder\nCreates \"[Brand] - UGC\" folder. Uses HTTP Request to bypass n8n ClickUp node dropdown issues.",
         "height": 180,
         "width": 340,
         "color": 5
       },
-      "id": "sticky-clickup-folder",
+      "id": "323c05cb-c691-435f-b6d4-423db6003b2f",
       "name": "Sticky Note - ClickUp Folder",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        1480,
-        80
+        25568,
+        8480
       ]
     },
     {
@@ -169,36 +149,36 @@
         "jsonBody": "={{ JSON.stringify({ name: $('Parse JotForm & Generate Client Code').first().json.folder_name }) }}",
         "options": {}
       },
-      "id": "node-clickup-folder",
+      "id": "fd315f0b-f668-4750-bfe1-463dd5abb9fd",
       "name": "Create Client Folder",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1520,
-        320
+        25600,
+        8720
       ],
       "credentials": {
         "clickUpApi": {
-          "id": "UOuIc5uPfQtavQLT",
-          "name": "ClickUp API"
+          "id": "CH8wDVhGoKw39AK1",
+          "name": "ClickUp account"
         }
       },
       "onError": "continueErrorOutput"
     },
     {
       "parameters": {
-        "content": "## 4b. CLICKUP — Create Onboarding Doc\nPOST /api/v3/workspaces/90161381822/docs\nCreates a ClickUp Doc inside the brand folder so\nthe script writer has the full onboarding brief in one place.\nThen edits the first page with all form data formatted in markdown.",
+        "content": "## 4b. CLICKUP \u2014 Create Onboarding Doc\nPOST /api/v3/workspaces/90161381822/docs\nCreates a ClickUp Doc inside the brand folder so\nthe script writer has the full onboarding brief in one place.\nThen edits the first page with all form data formatted in markdown.",
         "height": 220,
         "width": 380,
         "color": 5
       },
-      "id": "sticky-clickup-doc",
+      "id": "60c6ef10-b81e-49e0-af55-f7fdf6e3502d",
       "name": "Sticky Note - ClickUp Onboarding Doc",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        1700,
-        -260
+        25792,
+        8144
       ]
     },
     {
@@ -209,21 +189,21 @@
         "nodeCredentialType": "clickUpApi",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ name: $('Parse JotForm & Generate Client Code').first().json.brand_name + ' — Onboarding Brief', parent: { id: String($('Create Client Folder').first().json.id), type: 5 } }) }}",
+        "jsonBody": "={{ JSON.stringify({ name: $('Parse JotForm & Generate Client Code').first().json.brand_name + ' \u2014 Onboarding Brief', parent: { id: String($('Create Client Folder').first().json.id), type: 5 } }) }}",
         "options": {}
       },
-      "id": "node-clickup-doc",
+      "id": "c0399e5f-0226-4e29-899e-656d61ad8fdd",
       "name": "Create Onboarding Doc",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1730,
-        -40
+        25824,
+        8352
       ],
       "credentials": {
         "clickUpApi": {
-          "id": "UOuIc5uPfQtavQLT",
-          "name": "ClickUp API"
+          "id": "CH8wDVhGoKw39AK1",
+          "name": "ClickUp account"
         }
       },
       "onError": "continueRegularOutput"
@@ -236,39 +216,39 @@
         "nodeCredentialType": "clickUpApi",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ (() => { const d = $('Parse JotForm & Generate Client Code').first().json; const content = '# ' + d.brand_name + ' — Onboarding Brief\\n\\n' + '**Client Code:** ' + d.client_code + '\\n' + '**Client Name:** ' + d.client_name + '\\n' + '**Email:** ' + d.client_email + '\\n' + '**WhatsApp:** ' + d.whatsapp_number + '\\n' + '**Website:** ' + d.website_url + '\\n\\n' + '---\\n\\n' + '## Product & Positioning\\n' + '**Product / Feature:** ' + d.product_feature + '\\n' + '**Differentiator:** ' + d.differentiator + '\\n' + '**Competitors:** ' + d.competitors + '\\n' + '**Competitor Strengths:** ' + d.competitor_strengths + '\\n' + '**Selling Proposition:** ' + d.selling_proposition + '\\n\\n' + '---\\n\\n' + '## Target Audience\\n' + '**Target User:** ' + d.target_user + '\\n' + '**Biggest Problem:** ' + d.biggest_problem + '\\n' + '**Main Hesitation:** ' + d.main_hesitation + '\\n' + '**Transformation:** ' + d.transformation + '\\n\\n' + '---\\n\\n' + '## Brand & Creative\\n' + '**Brand Personality:** ' + d.brand_personality + '\\n' + '**Credibility Point:** ' + d.credibility_point + '\\n' + '**Social Proof:** ' + d.social_proof + '\\n' + '**Best Concepts:** ' + d.best_concepts + '\\n' + '**Reference Ads:** ' + d.reference_ads + '\\n\\n' + '---\\n\\n' + '## Rules & Compliance\\n' + '**Compliance:** ' + d.compliance + '\\n' + '**Do NOT Say:** ' + d.do_not_say + '\\n\\n' + '---\\n\\n' + '## Assets & Notes\\n' + '**Available Assets:** ' + d.available_assets + '\\n' + '**Number of Scripts:** ' + d.num_scripts + '\\n' + '**Additional Notes:** ' + d.additional_notes; return JSON.stringify({ name: d.brand_name + ' — Onboarding Brief', content: content, content_format: 'text/md' }); })() }}",
+        "jsonBody": "={{ (() => { const d = $('Parse JotForm & Generate Client Code').first().json; const content = '# ' + d.brand_name + ' \u2014 Onboarding Brief\\n\\n' + '**Client Code:** ' + d.client_code + '\\n' + '**Client Name:** ' + d.client_name + '\\n' + '**Email:** ' + d.client_email + '\\n' + '**WhatsApp:** ' + d.whatsapp_number + '\\n' + '**Website:** ' + d.website_url + '\\n\\n' + '---\\n\\n' + '## Product & Positioning\\n' + '**Product / Feature:** ' + d.product_feature + '\\n' + '**Differentiator:** ' + d.differentiator + '\\n' + '**Competitors:** ' + d.competitors + '\\n' + '**Competitor Strengths:** ' + d.competitor_strengths + '\\n' + '**Selling Proposition:** ' + d.selling_proposition + '\\n\\n' + '---\\n\\n' + '## Target Audience\\n' + '**Target User:** ' + d.target_user + '\\n' + '**Biggest Problem:** ' + d.biggest_problem + '\\n' + '**Main Hesitation:** ' + d.main_hesitation + '\\n' + '**Transformation:** ' + d.transformation + '\\n\\n' + '---\\n\\n' + '## Brand & Creative\\n' + '**Brand Personality:** ' + d.brand_personality + '\\n' + '**Credibility Point:** ' + d.credibility_point + '\\n' + '**Social Proof:** ' + d.social_proof + '\\n' + '**Best Concepts:** ' + d.best_concepts + '\\n' + '**Reference Ads:** ' + d.reference_ads + '\\n\\n' + '---\\n\\n' + '## Rules & Compliance\\n' + '**Compliance:** ' + d.compliance + '\\n' + '**Do NOT Say:** ' + d.do_not_say + '\\n\\n' + '---\\n\\n' + '## Assets & Notes\\n' + '**Available Assets:** ' + d.available_assets + '\\n' + '**Number of Scripts:** ' + d.num_scripts + '\\n' + '**Additional Notes:** ' + d.additional_notes; return JSON.stringify({ name: d.brand_name + ' \u2014 Onboarding Brief', content: content, content_format: 'text/md' }); })() }}",
         "options": {}
       },
-      "id": "node-clickup-doc-page",
+      "id": "52b1f145-c22a-4083-8c1d-5c6e8772a204",
       "name": "Add Onboarding Brief Page",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2130,
-        -40
+        26224,
+        8352
       ],
       "credentials": {
         "clickUpApi": {
-          "id": "UOuIc5uPfQtavQLT",
-          "name": "ClickUp API"
+          "id": "CH8wDVhGoKw39AK1",
+          "name": "ClickUp account"
         }
       },
       "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "content": "## 5. CLICKUP — Create List (HTTP Request)\nPOST /api/v2/folder/{id}/list\nCreates pipeline list inside new folder. Uses HTTP Request to bypass dropdown issues.",
+        "content": "## 5. CLICKUP \u2014 Create List (HTTP Request)\nPOST /api/v2/folder/{id}/list\nCreates pipeline list inside new folder. Uses HTTP Request to bypass dropdown issues.",
         "height": 180,
         "width": 340,
         "color": 5
       },
-      "id": "sticky-clickup-list",
+      "id": "3695c934-0472-42bc-a85d-687644940e43",
       "name": "Sticky Note - ClickUp List",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        1900,
-        80
+        25984,
+        8480
       ]
     },
     {
@@ -282,80 +262,79 @@
         "jsonBody": "={{ JSON.stringify({ name: $('Parse JotForm & Generate Client Code').first().json.list_name }) }}",
         "options": {}
       },
-      "id": "node-clickup-list",
+      "id": "aa15f1e9-dd63-47bf-8a6e-f50fba955c2f",
       "name": "Create Pipeline List in Folder",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1940,
-        320
+        26032,
+        8720
       ],
       "credentials": {
         "clickUpApi": {
-          "id": "UOuIc5uPfQtavQLT",
-          "name": "ClickUp API"
+          "id": "CH8wDVhGoKw39AK1",
+          "name": "ClickUp account"
         }
       },
       "onError": "continueErrorOutput"
     },
     {
       "parameters": {
-        "content": "## 6. GENERATE TASKS + UGC SCRIPT CARDS\nCode node builds an array of 10 onboarding tasks with:\n- Due dates (today + N days as Unix ms)\n- Priorities (1=urgent → 4=low)\n- Rich descriptions with client context\n\nAlso generates N UGC script cards named:\nUGC_C{N}_{Brand}_Creator Name_R1_{Mon'YY}\nwhere N = num_scripts from JotForm.",
+        "content": "## 6. GENERATE TASKS + UGC SCRIPT CARDS\nCode node builds an array of 10 onboarding tasks with:\n- Due dates (today + N days as Unix ms)\n- Priorities (1=urgent \u2192 4=low)\n- Rich descriptions with client context\n\nAlso generates N UGC script cards named:\nUGC_C{N}_{Brand}_Creator Name_R1_{Mon'YY}\nwhere N = num_scripts from JotForm.",
         "height": 200,
         "width": 340,
         "color": 6
       },
-      "id": "sticky-tasks-gen",
+      "id": "cef03a6f-ed44-4526-9fb6-70e0b194ca3c",
       "name": "Sticky Note - Task Generation",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        2320,
-        80
+        26400,
+        8480
       ]
     },
     {
       "parameters": {
-        "jsCode": "// ============================================================\n// Generate 10 Onboarding Tasks for ClickUp\n// ============================================================\n\nlet d, listId;\ntry {\n  d = $('Parse JotForm & Generate Client Code').first().json;\n} catch (e) {\n  throw new Error('Cannot read Parse node output: ' + e.message);\n}\ntry {\n  listId = $('Create Pipeline List in Folder').first().json.id;\n} catch (e) {\n  throw new Error('Cannot read List node output (id): ' + e.message);\n}\n\nfunction dueDate(daysFromNow) {\n  const dt = new Date();\n  dt.setDate(dt.getDate() + daysFromNow);\n  dt.setHours(18, 0, 0, 0); // 6 PM deadline\n  return dt.getTime();\n}\n\nconst tasks = [\n  {\n    name: 'Review onboarding brief & flag gaps',\n    due_date: dueDate(1),\n    priority: 1,\n    description: `Read ${d.brand_name} brief. Flag items marked 'discuss on call' or blank.\\n\\nProduct: ${d.product_feature}\\nDifferentiator: ${d.differentiator}\\nCompliance: ${d.compliance || 'None specified'}\\nDo NOT say: ${d.do_not_say || 'None specified'}`,\n    listId\n  },\n  {\n    name: 'Schedule kickoff call with client',\n    due_date: dueDate(1),\n    priority: 1,\n    description: `Contact ${d.client_name} via WhatsApp (${d.whatsapp_number}) or email (${d.client_email}).\\nSchedule call to discuss flagged items + creative direction.`,\n    listId\n  },\n  {\n    name: 'Competitor ad research & analysis',\n    due_date: dueDate(3),\n    priority: 2,\n    description: `Research: ${d.competitors}\\nWhat they do better: ${d.competitor_strengths}\\nPull current ads from Meta Ad Library.\\nReference ads client likes: ${d.reference_ads || 'None provided'}`,\n    listId\n  },\n  {\n    name: 'Define creative angles & concepts',\n    due_date: dueDate(3),\n    priority: 2,\n    description: `Based on brief:\\nDifferentiator: ${d.differentiator}\\nTarget: ${d.target_user}\\nProblem solved: ${d.biggest_problem}\\nHesitation: ${d.main_hesitation}\\nBrand personality: ${d.brand_personality}\\nRef ads: ${d.reference_ads || 'None'}\\n\\nPropose 3-5 creative angles.`,\n    listId\n  },\n  {\n    name: 'Write first batch of UGC scripts',\n    due_date: dueDate(5),\n    priority: 2,\n    description: `Write 3-5 UGC scripts for ${d.product_feature}\\nSelling proposition: ${d.selling_proposition}\\nTransformation: ${d.transformation}\\nBest concepts: ${d.best_concepts || 'None specified'}\\n\\n⚠️ COMPLIANCE: ${d.compliance || 'None'}\\n🚫 DO NOT: ${d.do_not_say || 'None'}`,\n    listId\n  },\n  {\n    name: 'Source & match UGC creators',\n    due_date: dueDate(5),\n    priority: 3,\n    description: `Find creators matching:\\nBrand personality: ${d.brand_personality}\\nTarget audience: ${d.target_user}\\nContent style and tone requirements`,\n    listId\n  },\n  {\n    name: 'Internal creative review',\n    due_date: dueDate(7),\n    priority: 3,\n    description: `Review scripts before sharing with ${d.client_name}.\\nCheck against: ${d.compliance || 'No compliance notes'}\\nEnsure nothing in do-not list: ${d.do_not_say || 'None'}`,\n    listId\n  },\n  {\n    name: 'Client script approval',\n    due_date: dueDate(8),\n    priority: 2,\n    description: `Share scripts with ${d.client_name} (${d.client_email} / WhatsApp ${d.whatsapp_number}) for feedback.`,\n    listId\n  },\n  {\n    name: 'UGC shoot coordination',\n    due_date: dueDate(12),\n    priority: 3,\n    description: `Brief creators, coordinate shoots.\\nAvailable client assets: ${d.available_assets || 'None specified'}`,\n    listId\n  },\n  {\n    name: 'First draft delivery to client',\n    due_date: dueDate(15),\n    priority: 1,\n    description: `Deliver first round of edited UGC videos to ${d.client_name} for review.`,\n    listId\n  }\n];\n\n\n\n// --- UGC Script Cards ---\n// Creates N cards named UGC_C{N}_{Brand}_Creator Name_R1_{Mon'YY}\nconst scriptCount = d.num_scripts || 0;\nconst monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];\nconst scriptNow = new Date();\nconst monYear = monthNames[scriptNow.getMonth()] + \"'\" + String(scriptNow.getFullYear()).slice(-2);\n\nfor (let i = 1; i <= scriptCount; i++) {\n  tasks.push({\n    name: `UGC_C${i}_${d.brand_name}_Creator Name_R1_${monYear}`,\n    description: `UGC Script Card #${i} for ${d.brand_name}\\n\\nProduct: ${d.product_feature}\\nTarget: ${d.target_user}\\nDifferentiator: ${d.differentiator}\\nBrand personality: ${d.brand_personality}`,\n    listId\n  });\n}\n\nreturn tasks.map(t => ({ json: t }));"
+        "jsCode": "// ============================================================\n// Generate 10 Onboarding Tasks for ClickUp\n// ============================================================\n\nlet d, listId;\ntry {\n  d = $('Parse JotForm & Generate Client Code').first().json;\n} catch (e) {\n  throw new Error('Cannot read Parse node output: ' + e.message);\n}\ntry {\n  listId = $('Create Pipeline List in Folder').first().json.id;\n} catch (e) {\n  throw new Error('Cannot read List node output (id): ' + e.message);\n}\n\nfunction dueDate(daysFromNow) {\n  const dt = new Date();\n  dt.setDate(dt.getDate() + daysFromNow);\n  dt.setHours(18, 0, 0, 0); // 6 PM deadline\n  return dt.getTime();\n}\n\nconst tasks = [\n  {\n    name: 'Review onboarding brief & flag gaps',\n    due_date: dueDate(1),\n    priority: 1,\n    description: `Read ${d.brand_name} brief. Flag items marked 'discuss on call' or blank.\\n\\nProduct: ${d.product_feature}\\nDifferentiator: ${d.differentiator}\\nCompliance: ${d.compliance || 'None specified'}\\nDo NOT say: ${d.do_not_say || 'None specified'}`,\n    listId\n  },\n  {\n    name: 'Schedule kickoff call with client',\n    due_date: dueDate(1),\n    priority: 1,\n    description: `Contact ${d.client_name} via WhatsApp (${d.whatsapp_number}) or email (${d.client_email}).\\nSchedule call to discuss flagged items + creative direction.`,\n    listId\n  },\n  {\n    name: 'Competitor ad research & analysis',\n    due_date: dueDate(3),\n    priority: 2,\n    description: `Research: ${d.competitors}\\nWhat they do better: ${d.competitor_strengths}\\nPull current ads from Meta Ad Library.\\nReference ads client likes: ${d.reference_ads || 'None provided'}`,\n    listId\n  },\n  {\n    name: 'Define creative angles & concepts',\n    due_date: dueDate(3),\n    priority: 2,\n    description: `Based on brief:\\nDifferentiator: ${d.differentiator}\\nTarget: ${d.target_user}\\nProblem solved: ${d.biggest_problem}\\nHesitation: ${d.main_hesitation}\\nBrand personality: ${d.brand_personality}\\nRef ads: ${d.reference_ads || 'None'}\\n\\nPropose 3-5 creative angles.`,\n    listId\n  },\n  {\n    name: 'Write first batch of UGC scripts',\n    due_date: dueDate(5),\n    priority: 2,\n    description: `Write 3-5 UGC scripts for ${d.product_feature}\\nSelling proposition: ${d.selling_proposition}\\nTransformation: ${d.transformation}\\nBest concepts: ${d.best_concepts || 'None specified'}\\n\\n\u26a0\ufe0f COMPLIANCE: ${d.compliance || 'None'}\\n\ud83d\udeab DO NOT: ${d.do_not_say || 'None'}`,\n    listId\n  },\n  {\n    name: 'Source & match UGC creators',\n    due_date: dueDate(5),\n    priority: 3,\n    description: `Find creators matching:\\nBrand personality: ${d.brand_personality}\\nTarget audience: ${d.target_user}\\nContent style and tone requirements`,\n    listId\n  },\n  {\n    name: 'Internal creative review',\n    due_date: dueDate(7),\n    priority: 3,\n    description: `Review scripts before sharing with ${d.client_name}.\\nCheck against: ${d.compliance || 'No compliance notes'}\\nEnsure nothing in do-not list: ${d.do_not_say || 'None'}`,\n    listId\n  },\n  {\n    name: 'Client script approval',\n    due_date: dueDate(8),\n    priority: 2,\n    description: `Share scripts with ${d.client_name} (${d.client_email} / WhatsApp ${d.whatsapp_number}) for feedback.`,\n    listId\n  },\n  {\n    name: 'UGC shoot coordination',\n    due_date: dueDate(12),\n    priority: 3,\n    description: `Brief creators, coordinate shoots.\\nAvailable client assets: ${d.available_assets || 'None specified'}`,\n    listId\n  },\n  {\n    name: 'First draft delivery to client',\n    due_date: dueDate(15),\n    priority: 1,\n    description: `Deliver first round of edited UGC videos to ${d.client_name} for review.`,\n    listId\n  }\n];\n\n\n\n// --- UGC Script Cards ---\n// Creates N cards named UGC_C{N}_{Brand}_Creator Name_R1_{Mon'YY}\nconst scriptCount = d.num_scripts || 0;\nconst monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];\nconst scriptNow = new Date();\nconst monYear = monthNames[scriptNow.getMonth()] + \"'\" + String(scriptNow.getFullYear()).slice(-2);\n\nfor (let i = 1; i <= scriptCount; i++) {\n  tasks.push({\n    name: `UGC_C${i}_${d.brand_name}_Creator Name_R1_${monYear}`,\n    description: `UGC Script Card #${i} for ${d.brand_name}\\n\\nProduct: ${d.product_feature}\\nTarget: ${d.target_user}\\nDifferentiator: ${d.differentiator}\\nBrand personality: ${d.brand_personality}`,\n    listId\n  });\n}\n\nreturn tasks.map(t => ({ json: t }));"
       },
-      "id": "node-generate-tasks",
+      "id": "67729f3f-7b9e-4099-8ef4-3e12ba379d59",
       "name": "Generate Task Array",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2360,
-        320
+        26448,
+        8720
       ],
       "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "content": "## 7. SPLIT & CREATE TASKS (HTTP Request)\nLoops through 10 tasks one at a time (batch size 1)\nto avoid ClickUp rate limits.\nPOST /api/v2/list/{id}/task — uses HTTP Request node.",
+        "content": "## 7. SPLIT & CREATE TASKS (HTTP Request)\nLoops through 10 tasks one at a time (batch size 1)\nto avoid ClickUp rate limits.\nPOST /api/v2/list/{id}/task \u2014 uses HTTP Request node.",
         "height": 200,
         "width": 540,
         "color": 5
       },
-      "id": "sticky-split",
+      "id": "a940a314-2531-4eba-90ff-7848294912f7",
       "name": "Sticky Note - Split & Create",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        2740,
-        80
+        26832,
+        8480
       ]
     },
     {
       "parameters": {
-        "batchSize": 1,
         "options": {}
       },
-      "id": "node-split",
+      "id": "c7f4de94-8b7b-47c0-91fe-2f4acdeed0e7",
       "name": "Loop Over Tasks",
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 3,
       "position": [
-        2780,
-        320
+        26864,
+        8720
       ]
     },
     {
@@ -369,36 +348,36 @@
         "jsonBody": "={{ JSON.stringify({ name: $json.name, description: $json.description, due_date: $json.due_date, priority: $json.priority }) }}",
         "options": {}
       },
-      "id": "node-create-task",
+      "id": "2ca2086f-ce1e-473e-b6b0-85020b26aaba",
       "name": "Create ClickUp Task",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        3040,
-        320
+        27120,
+        8720
       ],
       "credentials": {
         "clickUpApi": {
-          "id": "UOuIc5uPfQtavQLT",
-          "name": "ClickUp API"
+          "id": "CH8wDVhGoKw39AK1",
+          "name": "ClickUp account"
         }
       },
       "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "content": "## 8. SLACK NOTIFICATION\nPosts to #ugc-agent-notifications (C0AFBQ5UF0E) with a summary of the new client.\nNon-critical — continues on fail so it doesn't block the workflow.",
+        "content": "## 8. SLACK NOTIFICATION\nPosts to #channel C07MN9QA1R7 with a summary of the new client.\nNon-critical \u2014 continues on fail so it doesn't block the workflow.",
         "height": 180,
         "width": 340,
         "color": 2
       },
-      "id": "sticky-slack",
+      "id": "9cd05a87-d233-46fd-b403-b3e01265b6f5",
       "name": "Sticky Note - Slack",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        6100,
-        80
+        30192,
+        8480
       ]
     },
     {
@@ -409,21 +388,22 @@
           "value": "C0AFBQ5UF0E",
           "mode": "id"
         },
-        "text": "={{ (() => {\nconst d = $('Parse JotForm & Generate Client Code').first().json;\nconst product = (d.product_feature || '').substring(0, 100);\nconst target = (d.target_user || '').substring(0, 100);\nconst diff = (d.differentiator || '').substring(0, 100);\nconst comp = d.compliance || 'None';\nconst dontSay = d.do_not_say || 'None';\nconst personality = d.brand_personality || 'Not specified';\nreturn `🎬 *New UGC Client Onboarded!*\\n\\n*${d.client_code} — ${d.brand_name}*\\nProduct: ${product}\\nTarget: ${target}\\nDifferentiator: ${diff}\\nBrand: ${personality}\\n\\n⚠️ Compliance: ${comp}\\n🚫 Do not: ${dontSay}\\n\\n📋 ClickUp: ${d.folder_name} created with 10 tasks (15-day timeline) + ${d.num_scripts || 0} UGC script cards + Chat Channel + Onboarding Brief Doc\\nAM: TBD\\n\\n_Let's make some fire ads!_ 🔥`;\n})() }}",
+        "text": "={{ (() => {\nconst d = $('Parse JotForm & Generate Client Code').first().json;\nconst product = (d.product_feature || '').substring(0, 100);\nconst target = (d.target_user || '').substring(0, 100);\nconst diff = (d.differentiator || '').substring(0, 100);\nconst comp = d.compliance || 'None';\nconst dontSay = d.do_not_say || 'None';\nconst personality = d.brand_personality || 'Not specified';\nreturn `\ud83c\udfac *New UGC Client Onboarded!*\\n\\n*${d.client_code} \u2014 ${d.brand_name}*\\nProduct: ${product}\\nTarget: ${target}\\nDifferentiator: ${diff}\\nBrand: ${personality}\\n\\n\u26a0\ufe0f Compliance: ${comp}\\n\ud83d\udeab Do not: ${dontSay}\\n\\n\ud83d\udccb ClickUp: ${d.folder_name} created with 10 tasks (15-day timeline) + ${d.num_scripts || 0} UGC script cards + Chat Channel + Onboarding Brief Doc\\nAM: TBD\\n\\n_Let's make some fire ads!_ \ud83d\udd25`;\n})() }}",
         "otherOptions": {}
       },
-      "id": "node-slack",
+      "id": "b2360413-6b3e-4204-b37b-7e825acb59cc",
       "name": "Notify Team on Slack",
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.2,
       "position": [
-        6140,
-        320
+        30224,
+        8720
       ],
+      "webhookId": "f649785c-710f-4fc4-a657-b80a923930bc",
       "credentials": {
         "slackApi": {
           "id": "5Q37UpOjGx4YsbyC",
-          "name": "Slack API"
+          "name": "Slack account"
         }
       },
       "onError": "continueRegularOutput"
@@ -435,13 +415,13 @@
         "width": 340,
         "color": 3
       },
-      "id": "sticky-log",
+      "id": "56dd61fe-975a-4576-b2e4-b1913ac5a2b3",
       "name": "Sticky Note - Onboarding Log",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        6520,
-        80
+        30608,
+        8480
       ]
     },
     {
@@ -458,34 +438,25 @@
           "mode": "name"
         },
         "columns": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "A": "={{ new Date().toISOString() }}",
-            "B": "={{ $('Parse JotForm & Generate Client Code').first().json.client_code }}",
-            "C": "={{ $('Parse JotForm & Generate Client Code').first().json.brand_name }}",
-            "D": "Success",
-            "E": "Yes",
-            "F": "Yes",
-            "G": "Yes",
-            "H": "Yes",
-            "I": "Yes",
-            "J": ""
-          }
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": []
         },
         "options": {}
       },
-      "id": "node-sheets-log",
+      "id": "7f561c22-c11f-4445-bf50-9c8d2ede5f28",
       "name": "Log to Onboarding Log",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
       "position": [
-        6560,
-        320
+        30640,
+        8720
       ],
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "Aas0vt74gbEuYgmW",
-          "name": "Google Sheets account"
+          "name": "Google Sheets account 2 - vishant"
         }
       },
       "onError": "continueRegularOutput"
@@ -497,57 +468,65 @@
         "width": 340,
         "color": 4
       },
-      "id": "sticky-respond",
+      "id": "5fc95fb7-7d18-4ead-92d4-c57f71bc436d",
       "name": "Sticky Note - Respond",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        6940,
-        80
+        31024,
+        8480
       ]
     },
     {
       "parameters": {
-        "respondWith": "json",
+        "respondWith": "text",
         "responseBody": "={{ JSON.stringify({ status: 'success', client_code: $('Parse JotForm & Generate Client Code').first().json.client_code, brand: $('Parse JotForm & Generate Client Code').first().json.brand_name }) }}",
-        "options": {}
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
       },
-      "id": "node-respond",
+      "id": "99470f48-d7d3-4748-b76c-19a66888d9d4",
       "name": "Respond to Webhook",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        6980,
-        320
+        31072,
+        8720
       ]
     },
     {
       "parameters": {
-        "content": "## ERROR HANDLING\nIf any node in the main flow fails, this error branch:\n1. Sends a Slack DM to dakshina@smashed.agency\n2. Logs the failure to the Onboarding Log sheet\n3. Returns 200 to prevent JotForm retry loops",
+        "content": "## ERROR HANDLING\nIf any node in the main flow fails, this error branch:\n1. Sends a Slack DM to U06P9F49BJT\n2. Logs the failure to the Onboarding Log sheet\n3. Returns 200 to prevent JotForm retry loops",
         "height": 200,
-        "width": 380,
-        "color": 1
+        "width": 380
       },
-      "id": "sticky-error",
+      "id": "28e0335b-98ca-4747-931d-1b9567e35c43",
       "name": "Sticky Note - Error Handling",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        1060,
-        600
+        25152,
+        8992
       ]
     },
     {
       "parameters": {
-        "jsCode": "// ============================================================\n// Error Handler — Capture error details\n// ============================================================\n\nconst errorData = $input.first().json;\n\n// Try to get brand name from the parse node if it ran\nlet brand_name = 'Unknown';\nlet client_code = 'N/A';\ntry {\n  const parseData = $('Parse JotForm & Generate Client Code').first().json;\n  brand_name = parseData.brand_name || 'Unknown';\n  client_code = parseData.client_code || 'N/A';\n} catch (e) {\n  // Parse node may not have run\n}\n\nconst errorMessage = errorData.error?.message || errorData.message || 'Unknown error';\nconst errorNode = errorData.error?.node?.name || errorData.node || 'Unknown node';\n\nreturn [{\n  json: {\n    brand_name,\n    client_code,\n    error_message: errorMessage,\n    error_node: errorNode,\n    timestamp: new Date().toISOString()\n  }\n}];"
+        "jsCode": "// ============================================================\n// Error Handler \u2014 Capture error details\n// ============================================================\n\nconst errorData = $input.first().json;\n\n// Try to get brand name from the parse node if it ran\nlet brand_name = 'Unknown';\nlet client_code = 'N/A';\ntry {\n  const parseData = $('Parse JotForm & Generate Client Code').first().json;\n  brand_name = parseData.brand_name || 'Unknown';\n  client_code = parseData.client_code || 'N/A';\n} catch (e) {\n  // Parse node may not have run\n}\n\nconst errorMessage = errorData.error?.message || errorData.message || 'Unknown error';\nconst errorNode = errorData.error?.node?.name || errorData.node || 'Unknown node';\n\nreturn [{\n  json: {\n    brand_name,\n    client_code,\n    error_message: errorMessage,\n    error_node: errorNode,\n    timestamp: new Date().toISOString()\n  }\n}];"
       },
-      "id": "node-error-handler",
+      "id": "006a243d-a299-46d9-839f-23a41dcb5ed9",
       "name": "Handle Error",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1100,
-        820
+        25184,
+        9216
       ]
     },
     {
@@ -555,24 +534,25 @@
         "select": "user",
         "user": {
           "__rl": true,
-          "value": "dakshina@smashed.agency",
+          "value": "U06P9F49BJT",
           "mode": "id"
         },
-        "text": "={{ `❌ Onboarding failed for ${$json.brand_name}. Error: ${$json.error_message}. Node: ${$json.error_node}` }}",
+        "text": "={{ `\u274c Onboarding failed for ${$json.brand_name}. Error: ${$json.error_message}. Node: ${$json.error_node}` }}",
         "otherOptions": {}
       },
-      "id": "node-error-slack",
-      "name": "Slack DM — Error Alert",
+      "id": "4f33019a-ba78-4d69-b754-fe06b8aff0ff",
+      "name": "Slack DM \u2014 Error Alert",
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.2,
       "position": [
-        1520,
-        820
+        25600,
+        9216
       ],
+      "webhookId": "4ea29fad-b665-4384-8abe-7764ddefcd73",
       "credentials": {
         "slackApi": {
           "id": "5Q37UpOjGx4YsbyC",
-          "name": "Slack API"
+          "name": "Slack account"
         }
       },
       "onError": "continueRegularOutput"
@@ -607,53 +587,61 @@
         },
         "options": {}
       },
-      "id": "node-error-log",
+      "id": "affd6568-c37b-417d-974d-1c8723e3775b",
       "name": "Log Error to Sheet",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
       "position": [
-        1940,
-        820
+        26032,
+        9216
       ],
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "Aas0vt74gbEuYgmW",
-          "name": "Google Sheets account"
+          "name": "Google Sheets account 2 - vishant"
         }
       },
       "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({ status: 'error', message: $json.error_message, client_code: $json.client_code }) }}",
+        "respondWith": "text",
+        "responseBody": "={{ JSON.stringify({ status: 'error', message: $json.error_message || 'Unknown error', client_code: $json.client_code || '' }) }}",
         "options": {
-          "responseCode": 200
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
         }
       },
-      "id": "node-error-respond",
+      "id": "4054182f-4a30-4a64-be08-f86dff8c5309",
       "name": "Respond 200 on Error",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        2360,
-        820
+        26448,
+        9216
       ]
     },
     {
       "parameters": {
-        "content": "## 5b. CLICKUP — Create Chat Channel in Space\nPOST /api/v3/workspaces/90161381822/chat/channels/location\nCreates channel inside Space 90165772240 (not at workspace level).\nIf a channel already exists on the space, returns it.",
+        "content": "## 5b. CLICKUP \u2014 Create Chat Channel in Space\nPOST /api/v3/workspaces/90161381822/chat/channels/location\nCreates channel inside Space 90165772240 (not at workspace level).\nIf a channel already exists on the space, returns it.",
         "height": 200,
         "width": 380,
         "color": 5
       },
-      "id": "sticky-clickup-channel",
+      "id": "08f27481-140d-4680-92aa-3fd05dfe39b6",
       "name": "Sticky Note - ClickUp Channel",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        2130,
-        80
+        26288,
+        8112
       ]
     },
     {
@@ -667,98 +655,97 @@
         "jsonBody": "={{ JSON.stringify({ name: $(\"Parse JotForm & Generate Client Code\").first().json.channel_name, parent_id: \"90165772240\", parent_type: \"space\" }) }}",
         "options": {}
       },
-      "id": "node-clickup-channel",
+      "id": "d270fdf9-cfbc-4fbe-8e63-2c2b7a51f79f",
       "name": "Create Chat Channel",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2150,
-        320
+        26240,
+        8720
       ],
       "credentials": {
         "clickUpApi": {
-          "id": "UOuIc5uPfQtavQLT",
-          "name": "ClickUp API"
+          "id": "CH8wDVhGoKw39AK1",
+          "name": "ClickUp account"
         }
       },
       "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "content": "## TEST TRIGGER\nClick \"Test workflow\" to run the entire flow with demo data.\nNo webhook needed — Manual Trigger outputs raw form data that\nflows through the Parse node, so all downstream references work.\nDisable this path in production by deactivating the Manual Trigger node.",
+        "content": "## TEST TRIGGER\nClick \"Test workflow\" to run the entire flow with demo data.\nNo webhook needed \u2014 Manual Trigger outputs raw form data that\nflows through the Parse node, so all downstream references work.\nDisable this path in production by deactivating the Manual Trigger node.",
         "height": 200,
         "width": 380,
         "color": 7
       },
-      "id": "sticky-test-trigger",
+      "id": "d18854a5-d875-4e3b-a94e-bc80d1ded868",
       "name": "Sticky Note - Test Trigger",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        240,
-        -360
+        24320,
+        8032
       ]
     },
     {
       "parameters": {},
-      "id": "node-manual-trigger",
-      "name": "Manual Trigger — Test",
+      "id": "ceb24ef2-5be7-4784-b517-f59235eee6cf",
+      "name": "Manual Trigger \u2014 Test",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
       "position": [
-        280,
-        -140
+        24368,
+        8256
       ]
     },
     {
       "parameters": {
-        "jsCode": "// ============================================================\n// TEST DATA — Simulates a raw JotForm webhook submission\n// Outputs data in the same format JotForm sends, so it flows\n// through the Parse node and all downstream references work.\n// Edit these values to test with different brands.\n// ============================================================\n\nreturn [{\n  json: {\n    body: {\n      client_name: 'Test User',\n      client_email: 'test@example.com',\n      whatsapp_number: '+919999999999',\n      brand_name: 'TestBrand',\n      website_url: 'https://testbrand.com',\n      product_feature: 'Premium organic skincare serum with Vitamin C',\n      differentiator: 'Only brand using high-altitude Himalayan botanicals',\n      competitors: 'Mamaearth, Plum, Minimalist',\n      competitor_strengths: 'Mamaearth has strong distribution, Minimalist has science-forward branding',\n      target_user: 'Women 22-35, urban, ingredient-conscious, mid-premium budget',\n      biggest_problem: 'Dull skin, dark spots, want visible results in 2 weeks',\n      main_hesitation: 'Too many serums in the market — why is this different?',\n      social_proof: '15K+ 5-star reviews, featured in Vogue India',\n      selling_proposition: 'Visible glow in 14 days or money back',\n      brand_personality: 'Clean, confident, earthy-luxe, approachable expert',\n      credibility_point: 'Dermatologist-tested, certified organic ingredients',\n      transformation: 'From dull tired skin to lit-from-within glow',\n      best_concepts: 'Before/after, ingredient hero, routine integration',\n      compliance: 'No medical claims, no before/after showing skin disease',\n      reference_ads: 'Minimalist serum ads, Drunk Elephant UGC style',\n      available_assets: 'Product photos, ingredient cards, customer testimonials',\n      do_not_say: 'Do not say anti-aging, do not compare directly to competitors by name',\n      num_scripts: 6,\n      additional_notes: 'Client prefers warm lighting in all UGC. Launch date is March 15.'\n    }\n  }\n}];"
+        "jsCode": "// ============================================================\n// TEST DATA \u2014 Simulates a raw JotForm webhook submission\n// Outputs data in the same format JotForm sends, so it flows\n// through the Parse node and all downstream references work.\n// Edit these values to test with different brands.\n// ============================================================\n\nreturn [{\n  json: {\n    body: {\n      client_name: 'Test User',\n      client_email: 'test@example.com',\n      whatsapp_number: '+919999999999',\n      brand_name: 'TestBrand',\n      website_url: 'https://testbrand.com',\n      product_feature: 'Premium organic skincare serum with Vitamin C',\n      differentiator: 'Only brand using high-altitude Himalayan botanicals',\n      competitors: 'Mamaearth, Plum, Minimalist',\n      competitor_strengths: 'Mamaearth has strong distribution, Minimalist has science-forward branding',\n      target_user: 'Women 22-35, urban, ingredient-conscious, mid-premium budget',\n      biggest_problem: 'Dull skin, dark spots, want visible results in 2 weeks',\n      main_hesitation: 'Too many serums in the market \u2014 why is this different?',\n      social_proof: '15K+ 5-star reviews, featured in Vogue India',\n      selling_proposition: 'Visible glow in 14 days or money back',\n      brand_personality: 'Clean, confident, earthy-luxe, approachable expert',\n      credibility_point: 'Dermatologist-tested, certified organic ingredients',\n      transformation: 'From dull tired skin to lit-from-within glow',\n      best_concepts: 'Before/after, ingredient hero, routine integration',\n      compliance: 'No medical claims, no before/after showing skin disease',\n      reference_ads: 'Minimalist serum ads, Drunk Elephant UGC style',\n      available_assets: 'Product photos, ingredient cards, customer testimonials',\n      do_not_say: 'Do not say anti-aging, do not compare directly to competitors by name',\n      num_scripts: 6,\n      additional_notes: 'Client prefers warm lighting in all UGC. Launch date is March 15.'\n    }\n  }\n}];"
       },
-      "id": "node-test-data",
+      "id": "6231fe1c-6b3e-4a57-aef0-6e59ef448dc6",
       "name": "Set Test Data",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        680,
-        -140
+        24768,
+        8256
       ]
     },
     {
       "parameters": {
-        "content": "## 8. GOOGLE DRIVE — Client Folder Setup\nFinds the alphabet folder (A-Z) in shared Clients drive,\ncreates Brand folder + References & Scripts subfolders.\nThen creates N Google Docs (one per UGC script) in Scripts.\n\nClients folder ID: 1tsbdVo92ECUyUCaCwvq1yGCRpA4uCDxT",
+        "content": "## 8. GOOGLE DRIVE \u2014 Client Folder Setup\nFinds the alphabet folder (A-Z) in shared Clients drive,\ncreates Brand folder + References & Scripts subfolders.\nThen creates N Google Docs (one per UGC script) in Scripts.\n\nClients folder ID: 1tsbdVo92ECUyUCaCwvq1yGCRpA4uCDxT",
         "height": 260,
         "width": 420,
         "color": 3
       },
-      "id": "sticky-drive-setup",
+      "id": "24adb011-832c-4b9d-9918-35645a26a70d",
       "name": "Sticky Note - Drive Setup",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        3420,
-        80
+        27504,
+        8480
       ]
     },
     {
       "parameters": {
-        "method": "GET",
         "url": "=https://www.googleapis.com/drive/v3/files?supportsAllDrives=true&includeItemsFromAllDrives=true&fields=files(id%2Cname)&q=name%3D%27{{ $('Parse JotForm & Generate Client Code').first().json.brand_name.charAt(0).toUpperCase() }}%27%20and%20%271tsbdVo92ECUyUCaCwvq1yGCRpA4uCDxT%27%20in%20parents%20and%20mimeType%3D%27application%2Fvnd.google-apps.folder%27%20and%20trashed%3Dfalse",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "googleDriveOAuth2Api",
         "options": {}
       },
-      "id": "node-drive-find-letter",
+      "id": "3889630c-2c85-47b9-8427-d3f12bb185e9",
       "name": "Find Letter Folder in Drive",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        3460,
-        320
+        27552,
+        8720
       ],
       "credentials": {
         "googleDriveOAuth2Api": {
           "id": "ZYBF6pP5UxUqJgVI",
-          "name": "Google Drive account"
+          "name": "Google Drive account - vishant"
         }
       },
       "onError": "continueErrorOutput"
@@ -774,18 +761,18 @@
         "jsonBody": "={{ JSON.stringify({ name: $('Parse JotForm & Generate Client Code').first().json.brand_name, mimeType: 'application/vnd.google-apps.folder', parents: [$json.files[0].id] }) }}",
         "options": {}
       },
-      "id": "node-drive-brand-folder",
+      "id": "0e3c0422-ae56-4b7a-a1dd-7417a013fc24",
       "name": "Create Brand Folder in Drive",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        3860,
-        320
+        27952,
+        8720
       ],
       "credentials": {
         "googleDriveOAuth2Api": {
           "id": "ZYBF6pP5UxUqJgVI",
-          "name": "Google Drive account"
+          "name": "Google Drive account - vishant"
         }
       },
       "onError": "continueErrorOutput"
@@ -801,18 +788,18 @@
         "jsonBody": "={{ JSON.stringify({ name: 'References', mimeType: 'application/vnd.google-apps.folder', parents: [$json.id] }) }}",
         "options": {}
       },
-      "id": "node-drive-references",
+      "id": "52e5b909-4d92-45ce-9cd8-271b797f5eab",
       "name": "Create References Subfolder",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        4260,
-        320
+        28352,
+        8720
       ],
       "credentials": {
         "googleDriveOAuth2Api": {
           "id": "ZYBF6pP5UxUqJgVI",
-          "name": "Google Drive account"
+          "name": "Google Drive account - vishant"
         }
       },
       "onError": "continueRegularOutput"
@@ -828,63 +815,62 @@
         "jsonBody": "={{ JSON.stringify({ name: 'Scripts', mimeType: 'application/vnd.google-apps.folder', parents: [$('Create Brand Folder in Drive').first().json.id] }) }}",
         "options": {}
       },
-      "id": "node-drive-scripts",
+      "id": "dab7841a-5f55-4245-9b59-7ddda049ba31",
       "name": "Create Scripts Subfolder",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        4660,
-        320
+        28752,
+        8720
       ],
       "credentials": {
         "googleDriveOAuth2Api": {
           "id": "ZYBF6pP5UxUqJgVI",
-          "name": "Google Drive account"
+          "name": "Google Drive account - vishant"
         }
       },
       "onError": "continueErrorOutput"
     },
     {
       "parameters": {
-        "content": "## 9. GOOGLE DOCS — Script Documents\nGenerates N empty Google Docs in the Scripts subfolder.\nDoc names match the ClickUp UGC script card names:\nUGC_C{N}_{Brand}_Creator Name_R1_{Mon'YY}\n\nScript writers open these docs and start writing.",
+        "content": "## 9. GOOGLE DOCS \u2014 Script Documents\nGenerates N empty Google Docs in the Scripts subfolder.\nDoc names match the ClickUp UGC script card names:\nUGC_C{N}_{Brand}_Creator Name_R1_{Mon'YY}\n\nScript writers open these docs and start writing.",
         "height": 220,
         "width": 400,
         "color": 3
       },
-      "id": "sticky-script-docs",
+      "id": "a7f37d88-4d89-401b-bd0e-db40a3f70096",
       "name": "Sticky Note - Script Docs",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        5020,
-        80
+        29104,
+        8480
       ]
     },
     {
       "parameters": {
         "jsCode": "// ============================================================\n// Generate Script Doc Names for Google Drive\n// Creates N doc entries matching the ClickUp card names\n// ============================================================\n\nconst d = $('Parse JotForm & Generate Client Code').first().json;\nconst scriptsFolderId = $('Create Scripts Subfolder').first().json.id;\nconst count = d.num_scripts || 0;\n\nif (count === 0) return [{ json: { _skip: true, scriptsFolderId } }];\n\nconst months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];\nconst now = new Date();\nconst monYear = months[now.getMonth()] + \"'\" + String(now.getFullYear()).slice(-2);\n\nconst docs = [];\nfor (let i = 1; i <= count; i++) {\n  docs.push({\n    name: `UGC_C${i}_${d.brand_name}_Creator Name_R1_${monYear}`,\n    scriptsFolderId\n  });\n}\n\nreturn docs.map(d => ({ json: d }));"
       },
-      "id": "node-generate-docs",
+      "id": "bbfa92cb-1bab-4473-b367-345598d00ad1",
       "name": "Generate Script Doc Names",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        5060,
-        320
+        29152,
+        8720
       ]
     },
     {
       "parameters": {
-        "batchSize": 1,
         "options": {}
       },
-      "id": "node-loop-docs",
+      "id": "b36a6515-7418-4b90-99a5-ce031bb813c8",
       "name": "Loop Over Script Docs",
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 3,
       "position": [
-        5460,
-        320
+        29552,
+        8720
       ]
     },
     {
@@ -898,18 +884,18 @@
         "jsonBody": "={{ $json._skip ? JSON.stringify({}) : JSON.stringify({ name: $json.name, mimeType: 'application/vnd.google-apps.document', parents: [$json.scriptsFolderId] }) }}",
         "options": {}
       },
-      "id": "node-create-doc",
+      "id": "ae25dba6-2c38-4ce7-9449-1d85c3577b4d",
       "name": "Create Script Doc in Drive",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        5720,
-        320
+        29808,
+        8720
       ],
       "credentials": {
         "googleDriveOAuth2Api": {
           "id": "ZYBF6pP5UxUqJgVI",
-          "name": "Google Drive account"
+          "name": "Google Drive account - vishant"
         }
       },
       "onError": "continueRegularOutput"
@@ -918,18 +904,18 @@
       "parameters": {
         "jsCode": "// Collapse loop output into a single item for Drive operations\nreturn [{ json: { ready: true } }];"
       },
-      "id": "node-drive-prepare",
+      "id": "a6bc34ae-6577-4d58-97b7-3e7586a375a6",
       "name": "Prepare Drive Step",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        3260,
-        320
+        27344,
+        8720
       ]
     }
   ],
   "connections": {
-    "Webhook — JotForm": {
+    "Webhook \u2014 JotForm": {
       "main": [
         [
           {
@@ -940,7 +926,7 @@
         ]
       ]
     },
-    "Manual Trigger — Test": {
+    "Manual Trigger \u2014 Test": {
       "main": [
         [
           {
@@ -1113,14 +1099,14 @@
       "main": [
         [
           {
-            "node": "Slack DM — Error Alert",
+            "node": "Slack DM \u2014 Error Alert",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Slack DM — Error Alert": {
+    "Slack DM \u2014 Error Alert": {
       "main": [
         [
           {
@@ -1260,23 +1246,1336 @@
     }
   },
   "settings": {
-    "executionOrder": "v1"
+    "executionOrder": "v1",
+    "availableInMCP": false,
+    "callerPolicy": "workflowsFromSameOwner"
   },
   "staticData": null,
-  "tags": [
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": {},
+  "versionId": "64018dc3-9aa4-466c-a566-1449a3d372c4",
+  "activeVersionId": "64018dc3-9aa4-466c-a566-1449a3d372c4",
+  "versionCounter": 257,
+  "triggerCount": 1,
+  "shared": [
     {
-      "name": "Onboarding",
-      "id": "1"
-    },
-    {
-      "name": "UGC",
-      "id": "2"
-    },
-    {
-      "name": "Client Ops",
-      "id": "3"
+      "updatedAt": "2026-02-11T21:48:14.000Z",
+      "createdAt": "2026-02-11T21:48:14.000Z",
+      "role": "workflow:owner",
+      "workflowId": "ZJfWCoCYf9c0O8tdywMTj",
+      "projectId": "AD8mXtbIf5cdYNIV",
+      "project": {
+        "updatedAt": "2026-01-26T04:34:53.263Z",
+        "createdAt": "2026-01-26T04:34:35.063Z",
+        "id": "AD8mXtbIf5cdYNIV",
+        "name": "SenseInfo Tech <senseinfotechno@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "ed50a507-d93d-45c3-9412-d80babb81dd0",
+        "projectRelations": [
+          {
+            "updatedAt": "2026-01-26T04:34:35.063Z",
+            "createdAt": "2026-01-26T04:34:35.063Z",
+            "userId": "ed50a507-d93d-45c3-9412-d80babb81dd0",
+            "projectId": "AD8mXtbIf5cdYNIV",
+            "user": {
+              "updatedAt": "2026-02-16T19:22:13.000Z",
+              "createdAt": "2026-01-26T04:34:34.578Z",
+              "id": "ed50a507-d93d-45c3-9412-d80babb81dd0",
+              "email": "senseinfotechno@gmail.com",
+              "firstName": "SenseInfo",
+              "lastName": "Tech",
+              "personalizationAnswers": {
+                "version": "v4",
+                "personalization_survey_submitted_at": "2026-01-26T04:35:01.423Z",
+                "personalization_survey_n8n_version": "2.4.6",
+                "companySize": "<20",
+                "companyType": "saas",
+                "role": "business-owner",
+                "reportedSource": "google"
+              },
+              "settings": {
+                "userActivated": true,
+                "firstSuccessfulWorkflowId": "T2U_raVAJPmEIai1EY6TF",
+                "userActivatedAt": 1769404953077,
+                "easyAIWorkflowOnboarded": true,
+                "npsSurvey": {
+                  "waitingForResponse": true,
+                  "ignoredCount": 2,
+                  "lastShownAt": 1770721963325
+                }
+              },
+              "disabled": false,
+              "mfaEnabled": false,
+              "lastActiveAt": "2026-02-16",
+              "isPending": false
+            }
+          }
+        ]
+      }
     }
   ],
-  "triggerCount": 1,
-  "pinData": {}
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-02-17T09:37:10.068Z",
+    "createdAt": "2026-02-17T09:37:10.068Z",
+    "versionId": "64018dc3-9aa4-466c-a566-1449a3d372c4",
+    "workflowId": "ZJfWCoCYf9c0O8tdywMTj",
+    "nodes": [
+      {
+        "parameters": {
+          "content": "## 1. TRIGGER\nWebhook receives JotForm POST at /ugc-onboarding\nJotForm sends data in inconsistent formats \u2014 the Code node handles all parsing.",
+          "height": 180,
+          "width": 320,
+          "color": 4
+        },
+        "id": "65cd0cb0-6576-412f-ac97-655bbebce635",
+        "name": "Sticky Note - Trigger",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          24320,
+          8480
+        ]
+      },
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "ugc-onboarding",
+          "responseMode": "lastNode",
+          "options": {}
+        },
+        "id": "1c8bebc5-6a7d-4e11-b830-6bebd0f67192",
+        "name": "Webhook \u2014 JotForm",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 1.1,
+        "position": [
+          24368,
+          8720
+        ],
+        "webhookId": "ugc-onboarding-webhook"
+      },
+      {
+        "parameters": {
+          "content": "## 2. PARSE & GENERATE CLIENT CODE\nHandles 3 JotForm data formats:\n1. body.rawRequest (JSON string)\n2. Numbered q-fields (q1_whatIs, etc.)\n3. Direct field names\n\nAlso generates client code: ABC-MMDD",
+          "height": 220,
+          "width": 340,
+          "color": 6
+        },
+        "id": "588c63e7-4645-4fe7-81aa-b98a916df18f",
+        "name": "Sticky Note - Parse",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          24720,
+          8480
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "// ============================================================\n// Parse JotForm & Generate Client Code\n// Handles multiple JotForm data formats\n// ============================================================\n\nconst body = $input.first().json.body || $input.first().json;\n\n// --- STRATEGY 1: rawRequest JSON string ---\nlet parsed = null;\ntry {\n  if (body.rawRequest && typeof body.rawRequest === 'string') {\n    parsed = JSON.parse(body.rawRequest);\n  } else if (body.rawRequest && typeof body.rawRequest === 'object') {\n    parsed = body.rawRequest;\n  }\n} catch (e) {\n  parsed = null;\n}\n\n// --- STRATEGY 2: q-prefixed fields (q1_whatIs, q2_email, etc.) ---\nfunction fromQFields(b) {\n  const qMap = {};\n  for (const key of Object.keys(b)) {\n    if (/^q\\d+/.test(key)) {\n      qMap[key] = b[key];\n    }\n  }\n  if (Object.keys(qMap).length === 0) return null;\n\n  // Sort by question number\n  const sorted = Object.entries(qMap).sort((a, b) => {\n    const numA = parseInt(a[0].match(/^q(\\d+)/)[1]);\n    const numB = parseInt(b[0].match(/^q(\\d+)/)[1]);\n    return numA - numB;\n  });\n\n  // Map by order (best-effort mapping based on form field order)\n  const fieldOrder = [\n    'client_name', 'client_email', 'whatsapp_number', 'brand_name', 'website_url',\n    'product_feature', 'differentiator', 'competitors', 'competitor_strengths',\n    'target_user', 'biggest_problem', 'main_hesitation',\n    'social_proof', 'selling_proposition', 'brand_personality', 'credibility_point', 'transformation',\n    'best_concepts', 'compliance', 'reference_ads', 'available_assets', 'do_not_say', 'additional_notes', 'num_scripts'\n  ];\n\n  const result = {};\n  sorted.forEach(([key, val], i) => {\n    if (i < fieldOrder.length) {\n      result[fieldOrder[i]] = val;\n    }\n  });\n  return result;\n}\n\n// --- STRATEGY 3: Direct field names ---\nfunction fromDirectFields(b) {\n  const directFields = [\n    'client_name', 'client_email', 'whatsapp_number', 'brand_name', 'website_url',\n    'product_feature', 'differentiator', 'competitors', 'competitor_strengths',\n    'target_user', 'biggest_problem', 'main_hesitation',\n    'social_proof', 'selling_proposition', 'brand_personality', 'credibility_point', 'transformation',\n    'best_concepts', 'compliance', 'reference_ads', 'available_assets', 'do_not_say', 'additional_notes', 'num_scripts'\n  ];\n  const found = {};\n  let count = 0;\n  for (const f of directFields) {\n    if (b[f] !== undefined) {\n      found[f] = b[f];\n      count++;\n    }\n  }\n  return count > 0 ? found : null;\n}\n\n// Resolve data source\nlet data = parsed || fromQFields(body) || fromDirectFields(body) || body;\n\n// --- HELPER: Clean a field value ---\nfunction clean(val) {\n  if (val === undefined || val === null) return '';\n  if (Array.isArray(val)) return val.map(v => String(v).trim()).filter(Boolean).join(', ');\n  if (typeof val === 'object') {\n    // Handle name object: { first, last } or { prefix, first, middle, last }\n    if (val.first || val.last) {\n      return [val.prefix, val.first, val.middle, val.last].filter(Boolean).map(s => String(s).trim()).join(' ');\n    }\n    // Handle phone object: { area, phone } or { countryCode, area, phone }\n    if (val.phone !== undefined) {\n      const parts = [val.countryCode, val.area, val.phone].filter(Boolean).map(s => String(s).replace(/[\\s\\-()]/g, ''));\n      return parts.join('');\n    }\n    return JSON.stringify(val);\n  }\n  return String(val).trim();\n}\n\n// --- Extract and clean all 23 fields ---\nconst client_name = clean(data.client_name || data.clientName || data.name);\nconst client_email = clean(data.client_email || data.clientEmail || data.email);\nconst whatsapp_number = clean(data.whatsapp_number || data.whatsappNumber || data.whatsapp || data.phone);\nconst brand_name = clean(data.brand_name || data.brandName || data.brand);\nconst website_url = clean(data.website_url || data.websiteUrl || data.website);\nconst product_feature = clean(data.product_feature || data.productFeature);\nconst differentiator = clean(data.differentiator);\nconst competitors = clean(data.competitors);\nconst competitor_strengths = clean(data.competitor_strengths || data.competitorStrengths);\nconst target_user = clean(data.target_user || data.targetUser);\nconst biggest_problem = clean(data.biggest_problem || data.biggestProblem);\nconst main_hesitation = clean(data.main_hesitation || data.mainHesitation);\nconst social_proof = clean(data.social_proof || data.socialProof);\nconst selling_proposition = clean(data.selling_proposition || data.sellingProposition);\nconst brand_personality = clean(data.brand_personality || data.brandPersonality);\nconst credibility_point = clean(data.credibility_point || data.credibilityPoint);\nconst transformation = clean(data.transformation);\nconst best_concepts = clean(data.best_concepts || data.bestConcepts);\nconst compliance = clean(data.compliance);\nconst reference_ads = clean(data.reference_ads || data.referenceAds);\nconst available_assets = clean(data.available_assets || data.availableAssets);\nconst do_not_say = clean(data.do_not_say || data.doNotSay);\nconst additional_notes = clean(data.additional_notes || data.additionalNotes);\nconst num_scripts = parseInt(clean(data.num_scripts || data.numScripts || data.number_of_scripts || data.script_count)) || 0;\n\n// --- Generate Client Code ---\n// Rules: first 3 chars of brand name (uppercase), skip \"The\" prefix, strip special chars\nfunction generateClientCode(brandName) {\n  let name = brandName.trim();\n  // Remove leading \"The \" (case-insensitive)\n  name = name.replace(/^the\\s+/i, '');\n  // Remove special characters, keep letters and spaces\n  name = name.replace(/[^a-zA-Z\\s]/g, '');\n  // Take first 3 alphabetic characters of concatenated name (no spaces)\n  // Examples: 'Yaan Man' \u2192 YAA, 'Supafuelz' \u2192 SUP, 'The Pain Company' \u2192 (skip The) \u2192 PAI\n  const concat = name.replace(/\\s+/g, '');\n  const code = (concat.substring(0, 3) || 'XXX').toUpperCase();\n\n  // Add date: MMDD\n  const now = new Date();\n  const mm = String(now.getMonth() + 1).padStart(2, '0');\n  const dd = String(now.getDate()).padStart(2, '0');\n  return `${code}-${mm}${dd}`;\n}\n\nconst client_code = generateClientCode(brand_name);\n\n// Start date: today in DD/MM/YYYY\nconst now = new Date();\nconst start_date = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;\n\nreturn [{\n  json: {\n    client_code,\n    brand_name,\n    client_name,\n    client_email,\n    whatsapp_number,\n    website_url,\n    product_feature,\n    differentiator,\n    competitors,\n    competitor_strengths,\n    target_user,\n    biggest_problem,\n    main_hesitation,\n    social_proof,\n    selling_proposition,\n    brand_personality,\n    credibility_point,\n    transformation,\n    best_concepts,\n    compliance,\n    reference_ads,\n    available_assets,\n    do_not_say,\n    additional_notes,\n    num_scripts,\n    status: 'Onboarding',\n    start_date,\n    folder_name: `${brand_name} - UGC`,\n    list_name: `${brand_name} - UGC Pipeline`,\n    channel_name: `${brand_name} - UGC`\n  }\n}];"
+        },
+        "id": "326cc7ff-5a27-4c0b-9c0c-f145cddd2e38",
+        "name": "Parse JotForm & Generate Client Code",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          24768,
+          8720
+        ]
+      },
+      {
+        "parameters": {
+          "content": "## 3. GOOGLE SHEETS \u2014 Client Database\nAppends a row with all 28 columns (A\u2013AB) to the main client database sheet.\nPlaceholder document ID \u2014 replace with your actual Google Sheet ID.",
+          "height": 180,
+          "width": 340,
+          "color": 3
+        },
+        "id": "2bfd1981-731f-49ea-8af7-09cff11c141d",
+        "name": "Sticky Note - Client DB",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          25152,
+          8480
+        ]
+      },
+      {
+        "parameters": {
+          "operation": "append",
+          "documentId": {
+            "__rl": true,
+            "value": "1cB4wtyp0l0xwH2Ukw-U93eW9_Ix1lB6EroYs1GyDLCM",
+            "mode": "id"
+          },
+          "sheetName": {
+            "__rl": true,
+            "value": "Client Database",
+            "mode": "name"
+          },
+          "columns": {
+            "mappingMode": "autoMapInputData",
+            "value": {},
+            "matchingColumns": [],
+            "schema": []
+          },
+          "options": {}
+        },
+        "id": "8828f091-8868-4d1c-845d-d58ccf3bfc94",
+        "name": "Add to Client Database",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 4.5,
+        "position": [
+          25184,
+          8720
+        ],
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "Aas0vt74gbEuYgmW",
+            "name": "Google Sheets account 2 - vishant"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "content": "## 4. CLICKUP \u2014 Create Folder (HTTP Request)\nPOST /api/v2/space/90165772240/folder\nCreates \"[Brand] - UGC\" folder. Uses HTTP Request to bypass n8n ClickUp node dropdown issues.",
+          "height": 180,
+          "width": 340,
+          "color": 5
+        },
+        "id": "323c05cb-c691-435f-b6d4-423db6003b2f",
+        "name": "Sticky Note - ClickUp Folder",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          25568,
+          8480
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://api.clickup.com/api/v2/space/90165772240/folder",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "clickUpApi",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ name: $('Parse JotForm & Generate Client Code').first().json.folder_name }) }}",
+          "options": {}
+        },
+        "id": "fd315f0b-f668-4750-bfe1-463dd5abb9fd",
+        "name": "Create Client Folder",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          25600,
+          8720
+        ],
+        "credentials": {
+          "clickUpApi": {
+            "id": "CH8wDVhGoKw39AK1",
+            "name": "ClickUp account"
+          }
+        },
+        "onError": "continueErrorOutput"
+      },
+      {
+        "parameters": {
+          "content": "## 4b. CLICKUP \u2014 Create Onboarding Doc\nPOST /api/v3/workspaces/90161381822/docs\nCreates a ClickUp Doc inside the brand folder so\nthe script writer has the full onboarding brief in one place.\nThen edits the first page with all form data formatted in markdown.",
+          "height": 220,
+          "width": 380,
+          "color": 5
+        },
+        "id": "60c6ef10-b81e-49e0-af55-f7fdf6e3502d",
+        "name": "Sticky Note - ClickUp Onboarding Doc",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          25792,
+          8144
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://api.clickup.com/api/v3/workspaces/90161381822/docs",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "clickUpApi",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ name: $('Parse JotForm & Generate Client Code').first().json.brand_name + ' \u2014 Onboarding Brief', parent: { id: String($('Create Client Folder').first().json.id), type: 5 } }) }}",
+          "options": {}
+        },
+        "id": "c0399e5f-0226-4e29-899e-656d61ad8fdd",
+        "name": "Create Onboarding Doc",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          25824,
+          8352
+        ],
+        "credentials": {
+          "clickUpApi": {
+            "id": "CH8wDVhGoKw39AK1",
+            "name": "ClickUp account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "=https://api.clickup.com/api/v3/workspaces/90161381822/docs/{{ $json.id }}/pages",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "clickUpApi",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ (() => { const d = $('Parse JotForm & Generate Client Code').first().json; const content = '# ' + d.brand_name + ' \u2014 Onboarding Brief\\n\\n' + '**Client Code:** ' + d.client_code + '\\n' + '**Client Name:** ' + d.client_name + '\\n' + '**Email:** ' + d.client_email + '\\n' + '**WhatsApp:** ' + d.whatsapp_number + '\\n' + '**Website:** ' + d.website_url + '\\n\\n' + '---\\n\\n' + '## Product & Positioning\\n' + '**Product / Feature:** ' + d.product_feature + '\\n' + '**Differentiator:** ' + d.differentiator + '\\n' + '**Competitors:** ' + d.competitors + '\\n' + '**Competitor Strengths:** ' + d.competitor_strengths + '\\n' + '**Selling Proposition:** ' + d.selling_proposition + '\\n\\n' + '---\\n\\n' + '## Target Audience\\n' + '**Target User:** ' + d.target_user + '\\n' + '**Biggest Problem:** ' + d.biggest_problem + '\\n' + '**Main Hesitation:** ' + d.main_hesitation + '\\n' + '**Transformation:** ' + d.transformation + '\\n\\n' + '---\\n\\n' + '## Brand & Creative\\n' + '**Brand Personality:** ' + d.brand_personality + '\\n' + '**Credibility Point:** ' + d.credibility_point + '\\n' + '**Social Proof:** ' + d.social_proof + '\\n' + '**Best Concepts:** ' + d.best_concepts + '\\n' + '**Reference Ads:** ' + d.reference_ads + '\\n\\n' + '---\\n\\n' + '## Rules & Compliance\\n' + '**Compliance:** ' + d.compliance + '\\n' + '**Do NOT Say:** ' + d.do_not_say + '\\n\\n' + '---\\n\\n' + '## Assets & Notes\\n' + '**Available Assets:** ' + d.available_assets + '\\n' + '**Number of Scripts:** ' + d.num_scripts + '\\n' + '**Additional Notes:** ' + d.additional_notes; return JSON.stringify({ name: d.brand_name + ' \u2014 Onboarding Brief', content: content, content_format: 'text/md' }); })() }}",
+          "options": {}
+        },
+        "id": "52b1f145-c22a-4083-8c1d-5c6e8772a204",
+        "name": "Add Onboarding Brief Page",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          26224,
+          8352
+        ],
+        "credentials": {
+          "clickUpApi": {
+            "id": "CH8wDVhGoKw39AK1",
+            "name": "ClickUp account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "content": "## 5. CLICKUP \u2014 Create List (HTTP Request)\nPOST /api/v2/folder/{id}/list\nCreates pipeline list inside new folder. Uses HTTP Request to bypass dropdown issues.",
+          "height": 180,
+          "width": 340,
+          "color": 5
+        },
+        "id": "3695c934-0472-42bc-a85d-687644940e43",
+        "name": "Sticky Note - ClickUp List",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          25984,
+          8480
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "=https://api.clickup.com/api/v2/folder/{{ $json.id }}/list",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "clickUpApi",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ name: $('Parse JotForm & Generate Client Code').first().json.list_name }) }}",
+          "options": {}
+        },
+        "id": "aa15f1e9-dd63-47bf-8a6e-f50fba955c2f",
+        "name": "Create Pipeline List in Folder",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          26032,
+          8720
+        ],
+        "credentials": {
+          "clickUpApi": {
+            "id": "CH8wDVhGoKw39AK1",
+            "name": "ClickUp account"
+          }
+        },
+        "onError": "continueErrorOutput"
+      },
+      {
+        "parameters": {
+          "content": "## 6. GENERATE TASKS + UGC SCRIPT CARDS\nCode node builds an array of 10 onboarding tasks with:\n- Due dates (today + N days as Unix ms)\n- Priorities (1=urgent \u2192 4=low)\n- Rich descriptions with client context\n\nAlso generates N UGC script cards named:\nUGC_C{N}_{Brand}_Creator Name_R1_{Mon'YY}\nwhere N = num_scripts from JotForm.",
+          "height": 200,
+          "width": 340,
+          "color": 6
+        },
+        "id": "cef03a6f-ed44-4526-9fb6-70e0b194ca3c",
+        "name": "Sticky Note - Task Generation",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          26400,
+          8480
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "// ============================================================\n// Generate 10 Onboarding Tasks for ClickUp\n// ============================================================\n\nlet d, listId;\ntry {\n  d = $('Parse JotForm & Generate Client Code').first().json;\n} catch (e) {\n  throw new Error('Cannot read Parse node output: ' + e.message);\n}\ntry {\n  listId = $('Create Pipeline List in Folder').first().json.id;\n} catch (e) {\n  throw new Error('Cannot read List node output (id): ' + e.message);\n}\n\nfunction dueDate(daysFromNow) {\n  const dt = new Date();\n  dt.setDate(dt.getDate() + daysFromNow);\n  dt.setHours(18, 0, 0, 0); // 6 PM deadline\n  return dt.getTime();\n}\n\nconst tasks = [\n  {\n    name: 'Review onboarding brief & flag gaps',\n    due_date: dueDate(1),\n    priority: 1,\n    description: `Read ${d.brand_name} brief. Flag items marked 'discuss on call' or blank.\\n\\nProduct: ${d.product_feature}\\nDifferentiator: ${d.differentiator}\\nCompliance: ${d.compliance || 'None specified'}\\nDo NOT say: ${d.do_not_say || 'None specified'}`,\n    listId\n  },\n  {\n    name: 'Schedule kickoff call with client',\n    due_date: dueDate(1),\n    priority: 1,\n    description: `Contact ${d.client_name} via WhatsApp (${d.whatsapp_number}) or email (${d.client_email}).\\nSchedule call to discuss flagged items + creative direction.`,\n    listId\n  },\n  {\n    name: 'Competitor ad research & analysis',\n    due_date: dueDate(3),\n    priority: 2,\n    description: `Research: ${d.competitors}\\nWhat they do better: ${d.competitor_strengths}\\nPull current ads from Meta Ad Library.\\nReference ads client likes: ${d.reference_ads || 'None provided'}`,\n    listId\n  },\n  {\n    name: 'Define creative angles & concepts',\n    due_date: dueDate(3),\n    priority: 2,\n    description: `Based on brief:\\nDifferentiator: ${d.differentiator}\\nTarget: ${d.target_user}\\nProblem solved: ${d.biggest_problem}\\nHesitation: ${d.main_hesitation}\\nBrand personality: ${d.brand_personality}\\nRef ads: ${d.reference_ads || 'None'}\\n\\nPropose 3-5 creative angles.`,\n    listId\n  },\n  {\n    name: 'Write first batch of UGC scripts',\n    due_date: dueDate(5),\n    priority: 2,\n    description: `Write 3-5 UGC scripts for ${d.product_feature}\\nSelling proposition: ${d.selling_proposition}\\nTransformation: ${d.transformation}\\nBest concepts: ${d.best_concepts || 'None specified'}\\n\\n\u26a0\ufe0f COMPLIANCE: ${d.compliance || 'None'}\\n\ud83d\udeab DO NOT: ${d.do_not_say || 'None'}`,\n    listId\n  },\n  {\n    name: 'Source & match UGC creators',\n    due_date: dueDate(5),\n    priority: 3,\n    description: `Find creators matching:\\nBrand personality: ${d.brand_personality}\\nTarget audience: ${d.target_user}\\nContent style and tone requirements`,\n    listId\n  },\n  {\n    name: 'Internal creative review',\n    due_date: dueDate(7),\n    priority: 3,\n    description: `Review scripts before sharing with ${d.client_name}.\\nCheck against: ${d.compliance || 'No compliance notes'}\\nEnsure nothing in do-not list: ${d.do_not_say || 'None'}`,\n    listId\n  },\n  {\n    name: 'Client script approval',\n    due_date: dueDate(8),\n    priority: 2,\n    description: `Share scripts with ${d.client_name} (${d.client_email} / WhatsApp ${d.whatsapp_number}) for feedback.`,\n    listId\n  },\n  {\n    name: 'UGC shoot coordination',\n    due_date: dueDate(12),\n    priority: 3,\n    description: `Brief creators, coordinate shoots.\\nAvailable client assets: ${d.available_assets || 'None specified'}`,\n    listId\n  },\n  {\n    name: 'First draft delivery to client',\n    due_date: dueDate(15),\n    priority: 1,\n    description: `Deliver first round of edited UGC videos to ${d.client_name} for review.`,\n    listId\n  }\n];\n\n\n\n// --- UGC Script Cards ---\n// Creates N cards named UGC_C{N}_{Brand}_Creator Name_R1_{Mon'YY}\nconst scriptCount = d.num_scripts || 0;\nconst monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];\nconst scriptNow = new Date();\nconst monYear = monthNames[scriptNow.getMonth()] + \"'\" + String(scriptNow.getFullYear()).slice(-2);\n\nfor (let i = 1; i <= scriptCount; i++) {\n  tasks.push({\n    name: `UGC_C${i}_${d.brand_name}_Creator Name_R1_${monYear}`,\n    description: `UGC Script Card #${i} for ${d.brand_name}\\n\\nProduct: ${d.product_feature}\\nTarget: ${d.target_user}\\nDifferentiator: ${d.differentiator}\\nBrand personality: ${d.brand_personality}`,\n    listId\n  });\n}\n\nreturn tasks.map(t => ({ json: t }));"
+        },
+        "id": "67729f3f-7b9e-4099-8ef4-3e12ba379d59",
+        "name": "Generate Task Array",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          26448,
+          8720
+        ],
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "content": "## 7. SPLIT & CREATE TASKS (HTTP Request)\nLoops through 10 tasks one at a time (batch size 1)\nto avoid ClickUp rate limits.\nPOST /api/v2/list/{id}/task \u2014 uses HTTP Request node.",
+          "height": 200,
+          "width": 540,
+          "color": 5
+        },
+        "id": "a940a314-2531-4eba-90ff-7848294912f7",
+        "name": "Sticky Note - Split & Create",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          26832,
+          8480
+        ]
+      },
+      {
+        "parameters": {
+          "options": {}
+        },
+        "id": "c7f4de94-8b7b-47c0-91fe-2f4acdeed0e7",
+        "name": "Loop Over Tasks",
+        "type": "n8n-nodes-base.splitInBatches",
+        "typeVersion": 3,
+        "position": [
+          26864,
+          8720
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "=https://api.clickup.com/api/v2/list/{{ $json.listId }}/task",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "clickUpApi",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ name: $json.name, description: $json.description, due_date: $json.due_date, priority: $json.priority }) }}",
+          "options": {}
+        },
+        "id": "2ca2086f-ce1e-473e-b6b0-85020b26aaba",
+        "name": "Create ClickUp Task",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          27120,
+          8720
+        ],
+        "credentials": {
+          "clickUpApi": {
+            "id": "CH8wDVhGoKw39AK1",
+            "name": "ClickUp account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "content": "## 8. SLACK NOTIFICATION\nPosts to #channel C07MN9QA1R7 with a summary of the new client.\nNon-critical \u2014 continues on fail so it doesn't block the workflow.",
+          "height": 180,
+          "width": 340,
+          "color": 2
+        },
+        "id": "9cd05a87-d233-46fd-b403-b3e01265b6f5",
+        "name": "Sticky Note - Slack",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          30192,
+          8480
+        ]
+      },
+      {
+        "parameters": {
+          "select": "channel",
+          "channelId": {
+            "__rl": true,
+            "value": "C0AFBQ5UF0E",
+            "mode": "id"
+          },
+          "text": "={{ (() => {\nconst d = $('Parse JotForm & Generate Client Code').first().json;\nconst product = (d.product_feature || '').substring(0, 100);\nconst target = (d.target_user || '').substring(0, 100);\nconst diff = (d.differentiator || '').substring(0, 100);\nconst comp = d.compliance || 'None';\nconst dontSay = d.do_not_say || 'None';\nconst personality = d.brand_personality || 'Not specified';\nreturn `\ud83c\udfac *New UGC Client Onboarded!*\\n\\n*${d.client_code} \u2014 ${d.brand_name}*\\nProduct: ${product}\\nTarget: ${target}\\nDifferentiator: ${diff}\\nBrand: ${personality}\\n\\n\u26a0\ufe0f Compliance: ${comp}\\n\ud83d\udeab Do not: ${dontSay}\\n\\n\ud83d\udccb ClickUp: ${d.folder_name} created with 10 tasks (15-day timeline) + ${d.num_scripts || 0} UGC script cards + Chat Channel + Onboarding Brief Doc\\nAM: TBD\\n\\n_Let's make some fire ads!_ \ud83d\udd25`;\n})() }}",
+          "otherOptions": {}
+        },
+        "id": "b2360413-6b3e-4204-b37b-7e825acb59cc",
+        "name": "Notify Team on Slack",
+        "type": "n8n-nodes-base.slack",
+        "typeVersion": 2.2,
+        "position": [
+          30224,
+          8720
+        ],
+        "webhookId": "f649785c-710f-4fc4-a657-b80a923930bc",
+        "credentials": {
+          "slackApi": {
+            "id": "5Q37UpOjGx4YsbyC",
+            "name": "Slack account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "content": "## 9. ONBOARDING LOG\nAppends a success record to the Onboarding Log sheet.\nTracks which steps ran and any errors.",
+          "height": 180,
+          "width": 340,
+          "color": 3
+        },
+        "id": "56dd61fe-975a-4576-b2e4-b1913ac5a2b3",
+        "name": "Sticky Note - Onboarding Log",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          30608,
+          8480
+        ]
+      },
+      {
+        "parameters": {
+          "operation": "append",
+          "documentId": {
+            "__rl": true,
+            "value": "1cB4wtyp0l0xwH2Ukw-U93eW9_Ix1lB6EroYs1GyDLCM",
+            "mode": "id"
+          },
+          "sheetName": {
+            "__rl": true,
+            "value": "Onboarding Log",
+            "mode": "name"
+          },
+          "columns": {
+            "mappingMode": "autoMapInputData",
+            "value": {},
+            "matchingColumns": [],
+            "schema": []
+          },
+          "options": {}
+        },
+        "id": "7f561c22-c11f-4445-bf50-9c8d2ede5f28",
+        "name": "Log to Onboarding Log",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 4.5,
+        "position": [
+          30640,
+          8720
+        ],
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "Aas0vt74gbEuYgmW",
+            "name": "Google Sheets account 2 - vishant"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "content": "## 10. RESPOND TO WEBHOOK\nReturns JSON to JotForm with status, client code, and brand name.\nThis is the \"Last Node\" response for the webhook.",
+          "height": 180,
+          "width": 340,
+          "color": 4
+        },
+        "id": "5fc95fb7-7d18-4ead-92d4-c57f71bc436d",
+        "name": "Sticky Note - Respond",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          31024,
+          8480
+        ]
+      },
+      {
+        "parameters": {
+          "respondWith": "text",
+          "responseBody": "={{ JSON.stringify({ status: 'success', client_code: $('Parse JotForm & Generate Client Code').first().json.client_code, brand: $('Parse JotForm & Generate Client Code').first().json.brand_name }) }}",
+          "options": {
+            "responseHeaders": {
+              "entries": [
+                {
+                  "name": "Content-Type",
+                  "value": "application/json"
+                }
+              ]
+            }
+          }
+        },
+        "id": "99470f48-d7d3-4748-b76c-19a66888d9d4",
+        "name": "Respond to Webhook",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.1,
+        "position": [
+          31072,
+          8720
+        ]
+      },
+      {
+        "parameters": {
+          "content": "## ERROR HANDLING\nIf any node in the main flow fails, this error branch:\n1. Sends a Slack DM to U06P9F49BJT\n2. Logs the failure to the Onboarding Log sheet\n3. Returns 200 to prevent JotForm retry loops",
+          "height": 200,
+          "width": 380
+        },
+        "id": "28e0335b-98ca-4747-931d-1b9567e35c43",
+        "name": "Sticky Note - Error Handling",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          25152,
+          8992
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "// ============================================================\n// Error Handler \u2014 Capture error details\n// ============================================================\n\nconst errorData = $input.first().json;\n\n// Try to get brand name from the parse node if it ran\nlet brand_name = 'Unknown';\nlet client_code = 'N/A';\ntry {\n  const parseData = $('Parse JotForm & Generate Client Code').first().json;\n  brand_name = parseData.brand_name || 'Unknown';\n  client_code = parseData.client_code || 'N/A';\n} catch (e) {\n  // Parse node may not have run\n}\n\nconst errorMessage = errorData.error?.message || errorData.message || 'Unknown error';\nconst errorNode = errorData.error?.node?.name || errorData.node || 'Unknown node';\n\nreturn [{\n  json: {\n    brand_name,\n    client_code,\n    error_message: errorMessage,\n    error_node: errorNode,\n    timestamp: new Date().toISOString()\n  }\n}];"
+        },
+        "id": "006a243d-a299-46d9-839f-23a41dcb5ed9",
+        "name": "Handle Error",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          25184,
+          9216
+        ]
+      },
+      {
+        "parameters": {
+          "select": "user",
+          "user": {
+            "__rl": true,
+            "value": "U06P9F49BJT",
+            "mode": "id"
+          },
+          "text": "={{ `\u274c Onboarding failed for ${$json.brand_name}. Error: ${$json.error_message}. Node: ${$json.error_node}` }}",
+          "otherOptions": {}
+        },
+        "id": "4f33019a-ba78-4d69-b754-fe06b8aff0ff",
+        "name": "Slack DM \u2014 Error Alert",
+        "type": "n8n-nodes-base.slack",
+        "typeVersion": 2.2,
+        "position": [
+          25600,
+          9216
+        ],
+        "webhookId": "4ea29fad-b665-4384-8abe-7764ddefcd73",
+        "credentials": {
+          "slackApi": {
+            "id": "5Q37UpOjGx4YsbyC",
+            "name": "Slack account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "operation": "append",
+          "documentId": {
+            "__rl": true,
+            "value": "1cB4wtyp0l0xwH2Ukw-U93eW9_Ix1lB6EroYs1GyDLCM",
+            "mode": "id"
+          },
+          "sheetName": {
+            "__rl": true,
+            "value": "Onboarding Log",
+            "mode": "name"
+          },
+          "columns": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "A": "={{ $json.timestamp }}",
+              "B": "={{ $json.client_code }}",
+              "C": "={{ $json.brand_name }}",
+              "D": "Failed",
+              "E": "Unknown",
+              "F": "Unknown",
+              "G": "Skipped",
+              "H": "Skipped",
+              "I": "Error",
+              "J": "={{ $json.error_node }}: {{ $json.error_message }}"
+            }
+          },
+          "options": {}
+        },
+        "id": "affd6568-c37b-417d-974d-1c8723e3775b",
+        "name": "Log Error to Sheet",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 4.5,
+        "position": [
+          26032,
+          9216
+        ],
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "Aas0vt74gbEuYgmW",
+            "name": "Google Sheets account 2 - vishant"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "respondWith": "text",
+          "responseBody": "={{ JSON.stringify({ status: 'error', message: $json.error_message || 'Unknown error', client_code: $json.client_code || '' }) }}",
+          "options": {
+            "responseCode": 200,
+            "responseHeaders": {
+              "entries": [
+                {
+                  "name": "Content-Type",
+                  "value": "application/json"
+                }
+              ]
+            }
+          }
+        },
+        "id": "4054182f-4a30-4a64-be08-f86dff8c5309",
+        "name": "Respond 200 on Error",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.1,
+        "position": [
+          26448,
+          9216
+        ]
+      },
+      {
+        "parameters": {
+          "content": "## 5b. CLICKUP \u2014 Create Chat Channel in Space\nPOST /api/v3/workspaces/90161381822/chat/channels/location\nCreates channel inside Space 90165772240 (not at workspace level).\nIf a channel already exists on the space, returns it.",
+          "height": 200,
+          "width": 380,
+          "color": 5
+        },
+        "id": "08f27481-140d-4680-92aa-3fd05dfe39b6",
+        "name": "Sticky Note - ClickUp Channel",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          26288,
+          8112
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://api.clickup.com/api/v3/workspaces/90161381822/chat/channels/location",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "clickUpApi",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ name: $(\"Parse JotForm & Generate Client Code\").first().json.channel_name, parent_id: \"90165772240\", parent_type: \"space\" }) }}",
+          "options": {}
+        },
+        "id": "d270fdf9-cfbc-4fbe-8e63-2c2b7a51f79f",
+        "name": "Create Chat Channel",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          26240,
+          8720
+        ],
+        "credentials": {
+          "clickUpApi": {
+            "id": "CH8wDVhGoKw39AK1",
+            "name": "ClickUp account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "content": "## TEST TRIGGER\nClick \"Test workflow\" to run the entire flow with demo data.\nNo webhook needed \u2014 Manual Trigger outputs raw form data that\nflows through the Parse node, so all downstream references work.\nDisable this path in production by deactivating the Manual Trigger node.",
+          "height": 200,
+          "width": 380,
+          "color": 7
+        },
+        "id": "d18854a5-d875-4e3b-a94e-bc80d1ded868",
+        "name": "Sticky Note - Test Trigger",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          24320,
+          8032
+        ]
+      },
+      {
+        "parameters": {},
+        "id": "ceb24ef2-5be7-4784-b517-f59235eee6cf",
+        "name": "Manual Trigger \u2014 Test",
+        "type": "n8n-nodes-base.manualTrigger",
+        "typeVersion": 1,
+        "position": [
+          24368,
+          8256
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "// ============================================================\n// TEST DATA \u2014 Simulates a raw JotForm webhook submission\n// Outputs data in the same format JotForm sends, so it flows\n// through the Parse node and all downstream references work.\n// Edit these values to test with different brands.\n// ============================================================\n\nreturn [{\n  json: {\n    body: {\n      client_name: 'Test User',\n      client_email: 'test@example.com',\n      whatsapp_number: '+919999999999',\n      brand_name: 'TestBrand',\n      website_url: 'https://testbrand.com',\n      product_feature: 'Premium organic skincare serum with Vitamin C',\n      differentiator: 'Only brand using high-altitude Himalayan botanicals',\n      competitors: 'Mamaearth, Plum, Minimalist',\n      competitor_strengths: 'Mamaearth has strong distribution, Minimalist has science-forward branding',\n      target_user: 'Women 22-35, urban, ingredient-conscious, mid-premium budget',\n      biggest_problem: 'Dull skin, dark spots, want visible results in 2 weeks',\n      main_hesitation: 'Too many serums in the market \u2014 why is this different?',\n      social_proof: '15K+ 5-star reviews, featured in Vogue India',\n      selling_proposition: 'Visible glow in 14 days or money back',\n      brand_personality: 'Clean, confident, earthy-luxe, approachable expert',\n      credibility_point: 'Dermatologist-tested, certified organic ingredients',\n      transformation: 'From dull tired skin to lit-from-within glow',\n      best_concepts: 'Before/after, ingredient hero, routine integration',\n      compliance: 'No medical claims, no before/after showing skin disease',\n      reference_ads: 'Minimalist serum ads, Drunk Elephant UGC style',\n      available_assets: 'Product photos, ingredient cards, customer testimonials',\n      do_not_say: 'Do not say anti-aging, do not compare directly to competitors by name',\n      num_scripts: 6,\n      additional_notes: 'Client prefers warm lighting in all UGC. Launch date is March 15.'\n    }\n  }\n}];"
+        },
+        "id": "6231fe1c-6b3e-4a57-aef0-6e59ef448dc6",
+        "name": "Set Test Data",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          24768,
+          8256
+        ]
+      },
+      {
+        "parameters": {
+          "content": "## 8. GOOGLE DRIVE \u2014 Client Folder Setup\nFinds the alphabet folder (A-Z) in shared Clients drive,\ncreates Brand folder + References & Scripts subfolders.\nThen creates N Google Docs (one per UGC script) in Scripts.\n\nClients folder ID: 1tsbdVo92ECUyUCaCwvq1yGCRpA4uCDxT",
+          "height": 260,
+          "width": 420,
+          "color": 3
+        },
+        "id": "24adb011-832c-4b9d-9918-35645a26a70d",
+        "name": "Sticky Note - Drive Setup",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          27504,
+          8480
+        ]
+      },
+      {
+        "parameters": {
+          "url": "=https://www.googleapis.com/drive/v3/files?supportsAllDrives=true&includeItemsFromAllDrives=true&fields=files(id%2Cname)&q=name%3D%27{{ $('Parse JotForm & Generate Client Code').first().json.brand_name.charAt(0).toUpperCase() }}%27%20and%20%271tsbdVo92ECUyUCaCwvq1yGCRpA4uCDxT%27%20in%20parents%20and%20mimeType%3D%27application%2Fvnd.google-apps.folder%27%20and%20trashed%3Dfalse",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "googleDriveOAuth2Api",
+          "options": {}
+        },
+        "id": "3889630c-2c85-47b9-8427-d3f12bb185e9",
+        "name": "Find Letter Folder in Drive",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          27552,
+          8720
+        ],
+        "credentials": {
+          "googleDriveOAuth2Api": {
+            "id": "ZYBF6pP5UxUqJgVI",
+            "name": "Google Drive account - vishant"
+          }
+        },
+        "onError": "continueErrorOutput"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://www.googleapis.com/drive/v3/files?supportsAllDrives=true",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "googleDriveOAuth2Api",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ name: $('Parse JotForm & Generate Client Code').first().json.brand_name, mimeType: 'application/vnd.google-apps.folder', parents: [$json.files[0].id] }) }}",
+          "options": {}
+        },
+        "id": "0e3c0422-ae56-4b7a-a1dd-7417a013fc24",
+        "name": "Create Brand Folder in Drive",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          27952,
+          8720
+        ],
+        "credentials": {
+          "googleDriveOAuth2Api": {
+            "id": "ZYBF6pP5UxUqJgVI",
+            "name": "Google Drive account - vishant"
+          }
+        },
+        "onError": "continueErrorOutput"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://www.googleapis.com/drive/v3/files?supportsAllDrives=true",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "googleDriveOAuth2Api",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ name: 'References', mimeType: 'application/vnd.google-apps.folder', parents: [$json.id] }) }}",
+          "options": {}
+        },
+        "id": "52e5b909-4d92-45ce-9cd8-271b797f5eab",
+        "name": "Create References Subfolder",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          28352,
+          8720
+        ],
+        "credentials": {
+          "googleDriveOAuth2Api": {
+            "id": "ZYBF6pP5UxUqJgVI",
+            "name": "Google Drive account - vishant"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://www.googleapis.com/drive/v3/files?supportsAllDrives=true",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "googleDriveOAuth2Api",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ name: 'Scripts', mimeType: 'application/vnd.google-apps.folder', parents: [$('Create Brand Folder in Drive').first().json.id] }) }}",
+          "options": {}
+        },
+        "id": "dab7841a-5f55-4245-9b59-7ddda049ba31",
+        "name": "Create Scripts Subfolder",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          28752,
+          8720
+        ],
+        "credentials": {
+          "googleDriveOAuth2Api": {
+            "id": "ZYBF6pP5UxUqJgVI",
+            "name": "Google Drive account - vishant"
+          }
+        },
+        "onError": "continueErrorOutput"
+      },
+      {
+        "parameters": {
+          "content": "## 9. GOOGLE DOCS \u2014 Script Documents\nGenerates N empty Google Docs in the Scripts subfolder.\nDoc names match the ClickUp UGC script card names:\nUGC_C{N}_{Brand}_Creator Name_R1_{Mon'YY}\n\nScript writers open these docs and start writing.",
+          "height": 220,
+          "width": 400,
+          "color": 3
+        },
+        "id": "a7f37d88-4d89-401b-bd0e-db40a3f70096",
+        "name": "Sticky Note - Script Docs",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          29104,
+          8480
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "// ============================================================\n// Generate Script Doc Names for Google Drive\n// Creates N doc entries matching the ClickUp card names\n// ============================================================\n\nconst d = $('Parse JotForm & Generate Client Code').first().json;\nconst scriptsFolderId = $('Create Scripts Subfolder').first().json.id;\nconst count = d.num_scripts || 0;\n\nif (count === 0) return [{ json: { _skip: true, scriptsFolderId } }];\n\nconst months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];\nconst now = new Date();\nconst monYear = months[now.getMonth()] + \"'\" + String(now.getFullYear()).slice(-2);\n\nconst docs = [];\nfor (let i = 1; i <= count; i++) {\n  docs.push({\n    name: `UGC_C${i}_${d.brand_name}_Creator Name_R1_${monYear}`,\n    scriptsFolderId\n  });\n}\n\nreturn docs.map(d => ({ json: d }));"
+        },
+        "id": "bbfa92cb-1bab-4473-b367-345598d00ad1",
+        "name": "Generate Script Doc Names",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          29152,
+          8720
+        ]
+      },
+      {
+        "parameters": {
+          "options": {}
+        },
+        "id": "b36a6515-7418-4b90-99a5-ce031bb813c8",
+        "name": "Loop Over Script Docs",
+        "type": "n8n-nodes-base.splitInBatches",
+        "typeVersion": 3,
+        "position": [
+          29552,
+          8720
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://www.googleapis.com/drive/v3/files?supportsAllDrives=true",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "googleDriveOAuth2Api",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ $json._skip ? JSON.stringify({}) : JSON.stringify({ name: $json.name, mimeType: 'application/vnd.google-apps.document', parents: [$json.scriptsFolderId] }) }}",
+          "options": {}
+        },
+        "id": "ae25dba6-2c38-4ce7-9449-1d85c3577b4d",
+        "name": "Create Script Doc in Drive",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          29808,
+          8720
+        ],
+        "credentials": {
+          "googleDriveOAuth2Api": {
+            "id": "ZYBF6pP5UxUqJgVI",
+            "name": "Google Drive account - vishant"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "// Collapse loop output into a single item for Drive operations\nreturn [{ json: { ready: true } }];"
+        },
+        "id": "a6bc34ae-6577-4d58-97b7-3e7586a375a6",
+        "name": "Prepare Drive Step",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          27344,
+          8720
+        ]
+      }
+    ],
+    "connections": {
+      "Webhook \u2014 JotForm": {
+        "main": [
+          [
+            {
+              "node": "Parse JotForm & Generate Client Code",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Manual Trigger \u2014 Test": {
+        "main": [
+          [
+            {
+              "node": "Set Test Data",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Set Test Data": {
+        "main": [
+          [
+            {
+              "node": "Parse JotForm & Generate Client Code",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Parse JotForm & Generate Client Code": {
+        "main": [
+          [
+            {
+              "node": "Add to Client Database",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Add to Client Database": {
+        "main": [
+          [
+            {
+              "node": "Create Client Folder",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Create Client Folder": {
+        "main": [
+          [
+            {
+              "node": "Create Pipeline List in Folder",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Create Onboarding Doc",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Handle Error",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Create Onboarding Doc": {
+        "main": [
+          [
+            {
+              "node": "Add Onboarding Brief Page",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Create Pipeline List in Folder": {
+        "main": [
+          [
+            {
+              "node": "Create Chat Channel",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Handle Error",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Create Chat Channel": {
+        "main": [
+          [
+            {
+              "node": "Generate Task Array",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Generate Task Array": {
+        "main": [
+          [
+            {
+              "node": "Loop Over Tasks",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Loop Over Tasks": {
+        "main": [
+          [
+            {
+              "node": "Prepare Drive Step",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Create ClickUp Task",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Create ClickUp Task": {
+        "main": [
+          [
+            {
+              "node": "Loop Over Tasks",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Notify Team on Slack": {
+        "main": [
+          [
+            {
+              "node": "Log to Onboarding Log",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Log to Onboarding Log": {
+        "main": [
+          [
+            {
+              "node": "Respond to Webhook",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Handle Error": {
+        "main": [
+          [
+            {
+              "node": "Slack DM \u2014 Error Alert",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Slack DM \u2014 Error Alert": {
+        "main": [
+          [
+            {
+              "node": "Log Error to Sheet",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Log Error to Sheet": {
+        "main": [
+          [
+            {
+              "node": "Respond 200 on Error",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Find Letter Folder in Drive": {
+        "main": [
+          [
+            {
+              "node": "Create Brand Folder in Drive",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Handle Error",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Create Brand Folder in Drive": {
+        "main": [
+          [
+            {
+              "node": "Create References Subfolder",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Handle Error",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Create References Subfolder": {
+        "main": [
+          [
+            {
+              "node": "Create Scripts Subfolder",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Create Scripts Subfolder": {
+        "main": [
+          [
+            {
+              "node": "Generate Script Doc Names",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Handle Error",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Generate Script Doc Names": {
+        "main": [
+          [
+            {
+              "node": "Loop Over Script Docs",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Loop Over Script Docs": {
+        "main": [
+          [
+            {
+              "node": "Notify Team on Slack",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Create Script Doc in Drive",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Create Script Doc in Drive": {
+        "main": [
+          [
+            {
+              "node": "Loop Over Script Docs",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prepare Drive Step": {
+        "main": [
+          [
+            {
+              "node": "Find Letter Folder in Drive",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "SenseInfo Tech",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-02-17T09:37:10.188Z",
+        "id": 77,
+        "workflowId": "ZJfWCoCYf9c0O8tdywMTj",
+        "versionId": "64018dc3-9aa4-466c-a566-1449a3d372c4",
+        "event": "activated",
+        "userId": "ed50a507-d93d-45c3-9412-d80babb81dd0"
+      }
+    ]
+  }
 }
