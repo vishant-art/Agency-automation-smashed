@@ -421,9 +421,9 @@
         320
       ],
       "credentials": {
-        "slackOAuth2Api": {
+        "slackApi": {
           "id": "5Q37UpOjGx4YsbyC",
-          "name": "Slack account"
+          "name": "Slack API"
         }
       },
       "onError": "continueRegularOutput"
@@ -570,9 +570,9 @@
         820
       ],
       "credentials": {
-        "slackOAuth2Api": {
+        "slackApi": {
           "id": "5Q37UpOjGx4YsbyC",
-          "name": "Slack account"
+          "name": "Slack API"
         }
       },
       "onError": "continueRegularOutput"

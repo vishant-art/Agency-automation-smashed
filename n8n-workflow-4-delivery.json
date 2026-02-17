@@ -441,7 +441,7 @@
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.2,
       "position": [5780, 480],
-      "credentials": { "slackOAuth2Api": { "id": "5Q37UpOjGx4YsbyC", "name": "Slack account" } },
+      "credentials": { "slackApi": { "id": "5Q37UpOjGx4YsbyC", "name": "Slack API" } },
       "onError": "continueRegularOutput"
     },
 
@@ -567,7 +567,7 @@
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.2,
       "position": [3500, 680],
-      "credentials": { "slackOAuth2Api": { "id": "5Q37UpOjGx4YsbyC", "name": "Slack account" } },
+      "credentials": { "slackApi": { "id": "5Q37UpOjGx4YsbyC", "name": "Slack API" } },
       "onError": "continueRegularOutput"
     },
 
@@ -606,7 +606,7 @@
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.2,
       "position": [1340, 900],
-      "credentials": { "slackOAuth2Api": { "id": "5Q37UpOjGx4YsbyC", "name": "Slack account" } },
+      "credentials": { "slackApi": { "id": "5Q37UpOjGx4YsbyC", "name": "Slack API" } },
       "onError": "continueRegularOutput"
     },
     {
