@@ -432,7 +432,7 @@
     {
       "parameters": {
         "select": "channel",
-        "channelId": { "__rl": true, "value": "C07MN9QA1R7", "mode": "id" },
+        "channelId": { "__rl": true, "value": "C0AFBQ5UF0E", "mode": "id" },
         "text": "={{ `*Scripts Delivered: ${$json.brand_name}*\\n\\n*${$json.total_scripts} UGC scripts delivered for ${$json.client_code}*\\n\\n${$json.script_summary}\\n\\nGoogle Docs populated | ClickUp cards updated | Airtable status: Delivered\\n\\n_Ready for ${$json.client_name}_` }}",
         "otherOptions": {}
       },
@@ -558,7 +558,7 @@
     {
       "parameters": {
         "select": "channel",
-        "channelId": { "__rl": true, "value": "C07MN9QA1R7", "mode": "id" },
+        "channelId": { "__rl": true, "value": "C0AFBQ5UF0E", "mode": "id" },
         "text": "={{ `PM rejected scripts for ${$('Merge Delivery Context').first().json.project.brand_name || 'project'}. Revision notes: ${$('Merge Delivery Context').first().json.notes || 'No notes provided'}. Re-write triggered automatically.` }}",
         "otherOptions": {}
       },

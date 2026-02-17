@@ -547,7 +547,7 @@
     {
       "parameters": {
         "select": "channel",
-        "channelId": { "__rl": true, "value": "C07MN9QA1R7", "mode": "id" },
+        "channelId": { "__rl": true, "value": "C0AFBQ5UF0E", "mode": "id" },
         "text": "={{ $json.slack_text }}",
         "otherOptions": {
           "blocksUi": "={{ $json.slack_blocks }}"

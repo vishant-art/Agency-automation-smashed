@@ -211,7 +211,7 @@
     {
       "parameters": {
         "select": "channel",
-        "channelId": { "__rl": true, "value": "C07MN9QA1R7", "mode": "id" },
+        "channelId": { "__rl": true, "value": "C0AG86W1XT2", "mode": "id" },
         "text": "={{ $json.slack_text }}",
         "otherOptions": {
           "blocksUi": "={{ $json.slack_blocks }}"
@@ -293,7 +293,7 @@
     {
       "parameters": {
         "select": "channel",
-        "channelId": { "__rl": true, "value": "C07MN9QA1R7", "mode": "id" },
+        "channelId": { "__rl": true, "value": "C0AG86W1XT2", "mode": "id" },
         "text": "={{ `PM rejected concepts for ${$('Merge Context').first().json.project.brand_name || 'project'}. Revision notes: ${$('Merge Context').first().json.notes || 'No notes provided'}. Please review and update concepts in Airtable.` }}",
         "otherOptions": {}
       },
@@ -424,7 +424,7 @@
     {
       "parameters": {
         "select": "channel",
-        "channelId": { "__rl": true, "value": "C07MN9QA1R7", "mode": "id" },
+        "channelId": { "__rl": true, "value": "C0AG86W1XT2", "mode": "id" },
         "text": "={{ `Client approved ${$('Prepare Workflow 3 Trigger').first().json.approved_count} concepts for ${$('Prepare Workflow 3 Trigger').first().json.brand_name}. Script writing started automatically.` }}",
         "otherOptions": {}
       },
@@ -504,7 +504,7 @@
     {
       "parameters": {
         "select": "channel",
-        "channelId": { "__rl": true, "value": "C07MN9QA1R7", "mode": "id" },
+        "channelId": { "__rl": true, "value": "C0AG86W1XT2", "mode": "id" },
         "text": "={{ `Client requested revisions on concepts for ${$('Merge Context').first().json.project.brand_name || 'project'}. Client feedback: ${$('Merge Context').first().json.notes || 'No specific notes'}. Please review in Airtable and update concepts.` }}",
         "otherOptions": {}
       },

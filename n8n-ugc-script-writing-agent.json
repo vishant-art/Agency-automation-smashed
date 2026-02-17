@@ -807,7 +807,7 @@
     {
       "parameters": {
         "select": "channel",
-        "channelId": { "__rl": true, "value": "C07MN9QA1R7", "mode": "id" },
+        "channelId": { "__rl": true, "value": "C0AFBQ5UF0E", "mode": "id" },
         "text": "={{ `✍️ *Script Agent Team Complete — ${$json.brand_name}*\\n\\n*${$json.total_scripts} UGC scripts generated for ${$json.client_code}*\\nQA Score: ${$json.qa_quality}/10 | Revisions: ${$json.revisions_used}\\n\\n${$json.script_summary}\\n\\n📄 Google Docs populated\\n📋 ClickUp cards updated\\n\\n*Agent Pipeline:* Research → Strategy → Writer → QA${$json.revisions_used > 0 ? ' → Revision × ' + $json.revisions_used : ''}\\n\\n_Ready for internal review before sharing with ${$json.client_name}_ 🔥` }}",
         "otherOptions": {}
       },

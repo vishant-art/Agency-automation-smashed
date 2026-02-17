@@ -387,7 +387,7 @@
     },
     {
       "parameters": {
-        "content": "## 8. SLACK NOTIFICATION\nPosts to #channel C07MN9QA1R7 with a summary of the new client.\nNon-critical — continues on fail so it doesn't block the workflow.",
+        "content": "## 8. SLACK NOTIFICATION\nPosts to #ugc-agent-notifications (C0AFBQ5UF0E) with a summary of the new client.\nNon-critical — continues on fail so it doesn't block the workflow.",
         "height": 180,
         "width": 340,
         "color": 2
@@ -406,7 +406,7 @@
         "select": "channel",
         "channelId": {
           "__rl": true,
-          "value": "C07MN9QA1R7",
+          "value": "C0AFBQ5UF0E",
           "mode": "id"
         },
         "text": "={{ (() => {\nconst d = $('Parse JotForm & Generate Client Code').first().json;\nconst product = (d.product_feature || '').substring(0, 100);\nconst target = (d.target_user || '').substring(0, 100);\nconst diff = (d.differentiator || '').substring(0, 100);\nconst comp = d.compliance || 'None';\nconst dontSay = d.do_not_say || 'None';\nconst personality = d.brand_personality || 'Not specified';\nreturn `🎬 *New UGC Client Onboarded!*\\n\\n*${d.client_code} — ${d.brand_name}*\\nProduct: ${product}\\nTarget: ${target}\\nDifferentiator: ${diff}\\nBrand: ${personality}\\n\\n⚠️ Compliance: ${comp}\\n🚫 Do not: ${dontSay}\\n\\n📋 ClickUp: ${d.folder_name} created with 10 tasks (15-day timeline) + ${d.num_scripts || 0} UGC script cards + Chat Channel + Onboarding Brief Doc\\nAM: TBD\\n\\n_Let's make some fire ads!_ 🔥`;\n})() }}",
