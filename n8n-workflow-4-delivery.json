@@ -1,8 +1,8 @@
 {
-  "updatedAt": "2026-02-17T09:42:15.432Z",
+  "updatedAt": "2026-02-18T08:32:51.387Z",
   "createdAt": "2026-02-16T08:01:57.240Z",
   "id": "hvytJvFSc6ZuNMAc",
-  "name": "UGC Phase 4 \u2014 Delivery (Google Docs + ClickUp + Client)",
+  "name": "UGC Phase 4 — Delivery (Google Docs + ClickUp + Client)",
   "description": null,
   "active": true,
   "isArchived": false,
@@ -32,7 +32,7 @@
         "options": {}
       },
       "id": "w4-webhook",
-      "name": "Webhook \u2014 Delivery",
+      "name": "Webhook — Delivery",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1.1,
       "position": [
@@ -45,7 +45,7 @@
     {
       "parameters": {},
       "id": "w4-manual-trigger",
-      "name": "Manual Trigger \u2014 Test",
+      "name": "Manual Trigger — Test",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
       "position": [
@@ -84,25 +84,16 @@
     },
     {
       "parameters": {
-        "resource": "record",
-        "operation": "search",
-        "base": {
-          "__rl": true,
-          "value": "appvFxwZc9yU8o8pK",
-          "mode": "id"
-        },
-        "table": {
-          "__rl": true,
-          "value": "Projects",
-          "mode": "name"
-        },
-        "filterByFormula": "=RECORD_ID() = '{{ $json.project_id }}'",
+        "method": "GET",
+        "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Projects/{{ $json.project_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
         "options": {}
       },
       "id": "w4-fetch-project",
       "name": "Fetch Project",
-      "type": "n8n-nodes-base.airtable",
-      "typeVersion": 2.1,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         940,
         320
@@ -116,25 +107,16 @@
     },
     {
       "parameters": {
-        "resource": "record",
-        "operation": "search",
-        "base": {
-          "__rl": true,
-          "value": "appvFxwZc9yU8o8pK",
-          "mode": "id"
-        },
-        "table": {
-          "__rl": true,
-          "value": "Scripts",
-          "mode": "name"
-        },
-        "filterByFormula": "=FIND('{{ $('Fetch Project').first().json.client_code }}', ARRAYJOIN({project_id})) > 0",
+        "method": "GET",
+        "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Scripts?filterByFormula={{ encodeURIComponent(\"FIND('\" + $('Fetch Project').first().json.fields.client_code + \"', ARRAYJOIN({project_id})) > 0\") }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
         "options": {}
       },
       "id": "w4-fetch-scripts",
       "name": "Fetch Scripts from Airtable",
-      "type": "n8n-nodes-base.airtable",
-      "typeVersion": 2.1,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         1300,
         320
@@ -148,7 +130,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Merge project + scripts + payload\nconst payload = $('Extract Delivery Payload').first().json;\nconst project = $('Fetch Project').first().json;\nconst scripts = $input.all().map(item => item.json);\n\nreturn [{ json: {\n  ...payload,\n  project,\n  scripts,\n  script_count: scripts.length\n} }];"
+        "jsCode": "// Merge project + scripts + payload\n// Handle HTTP Request format: Fetch Project returns {id, fields: {...}},\n// Fetch Scripts returns {records: [{id, fields: {...}}, ...]}\nconst payload = $('Extract Delivery Payload').first().json;\n\n// Flatten project from HTTP Request format\nconst rawProject = $('Fetch Project').first().json;\nconst project = rawProject.fields\n  ? { id: rawProject.id, ...rawProject.fields }\n  : rawProject;\n\n// Unpack scripts from HTTP Request format\nlet scripts;\nconst rawScripts = $input.all();\nif (rawScripts.length === 1 && rawScripts[0].json.records) {\n  scripts = rawScripts[0].json.records.map(r => ({ id: r.id, ...r.fields }));\n} else {\n  scripts = rawScripts.map(item => item.json);\n}\n\nreturn [{ json: {\n  ...payload,\n  project,\n  scripts,\n  script_count: scripts.length\n} }];"
       },
       "id": "w4-merge-data",
       "name": "Merge Delivery Context",
@@ -212,7 +194,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// ============================================================\n// Format approved scripts for Google Docs output\n// Same formatting logic as original workflow\n// ============================================================\n\nconst data = $input.first().json;\nconst project = data.project;\nconst scripts = data.scripts;\nconst scriptIds = data.script_ids || [];\nconst brandName = project.brand_name || project.fields?.brand_name || 'Brand';\nconst clientCode = project.client_code || project.fields?.client_code || 'N/A';\nconst clientName = project.client_name || project.fields?.client_name || 'Client';\nconst qaQuality = 'N/A';\n\n// Filter to specific script_ids if provided, otherwise use all\nconst selectedScripts = scriptIds.length > 0\n  ? scripts.filter(s => scriptIds.includes(s.id))\n  : scripts;\n\nconst formattedScripts = selectedScripts.map((s, i) => {\n  const d = s.fields || s;\n  const num = d.script_number || (i + 1);\n  const onScreenText = d.on_screen_text || '';\n\n  const docContent = [\n    `${brandName} | UGC Script #${num}`,\n    `${'='.repeat(50)}`,\n    '',\n    `CONCEPT: ${d.concept_name || 'N/A'}`,\n    `FORMAT: ${d.format || 'UGC'}`,\n    `DURATION: ${d.estimated_duration || '30 sec'}`,\n    `QA SCORE: ${d.qa_score || 'N/A'}/10`,\n    '',\n    `${'='.repeat(50)}`,\n    'HOOK (0-3 sec)',\n    `${'='.repeat(50)}`,\n    d.hook || '',\n    '',\n    `${'='.repeat(50)}`,\n    'HOOK REINFORCEMENT (3-5 sec)',\n    `${'='.repeat(50)}`,\n    d.hook_reinforcement || '',\n    '',\n    `${'='.repeat(50)}`,\n    'PROBLEM (5-10 sec)',\n    `${'='.repeat(50)}`,\n    d.problem || '',\n    '',\n    `${'='.repeat(50)}`,\n    'SOLUTION (10-18 sec)',\n    `${'='.repeat(50)}`,\n    d.solution || '',\n    '',\n    `${'='.repeat(50)}`,\n    'PROOF (18-25 sec)',\n    `${'='.repeat(50)}`,\n    d.proof || '',\n    '',\n    `${'='.repeat(50)}`,\n    'CTA (25-30 sec)',\n    `${'='.repeat(50)}`,\n    d.cta || '',\n    '',\n    `${'='.repeat(50)}`,\n    'FULL SCRIPT (for creator)',\n    `${'='.repeat(50)}`,\n    d.full_script || '',\n    '',\n    `${'='.repeat(50)}`,\n    'VISUAL DIRECTION',\n    `${'='.repeat(50)}`,\n    d.visual_direction || '',\n    '',\n    'ON-SCREEN TEXT:',\n    onScreenText,\n    '',\n    'CREATOR NOTES:',\n    d.creator_notes || '',\n    '',\n    'THUMBNAIL FRAME:',\n    d.thumbnail_frame || '',\n    '',\n    `${'='.repeat(50)}`,\n    `Generated by Smashed Agency UGC Script Agent Team`,\n    `Client: ${clientCode} | ${new Date().toISOString()}`\n  ].join('\\n');\n\n  return {\n    script_id: s.id,\n    script_number: num,\n    concept_name: d.concept_name || 'Concept ' + num,\n    format: d.format || 'UGC',\n    hook: d.hook || '',\n    full_script: d.full_script || '',\n    doc_content: docContent,\n    estimated_duration: d.estimated_duration || '30 sec'\n  };\n});\n\nreturn [{\n  json: {\n    project_id: data.project_id,\n    project,\n    brand_name: brandName,\n    client_code: clientCode,\n    client_name: clientName,\n    scripts: formattedScripts,\n    script_ids: selectedScripts.map(s => s.id),\n    total_scripts: formattedScripts.length\n  }\n}];"
+        "jsCode": "// ============================================================\n// Format approved scripts for Google Docs output — Production Brief Style\n// Outputs structured data for Google Docs API batchUpdate\n// ============================================================\n\nconst data = $input.first().json;\nconst project = data.project;\nconst scripts = data.scripts;\nconst scriptIds = data.script_ids || [];\nconst brandName = project.brand_name || project.fields?.brand_name || 'Brand';\nconst clientCode = project.client_code || project.fields?.client_code || 'N/A';\nconst clientName = project.client_name || project.fields?.client_name || 'Client';\nconst productFeature = project.product_feature || project.fields?.product_feature || '';\n\n// Filter to specific script_ids if provided, otherwise use all\nconst selectedScripts = scriptIds.length > 0\n  ? scripts.filter(s => scriptIds.includes(s.id))\n  : scripts;\n\nconst formattedScripts = selectedScripts.map((s, i) => {\n  const d = s.fields || s;\n  const num = d.script_number || (i + 1);\n  const conceptName = d.concept_name || 'Concept ' + num;\n  const conceptStory = d.concept_story || '';\n  const format = d.format || 'UGC';\n  const estimatedDuration = d.estimated_duration || '30 sec';\n\n  // Parse costumes\n  let costumes = [];\n  try {\n    costumes = typeof d.costumes === 'string' ? JSON.parse(d.costumes) : (Array.isArray(d.costumes) ? d.costumes : []);\n  } catch(e) { costumes = []; }\n\n  // Parse props\n  let props = [];\n  if (typeof d.props === 'string') {\n    props = d.props.split(',').map(p => p.trim()).filter(Boolean);\n  } else if (Array.isArray(d.props)) {\n    props = d.props;\n  }\n\n  // Parse references\n  let references = [];\n  try {\n    const refField = d.references_json || d.references || '[]';\n    references = typeof refField === 'string' ? JSON.parse(refField) : (Array.isArray(refField) ? refField : []);\n  } catch(e) { references = []; }\n\n  // Parse creative table\n  let creativeTable = [];\n  try {\n    const ct = d.creative_table_json || d.creative_table || '[]';\n    creativeTable = typeof ct === 'string' ? JSON.parse(ct) : (Array.isArray(ct) ? ct : []);\n  } catch(e) { creativeTable = []; }\n\n  // Parse hooks\n  const hook1 = d.hook_1 || d.hook || '';\n  const hook2 = d.hook_2 || '';\n  const hook3 = d.hook_3 || '';\n\n  return {\n    script_id: s.id,\n    script_number: num,\n    concept_name: conceptName,\n    concept_story: conceptStory,\n    format: format,\n    hook: hook1,\n    hook_1: hook1,\n    hook_2: hook2,\n    hook_3: hook3,\n    full_script: d.full_script || '',\n    estimated_duration: estimatedDuration,\n    costumes: costumes,\n    props: props,\n    references: references,\n    creative_table: creativeTable,\n    creator_notes: d.creator_notes || '',\n    visual_direction: d.visual_direction || '',\n    on_screen_text: d.on_screen_text || '',\n    thumbnail_frame: d.thumbnail_frame || ''\n  };\n});\n\nreturn [{\n  json: {\n    project_id: data.project_id,\n    project,\n    brand_name: brandName,\n    client_code: clientCode,\n    client_name: clientName,\n    product_feature: productFeature,\n    scripts: formattedScripts,\n    script_ids: selectedScripts.map(s => s.id),\n    total_scripts: formattedScripts.length\n  }\n}];"
       },
       "id": "w4-format-scripts",
       "name": "Format Approved Scripts",
@@ -250,7 +232,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Match generated scripts to existing Google Docs by UGC_C{N} pattern\nconst data = $('Format Approved Scripts').first().json;\nconst docs = ($input.first().json.files || []).sort((a, b) => {\n  const nA = parseInt((a.name.match(/UGC_C(\\d+)/) || [0,0])[1]);\n  const nB = parseInt((b.name.match(/UGC_C(\\d+)/) || [0,0])[1]);\n  return nA - nB;\n});\n\nconst items = data.scripts.map((s, i) => ({\n  json: {\n    doc_id: docs[i] ? docs[i].id : null,\n    doc_name: docs[i] ? docs[i].name : null,\n    doc_content: s.doc_content,\n    script_number: s.script_number\n  }\n}));\n\nreturn items.length ? items : [{ json: { _skip: true } }];"
+        "jsCode": "// Match generated scripts to existing Google Docs by UGC_C{N} pattern\nconst data = $('Format Approved Scripts').first().json;\nconst docs = ($input.first().json.files || []).sort((a, b) => {\n  const nA = parseInt((a.name.match(/UGC_C(\\d+)/) || [0,0])[1]);\n  const nB = parseInt((b.name.match(/UGC_C(\\d+)/) || [0,0])[1]);\n  return nA - nB;\n});\n\nconst items = data.scripts.map((s, i) => ({\n  json: {\n    doc_id: docs[i] ? docs[i].id : null,\n    doc_name: docs[i] ? docs[i].name : null,\n    script_number: s.script_number,\n    concept_name: s.concept_name,\n    concept_story: s.concept_story,\n    format: s.format,\n    hook: s.hook,\n    hook_1: s.hook_1,\n    hook_2: s.hook_2,\n    hook_3: s.hook_3,\n    full_script: s.full_script,\n    estimated_duration: s.estimated_duration,\n    costumes: s.costumes,\n    props: s.props,\n    references: s.references,\n    creative_table: s.creative_table,\n    creator_notes: s.creator_notes,\n    visual_direction: s.visual_direction,\n    on_screen_text: s.on_screen_text,\n    thumbnail_frame: s.thumbnail_frame,\n    brand_name: data.brand_name,\n    product_feature: data.product_feature,\n    client_code: data.client_code\n  }\n}));\n\nreturn items.length ? items : [{ json: { _skip: true } }];"
       },
       "id": "w4-match-docs",
       "name": "Match Scripts to Docs",
@@ -312,30 +294,106 @@
     },
     {
       "parameters": {
+        "jsCode": "// ============================================================\n// Build Doc Requests — Step A\n// Build Google Docs API batchUpdate requests for production brief\n// First clears existing content, then inserts new production brief\n// ============================================================\n\n// Get script data from Doc Found? node (passed through Read Doc Before Write)\nconst docData = $('Doc Found?').first().json;\nconst docStructure = $input.first().json;\n\n// Validate document body was read successfully\nif (!docStructure.body || !docStructure.body.content || docStructure.body.content.length === 0) {\n  throw new Error('Failed to read document - cannot proceed with stale data');\n}\n\nconst docId = docData.doc_id;\nconst brandName = docData.brand_name || 'Brand';\nconst num = docData.script_number || 1;\nconst conceptName = docData.concept_name || 'Concept';\nconst conceptStory = docData.concept_story || '';\nconst productFeature = docData.product_feature || '';\nconst format = docData.format || 'UGC';\nconst duration = docData.estimated_duration || '30 sec';\nconst costumes = Array.isArray(docData.costumes) ? docData.costumes : [];\nconst props = Array.isArray(docData.props) ? docData.props : [];\nconst references = Array.isArray(docData.references) ? docData.references : [];\nconst creativeTable = Array.isArray(docData.creative_table) ? docData.creative_table : [];\nconst hook1 = docData.hook_1 || docData.hook || '';\nconst hook2 = docData.hook_2 || '';\nconst hook3 = docData.hook_3 || '';\nconst creatorNotes = docData.creator_notes || '';\nconst clientCode = docData.client_code || '';\n\n// Build header text\nconst lines = [];\nlines.push(`${brandName} | UGC Script #${num} — ${conceptName}`);\nlines.push('');\nlines.push(`Product: ${productFeature || 'N/A'}`);\nlines.push(`Format: ${format} | Duration: ${duration}`);\nlines.push('');\nlines.push(`Concept: ${conceptStory || conceptName}`);\nlines.push('');\n\n// Costumes section\nlines.push('COSTUMES');\nif (costumes.length > 0) {\n  costumes.forEach(c => {\n    const link = c.reference_link ? ` (${c.reference_link})` : '';\n    lines.push(`  • ${c.item || c}${link}`);\n  });\n} else {\n  lines.push('  • N/A');\n}\nlines.push('');\n\n// Props section\nlines.push('PROPS');\nif (props.length > 0) {\n  props.forEach(p => lines.push(`  • ${p}`));\n} else {\n  lines.push('  • N/A');\n}\nlines.push('');\n\n// References section\nlines.push('REFERENCES');\nif (references.length > 0) {\n  references.forEach(r => {\n    const link = r.link ? ` — ${r.link}` : '';\n    lines.push(`  • ${r.description || r}${link}`);\n  });\n} else {\n  lines.push('  • N/A');\n}\nlines.push('');\n\n// Creative Format header\nlines.push('CREATIVE FORMAT');\nlines.push('');\n\nconst headerText = lines.join('\\n');\n\n// Table dimensions\nconst tableRows = creativeTable.length + 1; // +1 for header row\nconst tableCols = 3;\n\n// After-table text\nconst afterLines = [];\nafterLines.push('');\nafterLines.push('HOOK VARIATIONS');\nafterLines.push(`  1. ${hook1}`);\nafterLines.push(`  2. ${hook2}`);\nafterLines.push(`  3. ${hook3}`);\nafterLines.push('');\nif (creatorNotes) {\n  afterLines.push(`CREATOR NOTES: ${creatorNotes}`);\n  afterLines.push('');\n}\nafterLines.push(`Generated by Smashed Agency UGC Script Agent`);\nafterLines.push(`Client: ${clientCode} | ${new Date().toISOString().split('T')[0]}`);\nconst afterText = afterLines.join('\\n');\n\n// Build requests\nconst requests = [];\n\n// Step 1: Delete all existing content if document has content beyond the initial newline\nconst bodyContent = docStructure.body?.content || [];\nconst lastElement = bodyContent[bodyContent.length - 1];\nconst docEndIndex = lastElement?.endIndex || 2;\nif (docEndIndex > 2) {\n  requests.push({\n    deleteContentRange: {\n      range: { startIndex: 1, endIndex: docEndIndex - 1 }\n    }\n  });\n}\n\n// Step 2: Insert header text at index 1\nrequests.push({\n  insertText: {\n    location: { index: 1 },\n    text: headerText\n  }\n});\n\n// Step 3: Insert table after header text\nconst tableIndex = headerText.length + 1;\nrequests.push({\n  insertTable: {\n    location: { index: tableIndex },\n    rows: tableRows,\n    columns: tableCols\n  }\n});\n\nreturn [{ json: {\n  doc_id: docId,\n  header_text: headerText,\n  after_text: afterText,\n  table_rows: tableRows,\n  table_cols: tableCols,\n  creative_table: creativeTable,\n  header_length: headerText.length,\n  requests_json: JSON.stringify({ requests })\n} }];"
+      },
+      "id": "w4-build-doc-requests",
+      "name": "Build Doc Requests",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3980,
+        100
+      ],
+      "credentials": {}
+    },
+    {
+      "parameters": {
         "method": "POST",
         "url": "=https://docs.googleapis.com/v1/documents/{{ $json.doc_id }}:batchUpdate",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "googleDriveOAuth2Api",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ requests: [{ insertText: { location: { index: 1 }, text: $json.doc_content } }] }) }}",
+        "jsonBody": "={{ $json.requests_json }}",
         "options": {}
       },
-      "id": "w4-write-doc",
-      "name": "Write to Google Doc",
+      "id": "w4-write-doc-structure",
+      "name": "Write Doc Structure",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        3980,
-        100
+        4340,
+        -40
       ],
       "credentials": {
         "googleDriveOAuth2Api": {
           "id": "ZYBF6pP5UxUqJgVI",
           "name": "Google Drive account - vishant"
         }
+      }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://docs.googleapis.com/v1/documents/{{ $('Build Doc Requests').first().json.doc_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "options": {}
       },
-      "onError": "continueRegularOutput"
+      "id": "w4-read-doc-structure",
+      "name": "Read Doc Structure",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4700,
+        -40
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "ZYBF6pP5UxUqJgVI",
+          "name": "Google Drive account - vishant"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Build Cell Requests — Step D\n// Parse document structure, find table cells, build insertText\n// requests for each cell with voiceover/visuals/references content\n// ============================================================\n\nconst doc = $input.first().json;\nconst buildData = $('Build Doc Requests').first().json;\nconst docId = buildData.doc_id;\nconst creativeTable = buildData.creative_table || [];\n\n// Find the table in the document body\nconst body = doc.body || {};\nconst content = body.content || [];\nlet table = null;\nlet tableEndIndex = 0;\n\nfor (const element of content) {\n  if (element.table) {\n    table = element;\n    tableEndIndex = element.endIndex;\n    break;\n  }\n}\n\nif (!table) {\n  // No table found, just append the after text at the end\n  const endIdx = body.content[body.content.length - 1]?.endIndex || 1;\n  return [{ json: {\n    doc_id: docId,\n    cell_requests_json: JSON.stringify({ requests: [{ insertText: { location: { index: endIdx - 1 }, text: afterText } }] })\n  } }];\n}\n\nconst requests = [];\nconst rows = table.table.tableRows || [];\n\n// Process in REVERSE order (Google Docs API requires reverse index order for inserts)\nconst cellInserts = [];\n\n// Header row\nconst headerLabels = ['Voiceover / Dialogue', 'Visuals / Camera', 'References'];\nconst headerRow = rows[0];\nif (headerRow) {\n  for (let c = 0; c < 3; c++) {\n    const cell = headerRow.tableCells[c];\n    if (cell) {\n      const cellContent = cell.content || [];\n      const startIdx = cellContent[0]?.paragraph?.elements?.[0]?.startIndex || cell.startIndex + 1;\n      // Find the actual insertion point inside the cell paragraph\n      const paraStart = cellContent[0]?.startIndex || startIdx;\n      cellInserts.push({ index: paraStart, text: headerLabels[c] });\n    }\n  }\n}\n\n// Data rows\nfor (let r = 1; r < rows.length; r++) {\n  const row = rows[r];\n  const sceneData = creativeTable[r - 1] || {};\n  const cellTexts = [\n    sceneData.voiceover || '',\n    sceneData.visuals || '',\n    sceneData.references || ''\n  ];\n  \n  for (let c = 0; c < 3; c++) {\n    const cell = row.tableCells[c];\n    if (cell) {\n      const cellContent = cell.content || [];\n      const paraStart = cellContent[0]?.startIndex || (cell.startIndex + 1);\n      cellInserts.push({ index: paraStart, text: cellTexts[c] });\n    }\n  }\n}\n\n// Sort by index DESCENDING (must insert from end to start to preserve indices)\ncellInserts.sort((a, b) => b.index - a.index);\n\n// Build insert requests\nfor (const ci of cellInserts) {\n  if (ci.text) {\n    requests.push({\n      insertText: {\n        location: { index: ci.index },\n        text: ci.text\n      }\n    });\n  }\n}\n\n\nreturn [{ json: {\n  doc_id: docId,\n  cell_requests_json: JSON.stringify({ requests })\n} }];"
+      },
+      "id": "w4-build-cell-requests",
+      "name": "Build Cell Requests",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5060,
+        -40
+      ],
+      "credentials": {}
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://docs.googleapis.com/v1/documents/{{ $json.doc_id }}:batchUpdate",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.cell_requests_json }}",
+        "options": {}
+      },
+      "id": "w4-populate-cells",
+      "name": "Populate Table Cells",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5420,
+        -40
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "ZYBF6pP5UxUqJgVI",
+          "name": "Google Drive account - vishant"
+        }
+      }
     },
     {
       "parameters": {
@@ -556,7 +614,7 @@
         "options": {}
       },
       "id": "w4-update-scripts-delivered",
-      "name": "Update Scripts \u2014 Delivered",
+      "name": "Update Scripts — Delivered",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -583,7 +641,7 @@
         "options": {}
       },
       "id": "w4-update-project-delivered",
-      "name": "Update Project \u2014 Delivered",
+      "name": "Update Project — Delivered",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -600,7 +658,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const data = $('Format Approved Scripts').first().json;\nconst summary = data.scripts.map(s => `  ${s.script_number}. \"${s.concept_name}\" (${s.format}) \u2014 \"${(s.hook || '').substring(0, 50)}...\"`).join('\\n');\nreturn [{ json: {\n  brand_name: data.brand_name,\n  client_code: data.client_code,\n  client_name: data.client_name,\n  total_scripts: data.total_scripts,\n  script_summary: summary,\n  project_id: data.project_id\n} }];"
+        "jsCode": "const data = $('Format Approved Scripts').first().json;\nconst summary = data.scripts.map(s => `  ${s.script_number}. \"${s.concept_name}\" (${s.format}) — \"${(s.hook || '').substring(0, 50)}...\"`).join('\\n');\nreturn [{ json: {\n  brand_name: data.brand_name,\n  client_code: data.client_code,\n  client_name: data.client_name,\n  total_scripts: data.total_scripts,\n  script_summary: summary,\n  project_id: data.project_id\n} }];"
       },
       "id": "w4-prep-notify",
       "name": "Prepare Notification",
@@ -624,7 +682,7 @@
         "otherOptions": {}
       },
       "id": "w4-slack-delivered",
-      "name": "Notify Slack \u2014 Delivered",
+      "name": "Notify Slack — Delivered",
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.2,
       "position": [
@@ -641,36 +699,19 @@
     },
     {
       "parameters": {
-        "operation": "append",
-        "documentId": {
-          "__rl": true,
-          "value": "1cB4wtyp0l0xwH2Ukw-U93eW9_Ix1lB6EroYs1GyDLCM",
-          "mode": "id"
-        },
-        "sheetName": {
-          "__rl": true,
-          "value": "Script Agent Log",
-          "mode": "name"
-        },
-        "columns": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "A": "={{ new Date().toISOString() }}",
-            "B": "={{ $json.client_code }}",
-            "C": "={{ $json.brand_name }}",
-            "D": "Delivered",
-            "E": "={{ $json.total_scripts }}",
-            "F": "N/A",
-            "G": "0",
-            "H": "={{ $json.script_summary }}"
-          }
-        },
+        "method": "POST",
+        "url": "=https://sheets.googleapis.com/v4/spreadsheets/1cB4wtyp0l0xwH2Ukw-U93eW9_Ix1lB6EroYs1GyDLCM/values/Script%20Agent%20Log!A:H:append?valueInputOption=USER_ENTERED",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ values: [[ new Date().toISOString(), $('Prepare Notification').first().json.client_code, $('Prepare Notification').first().json.brand_name, 'Delivered', String($('Prepare Notification').first().json.total_scripts), 'N/A', '0', $('Prepare Notification').first().json.script_summary ]] }) }}",
         "options": {}
       },
       "id": "w4-log",
       "name": "Log to Sheet",
-      "type": "n8n-nodes-base.googleSheets",
-      "typeVersion": 4.5,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         6140,
         480
@@ -686,11 +727,13 @@
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({ status: 'success', action: 'delivered', project_id: $json.project_id || $('Format Approved Scripts').first().json.project_id, brand: $json.brand_name, client_code: $json.client_code, scripts_delivered: $json.total_scripts, message: 'Scripts delivered to Google Docs, ClickUp, and Airtable. Client notified.' }) }}",
-        "options": {}
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200
+        }
       },
       "id": "w4-respond-approve",
-      "name": "Respond \u2014 Delivered",
+      "name": "Respond — Delivered",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
@@ -742,7 +785,7 @@
         "options": {}
       },
       "id": "w4-update-scripts-rejected",
-      "name": "Update Scripts \u2014 Rejected",
+      "name": "Update Scripts — Rejected",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -769,7 +812,7 @@
         }
       },
       "id": "w4-trigger-rewrite",
-      "name": "Trigger Rewrite \u2014 Workflow 3",
+      "name": "Trigger Rewrite — Workflow 3",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -791,7 +834,7 @@
         "otherOptions": {}
       },
       "id": "w4-slack-reject",
-      "name": "Slack \u2014 Rewrite Triggered",
+      "name": "Slack — Rewrite Triggered",
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.2,
       "position": [
@@ -808,12 +851,21 @@
     },
     {
       "parameters": {
-        "respondWith": "json",
+        "respondWith": "text",
         "responseBody": "={{ JSON.stringify({ status: 'success', action: 'reject', project_id: $('Merge Delivery Context').first().json.project_id, message: 'Scripts rejected. Revision notes stored. Re-write workflow triggered.' }) }}",
-        "options": {}
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
       },
       "id": "w4-respond-reject",
-      "name": "Respond \u2014 Reject",
+      "name": "Respond — Reject",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
@@ -865,10 +917,17 @@
     },
     {
       "parameters": {
-        "respondWith": "json",
+        "respondWith": "text",
         "responseBody": "={{ JSON.stringify({ status: 'error', phase: 'delivery', message: $json.error_message, project_id: $json.project_id }) }}",
         "options": {
-          "responseCode": 200
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
         }
       },
       "id": "w4-error-respond",
@@ -880,10 +939,97 @@
         900
       ],
       "credentials": {}
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://docs.googleapis.com/v1/documents/{{ $json.doc_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "options": {}
+      },
+      "id": "w4-read-doc-before-write",
+      "name": "Read Doc Before Write",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3850,
+        30
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "ZYBF6pP5UxUqJgVI",
+          "name": "Google Drive account - vishant"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://docs.googleapis.com/v1/documents/{{ $('Build Doc Requests').first().json.doc_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "options": {}
+      },
+      "id": "w4-read-doc-aftertext",
+      "name": "Read Doc for AfterText",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5780,
+        -40
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "ZYBF6pP5UxUqJgVI",
+          "name": "Google Drive account - vishant"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://docs.googleapis.com/v1/documents/{{ $('Build Doc Requests').first().json.doc_id }}:batchUpdate",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ requests: [{ insertText: { location: { index: $json.body.content.slice(-1)[0].endIndex - 1 }, text: $('Build Doc Requests').first().json.after_text } }] }) }}",
+        "options": {}
+      },
+      "id": "w4-insert-aftertext",
+      "name": "Insert After-Table Text",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        6140,
+        -40
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "ZYBF6pP5UxUqJgVI",
+          "name": "Google Drive account - vishant"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $('Prepare Notification').first().json;\nreturn [{ json: {\n  status: 'success',\n  action: 'delivered',\n  project_id: data.project_id,\n  brand: data.brand_name,\n  client_code: data.client_code,\n  scripts_delivered: data.total_scripts,\n  message: 'Scripts delivered to Google Docs, ClickUp, and Airtable. Client notified.'\n} }];"
+      },
+      "id": "w4-build-response",
+      "name": "Build Delivery Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6320,
+        480
+      ],
+      "credentials": {}
     }
   ],
   "connections": {
-    "Webhook \u2014 Delivery": {
+    "Webhook — Delivery": {
       "main": [
         [
           {
@@ -894,7 +1040,7 @@
         ]
       ]
     },
-    "Manual Trigger \u2014 Test": {
+    "Manual Trigger — Test": {
       "main": [
         [
           {
@@ -1038,7 +1184,7 @@
       "main": [
         [
           {
-            "node": "Write to Google Doc",
+            "node": "Read Doc Before Write",
             "type": "main",
             "index": 0
           }
@@ -1052,11 +1198,55 @@
         ]
       ]
     },
-    "Write to Google Doc": {
+    "Build Doc Requests": {
       "main": [
         [
           {
-            "node": "Loop Over Docs",
+            "node": "Write Doc Structure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Doc Structure": {
+      "main": [
+        [
+          {
+            "node": "Read Doc Structure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Doc Structure": {
+      "main": [
+        [
+          {
+            "node": "Build Cell Requests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Cell Requests": {
+      "main": [
+        [
+          {
+            "node": "Populate Table Cells",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Populate Table Cells": {
+      "main": [
+        [
+          {
+            "node": "Read Doc for AfterText",
             "type": "main",
             "index": 0
           }
@@ -1174,25 +1364,25 @@
       "main": [
         [
           {
-            "node": "Update Scripts \u2014 Delivered",
+            "node": "Update Scripts — Delivered",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Update Scripts \u2014 Delivered": {
+    "Update Scripts — Delivered": {
       "main": [
         [
           {
-            "node": "Update Project \u2014 Delivered",
+            "node": "Update Project — Delivered",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Update Project \u2014 Delivered": {
+    "Update Project — Delivered": {
       "main": [
         [
           {
@@ -1207,14 +1397,14 @@
       "main": [
         [
           {
-            "node": "Notify Slack \u2014 Delivered",
+            "node": "Notify Slack — Delivered",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Notify Slack \u2014 Delivered": {
+    "Notify Slack — Delivered": {
       "main": [
         [
           {
@@ -1229,7 +1419,7 @@
       "main": [
         [
           {
-            "node": "Respond \u2014 Delivered",
+            "node": "Build Delivery Response",
             "type": "main",
             "index": 0
           }
@@ -1240,40 +1430,40 @@
       "main": [
         [
           {
-            "node": "Update Scripts \u2014 Rejected",
+            "node": "Update Scripts — Rejected",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Update Scripts \u2014 Rejected": {
+    "Update Scripts — Rejected": {
       "main": [
         [
           {
-            "node": "Trigger Rewrite \u2014 Workflow 3",
+            "node": "Trigger Rewrite — Workflow 3",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Trigger Rewrite \u2014 Workflow 3": {
+    "Trigger Rewrite — Workflow 3": {
       "main": [
         [
           {
-            "node": "Slack \u2014 Rewrite Triggered",
+            "node": "Slack — Rewrite Triggered",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Slack \u2014 Rewrite Triggered": {
+    "Slack — Rewrite Triggered": {
       "main": [
         [
           {
-            "node": "Respond \u2014 Reject",
+            "node": "Respond — Reject",
             "type": "main",
             "index": 0
           }
@@ -1301,6 +1491,50 @@
           }
         ]
       ]
+    },
+    "Read Doc Before Write": {
+      "main": [
+        [
+          {
+            "node": "Build Doc Requests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Doc for AfterText": {
+      "main": [
+        [
+          {
+            "node": "Insert After-Table Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert After-Table Text": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Docs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Delivery Response": {
+      "main": [
+        [
+          {
+            "node": "Respond — Delivered",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
@@ -1311,9 +1545,9 @@
   "staticData": null,
   "meta": null,
   "pinData": null,
-  "versionId": "c50e4c9c-7952-41ed-9bda-c35d7f59784a",
-  "activeVersionId": "c50e4c9c-7952-41ed-9bda-c35d7f59784a",
-  "versionCounter": 23,
+  "versionId": "7feb9647-ae52-4367-82f7-267a0f2d8676",
+  "activeVersionId": "7feb9647-ae52-4367-82f7-267a0f2d8676",
+  "versionCounter": 47,
   "triggerCount": 1,
   "shared": [
     {
@@ -1338,7 +1572,7 @@
             "userId": "ed50a507-d93d-45c3-9412-d80babb81dd0",
             "projectId": "AD8mXtbIf5cdYNIV",
             "user": {
-              "updatedAt": "2026-02-16T19:22:13.000Z",
+              "updatedAt": "2026-02-17T18:53:18.000Z",
               "createdAt": "2026-01-26T04:34:34.578Z",
               "id": "ed50a507-d93d-45c3-9412-d80babb81dd0",
               "email": "senseinfotechno@gmail.com",
@@ -1366,7 +1600,7 @@
               },
               "disabled": false,
               "mfaEnabled": false,
-              "lastActiveAt": "2026-02-16",
+              "lastActiveAt": "2026-02-17",
               "isPending": false
             }
           }
@@ -1376,9 +1610,9 @@
   ],
   "tags": [],
   "activeVersion": {
-    "updatedAt": "2026-02-17T09:42:15.433Z",
-    "createdAt": "2026-02-17T09:42:15.433Z",
-    "versionId": "c50e4c9c-7952-41ed-9bda-c35d7f59784a",
+    "updatedAt": "2026-02-18T08:32:51.390Z",
+    "createdAt": "2026-02-18T08:32:51.390Z",
+    "versionId": "7feb9647-ae52-4367-82f7-267a0f2d8676",
     "workflowId": "hvytJvFSc6ZuNMAc",
     "nodes": [
       {
@@ -1406,7 +1640,7 @@
           "options": {}
         },
         "id": "w4-webhook",
-        "name": "Webhook \u2014 Delivery",
+        "name": "Webhook — Delivery",
         "type": "n8n-nodes-base.webhook",
         "typeVersion": 1.1,
         "position": [
@@ -1419,7 +1653,7 @@
       {
         "parameters": {},
         "id": "w4-manual-trigger",
-        "name": "Manual Trigger \u2014 Test",
+        "name": "Manual Trigger — Test",
         "type": "n8n-nodes-base.manualTrigger",
         "typeVersion": 1,
         "position": [
@@ -1458,25 +1692,16 @@
       },
       {
         "parameters": {
-          "resource": "record",
-          "operation": "search",
-          "base": {
-            "__rl": true,
-            "value": "appvFxwZc9yU8o8pK",
-            "mode": "id"
-          },
-          "table": {
-            "__rl": true,
-            "value": "Projects",
-            "mode": "name"
-          },
-          "filterByFormula": "=RECORD_ID() = '{{ $json.project_id }}'",
+          "method": "GET",
+          "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Projects/{{ $json.project_id }}",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "airtableTokenApi",
           "options": {}
         },
         "id": "w4-fetch-project",
         "name": "Fetch Project",
-        "type": "n8n-nodes-base.airtable",
-        "typeVersion": 2.1,
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
         "position": [
           940,
           320
@@ -1490,25 +1715,16 @@
       },
       {
         "parameters": {
-          "resource": "record",
-          "operation": "search",
-          "base": {
-            "__rl": true,
-            "value": "appvFxwZc9yU8o8pK",
-            "mode": "id"
-          },
-          "table": {
-            "__rl": true,
-            "value": "Scripts",
-            "mode": "name"
-          },
-          "filterByFormula": "=FIND('{{ $('Fetch Project').first().json.client_code }}', ARRAYJOIN({project_id})) > 0",
+          "method": "GET",
+          "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Scripts?filterByFormula={{ encodeURIComponent(\"FIND('\" + $('Fetch Project').first().json.fields.client_code + \"', ARRAYJOIN({project_id})) > 0\") }}",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "airtableTokenApi",
           "options": {}
         },
         "id": "w4-fetch-scripts",
         "name": "Fetch Scripts from Airtable",
-        "type": "n8n-nodes-base.airtable",
-        "typeVersion": 2.1,
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
         "position": [
           1300,
           320
@@ -1522,7 +1738,7 @@
       },
       {
         "parameters": {
-          "jsCode": "// Merge project + scripts + payload\nconst payload = $('Extract Delivery Payload').first().json;\nconst project = $('Fetch Project').first().json;\nconst scripts = $input.all().map(item => item.json);\n\nreturn [{ json: {\n  ...payload,\n  project,\n  scripts,\n  script_count: scripts.length\n} }];"
+          "jsCode": "// Merge project + scripts + payload\n// Handle HTTP Request format: Fetch Project returns {id, fields: {...}},\n// Fetch Scripts returns {records: [{id, fields: {...}}, ...]}\nconst payload = $('Extract Delivery Payload').first().json;\n\n// Flatten project from HTTP Request format\nconst rawProject = $('Fetch Project').first().json;\nconst project = rawProject.fields\n  ? { id: rawProject.id, ...rawProject.fields }\n  : rawProject;\n\n// Unpack scripts from HTTP Request format\nlet scripts;\nconst rawScripts = $input.all();\nif (rawScripts.length === 1 && rawScripts[0].json.records) {\n  scripts = rawScripts[0].json.records.map(r => ({ id: r.id, ...r.fields }));\n} else {\n  scripts = rawScripts.map(item => item.json);\n}\n\nreturn [{ json: {\n  ...payload,\n  project,\n  scripts,\n  script_count: scripts.length\n} }];"
         },
         "id": "w4-merge-data",
         "name": "Merge Delivery Context",
@@ -1586,7 +1802,7 @@
       },
       {
         "parameters": {
-          "jsCode": "// ============================================================\n// Format approved scripts for Google Docs output\n// Same formatting logic as original workflow\n// ============================================================\n\nconst data = $input.first().json;\nconst project = data.project;\nconst scripts = data.scripts;\nconst scriptIds = data.script_ids || [];\nconst brandName = project.brand_name || project.fields?.brand_name || 'Brand';\nconst clientCode = project.client_code || project.fields?.client_code || 'N/A';\nconst clientName = project.client_name || project.fields?.client_name || 'Client';\nconst qaQuality = 'N/A';\n\n// Filter to specific script_ids if provided, otherwise use all\nconst selectedScripts = scriptIds.length > 0\n  ? scripts.filter(s => scriptIds.includes(s.id))\n  : scripts;\n\nconst formattedScripts = selectedScripts.map((s, i) => {\n  const d = s.fields || s;\n  const num = d.script_number || (i + 1);\n  const onScreenText = d.on_screen_text || '';\n\n  const docContent = [\n    `${brandName} | UGC Script #${num}`,\n    `${'='.repeat(50)}`,\n    '',\n    `CONCEPT: ${d.concept_name || 'N/A'}`,\n    `FORMAT: ${d.format || 'UGC'}`,\n    `DURATION: ${d.estimated_duration || '30 sec'}`,\n    `QA SCORE: ${d.qa_score || 'N/A'}/10`,\n    '',\n    `${'='.repeat(50)}`,\n    'HOOK (0-3 sec)',\n    `${'='.repeat(50)}`,\n    d.hook || '',\n    '',\n    `${'='.repeat(50)}`,\n    'HOOK REINFORCEMENT (3-5 sec)',\n    `${'='.repeat(50)}`,\n    d.hook_reinforcement || '',\n    '',\n    `${'='.repeat(50)}`,\n    'PROBLEM (5-10 sec)',\n    `${'='.repeat(50)}`,\n    d.problem || '',\n    '',\n    `${'='.repeat(50)}`,\n    'SOLUTION (10-18 sec)',\n    `${'='.repeat(50)}`,\n    d.solution || '',\n    '',\n    `${'='.repeat(50)}`,\n    'PROOF (18-25 sec)',\n    `${'='.repeat(50)}`,\n    d.proof || '',\n    '',\n    `${'='.repeat(50)}`,\n    'CTA (25-30 sec)',\n    `${'='.repeat(50)}`,\n    d.cta || '',\n    '',\n    `${'='.repeat(50)}`,\n    'FULL SCRIPT (for creator)',\n    `${'='.repeat(50)}`,\n    d.full_script || '',\n    '',\n    `${'='.repeat(50)}`,\n    'VISUAL DIRECTION',\n    `${'='.repeat(50)}`,\n    d.visual_direction || '',\n    '',\n    'ON-SCREEN TEXT:',\n    onScreenText,\n    '',\n    'CREATOR NOTES:',\n    d.creator_notes || '',\n    '',\n    'THUMBNAIL FRAME:',\n    d.thumbnail_frame || '',\n    '',\n    `${'='.repeat(50)}`,\n    `Generated by Smashed Agency UGC Script Agent Team`,\n    `Client: ${clientCode} | ${new Date().toISOString()}`\n  ].join('\\n');\n\n  return {\n    script_id: s.id,\n    script_number: num,\n    concept_name: d.concept_name || 'Concept ' + num,\n    format: d.format || 'UGC',\n    hook: d.hook || '',\n    full_script: d.full_script || '',\n    doc_content: docContent,\n    estimated_duration: d.estimated_duration || '30 sec'\n  };\n});\n\nreturn [{\n  json: {\n    project_id: data.project_id,\n    project,\n    brand_name: brandName,\n    client_code: clientCode,\n    client_name: clientName,\n    scripts: formattedScripts,\n    script_ids: selectedScripts.map(s => s.id),\n    total_scripts: formattedScripts.length\n  }\n}];"
+          "jsCode": "// ============================================================\n// Format approved scripts for Google Docs output — Production Brief Style\n// Outputs structured data for Google Docs API batchUpdate\n// ============================================================\n\nconst data = $input.first().json;\nconst project = data.project;\nconst scripts = data.scripts;\nconst scriptIds = data.script_ids || [];\nconst brandName = project.brand_name || project.fields?.brand_name || 'Brand';\nconst clientCode = project.client_code || project.fields?.client_code || 'N/A';\nconst clientName = project.client_name || project.fields?.client_name || 'Client';\nconst productFeature = project.product_feature || project.fields?.product_feature || '';\n\n// Filter to specific script_ids if provided, otherwise use all\nconst selectedScripts = scriptIds.length > 0\n  ? scripts.filter(s => scriptIds.includes(s.id))\n  : scripts;\n\nconst formattedScripts = selectedScripts.map((s, i) => {\n  const d = s.fields || s;\n  const num = d.script_number || (i + 1);\n  const conceptName = d.concept_name || 'Concept ' + num;\n  const conceptStory = d.concept_story || '';\n  const format = d.format || 'UGC';\n  const estimatedDuration = d.estimated_duration || '30 sec';\n\n  // Parse costumes\n  let costumes = [];\n  try {\n    costumes = typeof d.costumes === 'string' ? JSON.parse(d.costumes) : (Array.isArray(d.costumes) ? d.costumes : []);\n  } catch(e) { costumes = []; }\n\n  // Parse props\n  let props = [];\n  if (typeof d.props === 'string') {\n    props = d.props.split(',').map(p => p.trim()).filter(Boolean);\n  } else if (Array.isArray(d.props)) {\n    props = d.props;\n  }\n\n  // Parse references\n  let references = [];\n  try {\n    const refField = d.references_json || d.references || '[]';\n    references = typeof refField === 'string' ? JSON.parse(refField) : (Array.isArray(refField) ? refField : []);\n  } catch(e) { references = []; }\n\n  // Parse creative table\n  let creativeTable = [];\n  try {\n    const ct = d.creative_table_json || d.creative_table || '[]';\n    creativeTable = typeof ct === 'string' ? JSON.parse(ct) : (Array.isArray(ct) ? ct : []);\n  } catch(e) { creativeTable = []; }\n\n  // Parse hooks\n  const hook1 = d.hook_1 || d.hook || '';\n  const hook2 = d.hook_2 || '';\n  const hook3 = d.hook_3 || '';\n\n  return {\n    script_id: s.id,\n    script_number: num,\n    concept_name: conceptName,\n    concept_story: conceptStory,\n    format: format,\n    hook: hook1,\n    hook_1: hook1,\n    hook_2: hook2,\n    hook_3: hook3,\n    full_script: d.full_script || '',\n    estimated_duration: estimatedDuration,\n    costumes: costumes,\n    props: props,\n    references: references,\n    creative_table: creativeTable,\n    creator_notes: d.creator_notes || '',\n    visual_direction: d.visual_direction || '',\n    on_screen_text: d.on_screen_text || '',\n    thumbnail_frame: d.thumbnail_frame || ''\n  };\n});\n\nreturn [{\n  json: {\n    project_id: data.project_id,\n    project,\n    brand_name: brandName,\n    client_code: clientCode,\n    client_name: clientName,\n    product_feature: productFeature,\n    scripts: formattedScripts,\n    script_ids: selectedScripts.map(s => s.id),\n    total_scripts: formattedScripts.length\n  }\n}];"
         },
         "id": "w4-format-scripts",
         "name": "Format Approved Scripts",
@@ -1624,7 +1840,7 @@
       },
       {
         "parameters": {
-          "jsCode": "// Match generated scripts to existing Google Docs by UGC_C{N} pattern\nconst data = $('Format Approved Scripts').first().json;\nconst docs = ($input.first().json.files || []).sort((a, b) => {\n  const nA = parseInt((a.name.match(/UGC_C(\\d+)/) || [0,0])[1]);\n  const nB = parseInt((b.name.match(/UGC_C(\\d+)/) || [0,0])[1]);\n  return nA - nB;\n});\n\nconst items = data.scripts.map((s, i) => ({\n  json: {\n    doc_id: docs[i] ? docs[i].id : null,\n    doc_name: docs[i] ? docs[i].name : null,\n    doc_content: s.doc_content,\n    script_number: s.script_number\n  }\n}));\n\nreturn items.length ? items : [{ json: { _skip: true } }];"
+          "jsCode": "// Match generated scripts to existing Google Docs by UGC_C{N} pattern\nconst data = $('Format Approved Scripts').first().json;\nconst docs = ($input.first().json.files || []).sort((a, b) => {\n  const nA = parseInt((a.name.match(/UGC_C(\\d+)/) || [0,0])[1]);\n  const nB = parseInt((b.name.match(/UGC_C(\\d+)/) || [0,0])[1]);\n  return nA - nB;\n});\n\nconst items = data.scripts.map((s, i) => ({\n  json: {\n    doc_id: docs[i] ? docs[i].id : null,\n    doc_name: docs[i] ? docs[i].name : null,\n    script_number: s.script_number,\n    concept_name: s.concept_name,\n    concept_story: s.concept_story,\n    format: s.format,\n    hook: s.hook,\n    hook_1: s.hook_1,\n    hook_2: s.hook_2,\n    hook_3: s.hook_3,\n    full_script: s.full_script,\n    estimated_duration: s.estimated_duration,\n    costumes: s.costumes,\n    props: s.props,\n    references: s.references,\n    creative_table: s.creative_table,\n    creator_notes: s.creator_notes,\n    visual_direction: s.visual_direction,\n    on_screen_text: s.on_screen_text,\n    thumbnail_frame: s.thumbnail_frame,\n    brand_name: data.brand_name,\n    product_feature: data.product_feature,\n    client_code: data.client_code\n  }\n}));\n\nreturn items.length ? items : [{ json: { _skip: true } }];"
         },
         "id": "w4-match-docs",
         "name": "Match Scripts to Docs",
@@ -1686,30 +1902,106 @@
       },
       {
         "parameters": {
+          "jsCode": "// ============================================================\n// Build Doc Requests — Step A\n// Build Google Docs API batchUpdate requests for production brief\n// First clears existing content, then inserts new production brief\n// ============================================================\n\n// Get script data from Doc Found? node (passed through Read Doc Before Write)\nconst docData = $('Doc Found?').first().json;\nconst docStructure = $input.first().json;\n\n// Validate document body was read successfully\nif (!docStructure.body || !docStructure.body.content || docStructure.body.content.length === 0) {\n  throw new Error('Failed to read document - cannot proceed with stale data');\n}\n\nconst docId = docData.doc_id;\nconst brandName = docData.brand_name || 'Brand';\nconst num = docData.script_number || 1;\nconst conceptName = docData.concept_name || 'Concept';\nconst conceptStory = docData.concept_story || '';\nconst productFeature = docData.product_feature || '';\nconst format = docData.format || 'UGC';\nconst duration = docData.estimated_duration || '30 sec';\nconst costumes = Array.isArray(docData.costumes) ? docData.costumes : [];\nconst props = Array.isArray(docData.props) ? docData.props : [];\nconst references = Array.isArray(docData.references) ? docData.references : [];\nconst creativeTable = Array.isArray(docData.creative_table) ? docData.creative_table : [];\nconst hook1 = docData.hook_1 || docData.hook || '';\nconst hook2 = docData.hook_2 || '';\nconst hook3 = docData.hook_3 || '';\nconst creatorNotes = docData.creator_notes || '';\nconst clientCode = docData.client_code || '';\n\n// Build header text\nconst lines = [];\nlines.push(`${brandName} | UGC Script #${num} — ${conceptName}`);\nlines.push('');\nlines.push(`Product: ${productFeature || 'N/A'}`);\nlines.push(`Format: ${format} | Duration: ${duration}`);\nlines.push('');\nlines.push(`Concept: ${conceptStory || conceptName}`);\nlines.push('');\n\n// Costumes section\nlines.push('COSTUMES');\nif (costumes.length > 0) {\n  costumes.forEach(c => {\n    const link = c.reference_link ? ` (${c.reference_link})` : '';\n    lines.push(`  • ${c.item || c}${link}`);\n  });\n} else {\n  lines.push('  • N/A');\n}\nlines.push('');\n\n// Props section\nlines.push('PROPS');\nif (props.length > 0) {\n  props.forEach(p => lines.push(`  • ${p}`));\n} else {\n  lines.push('  • N/A');\n}\nlines.push('');\n\n// References section\nlines.push('REFERENCES');\nif (references.length > 0) {\n  references.forEach(r => {\n    const link = r.link ? ` — ${r.link}` : '';\n    lines.push(`  • ${r.description || r}${link}`);\n  });\n} else {\n  lines.push('  • N/A');\n}\nlines.push('');\n\n// Creative Format header\nlines.push('CREATIVE FORMAT');\nlines.push('');\n\nconst headerText = lines.join('\\n');\n\n// Table dimensions\nconst tableRows = creativeTable.length + 1; // +1 for header row\nconst tableCols = 3;\n\n// After-table text\nconst afterLines = [];\nafterLines.push('');\nafterLines.push('HOOK VARIATIONS');\nafterLines.push(`  1. ${hook1}`);\nafterLines.push(`  2. ${hook2}`);\nafterLines.push(`  3. ${hook3}`);\nafterLines.push('');\nif (creatorNotes) {\n  afterLines.push(`CREATOR NOTES: ${creatorNotes}`);\n  afterLines.push('');\n}\nafterLines.push(`Generated by Smashed Agency UGC Script Agent`);\nafterLines.push(`Client: ${clientCode} | ${new Date().toISOString().split('T')[0]}`);\nconst afterText = afterLines.join('\\n');\n\n// Build requests\nconst requests = [];\n\n// Step 1: Delete all existing content if document has content beyond the initial newline\nconst bodyContent = docStructure.body?.content || [];\nconst lastElement = bodyContent[bodyContent.length - 1];\nconst docEndIndex = lastElement?.endIndex || 2;\nif (docEndIndex > 2) {\n  requests.push({\n    deleteContentRange: {\n      range: { startIndex: 1, endIndex: docEndIndex - 1 }\n    }\n  });\n}\n\n// Step 2: Insert header text at index 1\nrequests.push({\n  insertText: {\n    location: { index: 1 },\n    text: headerText\n  }\n});\n\n// Step 3: Insert table after header text\nconst tableIndex = headerText.length + 1;\nrequests.push({\n  insertTable: {\n    location: { index: tableIndex },\n    rows: tableRows,\n    columns: tableCols\n  }\n});\n\nreturn [{ json: {\n  doc_id: docId,\n  header_text: headerText,\n  after_text: afterText,\n  table_rows: tableRows,\n  table_cols: tableCols,\n  creative_table: creativeTable,\n  header_length: headerText.length,\n  requests_json: JSON.stringify({ requests })\n} }];"
+        },
+        "id": "w4-build-doc-requests",
+        "name": "Build Doc Requests",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          3980,
+          100
+        ],
+        "credentials": {}
+      },
+      {
+        "parameters": {
           "method": "POST",
           "url": "=https://docs.googleapis.com/v1/documents/{{ $json.doc_id }}:batchUpdate",
           "authentication": "predefinedCredentialType",
           "nodeCredentialType": "googleDriveOAuth2Api",
           "sendBody": true,
           "specifyBody": "json",
-          "jsonBody": "={{ JSON.stringify({ requests: [{ insertText: { location: { index: 1 }, text: $json.doc_content } }] }) }}",
+          "jsonBody": "={{ $json.requests_json }}",
           "options": {}
         },
-        "id": "w4-write-doc",
-        "name": "Write to Google Doc",
+        "id": "w4-write-doc-structure",
+        "name": "Write Doc Structure",
         "type": "n8n-nodes-base.httpRequest",
         "typeVersion": 4.2,
         "position": [
-          3980,
-          100
+          4340,
+          -40
         ],
         "credentials": {
           "googleDriveOAuth2Api": {
             "id": "ZYBF6pP5UxUqJgVI",
             "name": "Google Drive account - vishant"
           }
+        }
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "=https://docs.googleapis.com/v1/documents/{{ $('Build Doc Requests').first().json.doc_id }}",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "googleDriveOAuth2Api",
+          "options": {}
         },
-        "onError": "continueRegularOutput"
+        "id": "w4-read-doc-structure",
+        "name": "Read Doc Structure",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          4700,
+          -40
+        ],
+        "credentials": {
+          "googleDriveOAuth2Api": {
+            "id": "ZYBF6pP5UxUqJgVI",
+            "name": "Google Drive account - vishant"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "// ============================================================\n// Build Cell Requests — Step D\n// Parse document structure, find table cells, build insertText\n// requests for each cell with voiceover/visuals/references content\n// ============================================================\n\nconst doc = $input.first().json;\nconst buildData = $('Build Doc Requests').first().json;\nconst docId = buildData.doc_id;\nconst creativeTable = buildData.creative_table || [];\n\n// Find the table in the document body\nconst body = doc.body || {};\nconst content = body.content || [];\nlet table = null;\nlet tableEndIndex = 0;\n\nfor (const element of content) {\n  if (element.table) {\n    table = element;\n    tableEndIndex = element.endIndex;\n    break;\n  }\n}\n\nif (!table) {\n  // No table found, just append the after text at the end\n  const endIdx = body.content[body.content.length - 1]?.endIndex || 1;\n  return [{ json: {\n    doc_id: docId,\n    cell_requests_json: JSON.stringify({ requests: [{ insertText: { location: { index: endIdx - 1 }, text: afterText } }] })\n  } }];\n}\n\nconst requests = [];\nconst rows = table.table.tableRows || [];\n\n// Process in REVERSE order (Google Docs API requires reverse index order for inserts)\nconst cellInserts = [];\n\n// Header row\nconst headerLabels = ['Voiceover / Dialogue', 'Visuals / Camera', 'References'];\nconst headerRow = rows[0];\nif (headerRow) {\n  for (let c = 0; c < 3; c++) {\n    const cell = headerRow.tableCells[c];\n    if (cell) {\n      const cellContent = cell.content || [];\n      const startIdx = cellContent[0]?.paragraph?.elements?.[0]?.startIndex || cell.startIndex + 1;\n      // Find the actual insertion point inside the cell paragraph\n      const paraStart = cellContent[0]?.startIndex || startIdx;\n      cellInserts.push({ index: paraStart, text: headerLabels[c] });\n    }\n  }\n}\n\n// Data rows\nfor (let r = 1; r < rows.length; r++) {\n  const row = rows[r];\n  const sceneData = creativeTable[r - 1] || {};\n  const cellTexts = [\n    sceneData.voiceover || '',\n    sceneData.visuals || '',\n    sceneData.references || ''\n  ];\n  \n  for (let c = 0; c < 3; c++) {\n    const cell = row.tableCells[c];\n    if (cell) {\n      const cellContent = cell.content || [];\n      const paraStart = cellContent[0]?.startIndex || (cell.startIndex + 1);\n      cellInserts.push({ index: paraStart, text: cellTexts[c] });\n    }\n  }\n}\n\n// Sort by index DESCENDING (must insert from end to start to preserve indices)\ncellInserts.sort((a, b) => b.index - a.index);\n\n// Build insert requests\nfor (const ci of cellInserts) {\n  if (ci.text) {\n    requests.push({\n      insertText: {\n        location: { index: ci.index },\n        text: ci.text\n      }\n    });\n  }\n}\n\n\nreturn [{ json: {\n  doc_id: docId,\n  cell_requests_json: JSON.stringify({ requests })\n} }];"
+        },
+        "id": "w4-build-cell-requests",
+        "name": "Build Cell Requests",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          5060,
+          -40
+        ],
+        "credentials": {}
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "=https://docs.googleapis.com/v1/documents/{{ $json.doc_id }}:batchUpdate",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "googleDriveOAuth2Api",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ $json.cell_requests_json }}",
+          "options": {}
+        },
+        "id": "w4-populate-cells",
+        "name": "Populate Table Cells",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          5420,
+          -40
+        ],
+        "credentials": {
+          "googleDriveOAuth2Api": {
+            "id": "ZYBF6pP5UxUqJgVI",
+            "name": "Google Drive account - vishant"
+          }
+        }
       },
       {
         "parameters": {
@@ -1930,7 +2222,7 @@
           "options": {}
         },
         "id": "w4-update-scripts-delivered",
-        "name": "Update Scripts \u2014 Delivered",
+        "name": "Update Scripts — Delivered",
         "type": "n8n-nodes-base.httpRequest",
         "typeVersion": 4.2,
         "position": [
@@ -1957,7 +2249,7 @@
           "options": {}
         },
         "id": "w4-update-project-delivered",
-        "name": "Update Project \u2014 Delivered",
+        "name": "Update Project — Delivered",
         "type": "n8n-nodes-base.httpRequest",
         "typeVersion": 4.2,
         "position": [
@@ -1974,7 +2266,7 @@
       },
       {
         "parameters": {
-          "jsCode": "const data = $('Format Approved Scripts').first().json;\nconst summary = data.scripts.map(s => `  ${s.script_number}. \"${s.concept_name}\" (${s.format}) \u2014 \"${(s.hook || '').substring(0, 50)}...\"`).join('\\n');\nreturn [{ json: {\n  brand_name: data.brand_name,\n  client_code: data.client_code,\n  client_name: data.client_name,\n  total_scripts: data.total_scripts,\n  script_summary: summary,\n  project_id: data.project_id\n} }];"
+          "jsCode": "const data = $('Format Approved Scripts').first().json;\nconst summary = data.scripts.map(s => `  ${s.script_number}. \"${s.concept_name}\" (${s.format}) — \"${(s.hook || '').substring(0, 50)}...\"`).join('\\n');\nreturn [{ json: {\n  brand_name: data.brand_name,\n  client_code: data.client_code,\n  client_name: data.client_name,\n  total_scripts: data.total_scripts,\n  script_summary: summary,\n  project_id: data.project_id\n} }];"
         },
         "id": "w4-prep-notify",
         "name": "Prepare Notification",
@@ -1998,7 +2290,7 @@
           "otherOptions": {}
         },
         "id": "w4-slack-delivered",
-        "name": "Notify Slack \u2014 Delivered",
+        "name": "Notify Slack — Delivered",
         "type": "n8n-nodes-base.slack",
         "typeVersion": 2.2,
         "position": [
@@ -2015,36 +2307,19 @@
       },
       {
         "parameters": {
-          "operation": "append",
-          "documentId": {
-            "__rl": true,
-            "value": "1cB4wtyp0l0xwH2Ukw-U93eW9_Ix1lB6EroYs1GyDLCM",
-            "mode": "id"
-          },
-          "sheetName": {
-            "__rl": true,
-            "value": "Script Agent Log",
-            "mode": "name"
-          },
-          "columns": {
-            "mappingMode": "defineBelow",
-            "value": {
-              "A": "={{ new Date().toISOString() }}",
-              "B": "={{ $json.client_code }}",
-              "C": "={{ $json.brand_name }}",
-              "D": "Delivered",
-              "E": "={{ $json.total_scripts }}",
-              "F": "N/A",
-              "G": "0",
-              "H": "={{ $json.script_summary }}"
-            }
-          },
+          "method": "POST",
+          "url": "=https://sheets.googleapis.com/v4/spreadsheets/1cB4wtyp0l0xwH2Ukw-U93eW9_Ix1lB6EroYs1GyDLCM/values/Script%20Agent%20Log!A:H:append?valueInputOption=USER_ENTERED",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "googleSheetsOAuth2Api",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ values: [[ new Date().toISOString(), $('Prepare Notification').first().json.client_code, $('Prepare Notification').first().json.brand_name, 'Delivered', String($('Prepare Notification').first().json.total_scripts), 'N/A', '0', $('Prepare Notification').first().json.script_summary ]] }) }}",
           "options": {}
         },
         "id": "w4-log",
         "name": "Log to Sheet",
-        "type": "n8n-nodes-base.googleSheets",
-        "typeVersion": 4.5,
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
         "position": [
           6140,
           480
@@ -2060,11 +2335,13 @@
       {
         "parameters": {
           "respondWith": "json",
-          "responseBody": "={{ JSON.stringify({ status: 'success', action: 'delivered', project_id: $json.project_id || $('Format Approved Scripts').first().json.project_id, brand: $json.brand_name, client_code: $json.client_code, scripts_delivered: $json.total_scripts, message: 'Scripts delivered to Google Docs, ClickUp, and Airtable. Client notified.' }) }}",
-          "options": {}
+          "responseBody": "={{ $json }}",
+          "options": {
+            "responseCode": 200
+          }
         },
         "id": "w4-respond-approve",
-        "name": "Respond \u2014 Delivered",
+        "name": "Respond — Delivered",
         "type": "n8n-nodes-base.respondToWebhook",
         "typeVersion": 1.1,
         "position": [
@@ -2116,7 +2393,7 @@
           "options": {}
         },
         "id": "w4-update-scripts-rejected",
-        "name": "Update Scripts \u2014 Rejected",
+        "name": "Update Scripts — Rejected",
         "type": "n8n-nodes-base.httpRequest",
         "typeVersion": 4.2,
         "position": [
@@ -2143,7 +2420,7 @@
           }
         },
         "id": "w4-trigger-rewrite",
-        "name": "Trigger Rewrite \u2014 Workflow 3",
+        "name": "Trigger Rewrite — Workflow 3",
         "type": "n8n-nodes-base.httpRequest",
         "typeVersion": 4.2,
         "position": [
@@ -2165,7 +2442,7 @@
           "otherOptions": {}
         },
         "id": "w4-slack-reject",
-        "name": "Slack \u2014 Rewrite Triggered",
+        "name": "Slack — Rewrite Triggered",
         "type": "n8n-nodes-base.slack",
         "typeVersion": 2.2,
         "position": [
@@ -2182,12 +2459,21 @@
       },
       {
         "parameters": {
-          "respondWith": "json",
+          "respondWith": "text",
           "responseBody": "={{ JSON.stringify({ status: 'success', action: 'reject', project_id: $('Merge Delivery Context').first().json.project_id, message: 'Scripts rejected. Revision notes stored. Re-write workflow triggered.' }) }}",
-          "options": {}
+          "options": {
+            "responseHeaders": {
+              "entries": [
+                {
+                  "name": "Content-Type",
+                  "value": "application/json"
+                }
+              ]
+            }
+          }
         },
         "id": "w4-respond-reject",
-        "name": "Respond \u2014 Reject",
+        "name": "Respond — Reject",
         "type": "n8n-nodes-base.respondToWebhook",
         "typeVersion": 1.1,
         "position": [
@@ -2239,10 +2525,17 @@
       },
       {
         "parameters": {
-          "respondWith": "json",
+          "respondWith": "text",
           "responseBody": "={{ JSON.stringify({ status: 'error', phase: 'delivery', message: $json.error_message, project_id: $json.project_id }) }}",
           "options": {
-            "responseCode": 200
+            "responseHeaders": {
+              "entries": [
+                {
+                  "name": "Content-Type",
+                  "value": "application/json"
+                }
+              ]
+            }
           }
         },
         "id": "w4-error-respond",
@@ -2254,10 +2547,97 @@
           900
         ],
         "credentials": {}
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "=https://docs.googleapis.com/v1/documents/{{ $json.doc_id }}",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "googleDriveOAuth2Api",
+          "options": {}
+        },
+        "id": "w4-read-doc-before-write",
+        "name": "Read Doc Before Write",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          3850,
+          30
+        ],
+        "credentials": {
+          "googleDriveOAuth2Api": {
+            "id": "ZYBF6pP5UxUqJgVI",
+            "name": "Google Drive account - vishant"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "=https://docs.googleapis.com/v1/documents/{{ $('Build Doc Requests').first().json.doc_id }}",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "googleDriveOAuth2Api",
+          "options": {}
+        },
+        "id": "w4-read-doc-aftertext",
+        "name": "Read Doc for AfterText",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          5780,
+          -40
+        ],
+        "credentials": {
+          "googleDriveOAuth2Api": {
+            "id": "ZYBF6pP5UxUqJgVI",
+            "name": "Google Drive account - vishant"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "=https://docs.googleapis.com/v1/documents/{{ $('Build Doc Requests').first().json.doc_id }}:batchUpdate",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "googleDriveOAuth2Api",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ requests: [{ insertText: { location: { index: $json.body.content.slice(-1)[0].endIndex - 1 }, text: $('Build Doc Requests').first().json.after_text } }] }) }}",
+          "options": {}
+        },
+        "id": "w4-insert-aftertext",
+        "name": "Insert After-Table Text",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          6140,
+          -40
+        ],
+        "credentials": {
+          "googleDriveOAuth2Api": {
+            "id": "ZYBF6pP5UxUqJgVI",
+            "name": "Google Drive account - vishant"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const data = $('Prepare Notification').first().json;\nreturn [{ json: {\n  status: 'success',\n  action: 'delivered',\n  project_id: data.project_id,\n  brand: data.brand_name,\n  client_code: data.client_code,\n  scripts_delivered: data.total_scripts,\n  message: 'Scripts delivered to Google Docs, ClickUp, and Airtable. Client notified.'\n} }];"
+        },
+        "id": "w4-build-response",
+        "name": "Build Delivery Response",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          6320,
+          480
+        ],
+        "credentials": {}
       }
     ],
     "connections": {
-      "Webhook \u2014 Delivery": {
+      "Webhook — Delivery": {
         "main": [
           [
             {
@@ -2268,7 +2648,7 @@
           ]
         ]
       },
-      "Manual Trigger \u2014 Test": {
+      "Manual Trigger — Test": {
         "main": [
           [
             {
@@ -2412,7 +2792,7 @@
         "main": [
           [
             {
-              "node": "Write to Google Doc",
+              "node": "Read Doc Before Write",
               "type": "main",
               "index": 0
             }
@@ -2426,11 +2806,55 @@
           ]
         ]
       },
-      "Write to Google Doc": {
+      "Build Doc Requests": {
         "main": [
           [
             {
-              "node": "Loop Over Docs",
+              "node": "Write Doc Structure",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Write Doc Structure": {
+        "main": [
+          [
+            {
+              "node": "Read Doc Structure",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Read Doc Structure": {
+        "main": [
+          [
+            {
+              "node": "Build Cell Requests",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build Cell Requests": {
+        "main": [
+          [
+            {
+              "node": "Populate Table Cells",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Populate Table Cells": {
+        "main": [
+          [
+            {
+              "node": "Read Doc for AfterText",
               "type": "main",
               "index": 0
             }
@@ -2548,25 +2972,25 @@
         "main": [
           [
             {
-              "node": "Update Scripts \u2014 Delivered",
+              "node": "Update Scripts — Delivered",
               "type": "main",
               "index": 0
             }
           ]
         ]
       },
-      "Update Scripts \u2014 Delivered": {
+      "Update Scripts — Delivered": {
         "main": [
           [
             {
-              "node": "Update Project \u2014 Delivered",
+              "node": "Update Project — Delivered",
               "type": "main",
               "index": 0
             }
           ]
         ]
       },
-      "Update Project \u2014 Delivered": {
+      "Update Project — Delivered": {
         "main": [
           [
             {
@@ -2581,14 +3005,14 @@
         "main": [
           [
             {
-              "node": "Notify Slack \u2014 Delivered",
+              "node": "Notify Slack — Delivered",
               "type": "main",
               "index": 0
             }
           ]
         ]
       },
-      "Notify Slack \u2014 Delivered": {
+      "Notify Slack — Delivered": {
         "main": [
           [
             {
@@ -2603,7 +3027,7 @@
         "main": [
           [
             {
-              "node": "Respond \u2014 Delivered",
+              "node": "Build Delivery Response",
               "type": "main",
               "index": 0
             }
@@ -2614,40 +3038,40 @@
         "main": [
           [
             {
-              "node": "Update Scripts \u2014 Rejected",
+              "node": "Update Scripts — Rejected",
               "type": "main",
               "index": 0
             }
           ]
         ]
       },
-      "Update Scripts \u2014 Rejected": {
+      "Update Scripts — Rejected": {
         "main": [
           [
             {
-              "node": "Trigger Rewrite \u2014 Workflow 3",
+              "node": "Trigger Rewrite — Workflow 3",
               "type": "main",
               "index": 0
             }
           ]
         ]
       },
-      "Trigger Rewrite \u2014 Workflow 3": {
+      "Trigger Rewrite — Workflow 3": {
         "main": [
           [
             {
-              "node": "Slack \u2014 Rewrite Triggered",
+              "node": "Slack — Rewrite Triggered",
               "type": "main",
               "index": 0
             }
           ]
         ]
       },
-      "Slack \u2014 Rewrite Triggered": {
+      "Slack — Rewrite Triggered": {
         "main": [
           [
             {
-              "node": "Respond \u2014 Reject",
+              "node": "Respond — Reject",
               "type": "main",
               "index": 0
             }
@@ -2675,6 +3099,50 @@
             }
           ]
         ]
+      },
+      "Read Doc Before Write": {
+        "main": [
+          [
+            {
+              "node": "Build Doc Requests",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Read Doc for AfterText": {
+        "main": [
+          [
+            {
+              "node": "Insert After-Table Text",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Insert After-Table Text": {
+        "main": [
+          [
+            {
+              "node": "Loop Over Docs",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build Delivery Response": {
+        "main": [
+          [
+            {
+              "node": "Respond — Delivered",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       }
     },
     "authors": "SenseInfo Tech",
@@ -2683,10 +3151,18 @@
     "autosaved": false,
     "workflowPublishHistory": [
       {
-        "createdAt": "2026-02-17T09:42:15.622Z",
-        "id": 84,
+        "createdAt": "2026-02-18T08:32:51.503Z",
+        "id": 141,
         "workflowId": "hvytJvFSc6ZuNMAc",
-        "versionId": "c50e4c9c-7952-41ed-9bda-c35d7f59784a",
+        "versionId": "7feb9647-ae52-4367-82f7-267a0f2d8676",
+        "event": "activated",
+        "userId": "ed50a507-d93d-45c3-9412-d80babb81dd0"
+      },
+      {
+        "createdAt": "2026-02-18T08:32:54.753Z",
+        "id": 143,
+        "workflowId": "hvytJvFSc6ZuNMAc",
+        "versionId": "7feb9647-ae52-4367-82f7-267a0f2d8676",
         "event": "activated",
         "userId": "ed50a507-d93d-45c3-9412-d80babb81dd0"
       }
