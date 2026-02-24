@@ -1,0 +1,293 @@
+{
+  "name": "Cosmisk API — UGC Project Detail",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "ugc/project-detail",
+        "httpMethod": "POST",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [380, 300],
+      "id": "api-det-webhook",
+      "name": "Webhook",
+      "webhookId": "cosmisk-ugc-project-detail"
+    },
+    {
+      "parameters": {
+        "jsCode": "const authHeader = $input.first().json.headers?.authorization || '';\nif (!authHeader.startsWith('Bearer ')) {\n  return [{ json: { _unauthorized: true } }];\n}\nconst token = authHeader.replace('Bearer ', '');\ntry {\n  const decoded = JSON.parse(Buffer.from(token, 'base64').toString());\n  if (decoded.exp && Date.now() > decoded.exp) {\n    return [{ json: { _unauthorized: true } }];\n  }\n  return [{ json: { ...$input.first().json, _user: decoded } }];\n} catch(e) {\n  return [{ json: { _unauthorized: true } }];\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [600, 300],
+      "id": "api-det-auth",
+      "name": "Auth Check"
+    },
+    {
+      "parameters": {
+        "dataType": "string",
+        "value1": "={{ $json._unauthorized ? 'unauthorized' : 'ok' }}",
+        "rules": {
+          "rules": [
+            { "value2": "unauthorized", "output": 0 },
+            { "value2": "ok", "output": 1 }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 2,
+      "position": [820, 300],
+      "id": "api-det-gate",
+      "name": "Auth Gate"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ JSON.stringify({ success: false, error: 'Unauthorized' }) }}",
+        "options": {
+          "responseCode": 401,
+          "responseHeaders": {
+            "entries": [
+              { "name": "Content-Type", "value": "application/json" },
+              { "name": "Access-Control-Allow-Origin", "value": "*" }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1060, 160],
+      "id": "api-det-respond-401",
+      "name": "Respond 401"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || $input.first().json;\nconst project_id = (body.project_id || '').trim();\n\nif (!project_id) {\n  return [{ json: { _error: true, message: 'project_id is required' } }];\n}\n\nreturn [{ json: { project_id, _user: $input.first().json._user } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1060, 400],
+      "id": "api-det-extract",
+      "name": "Extract Project ID"
+    },
+    {
+      "parameters": {
+        "dataType": "string",
+        "value1": "={{ $json._error ? 'error' : 'ok' }}",
+        "rules": {
+          "rules": [
+            { "value2": "error", "output": 0 },
+            { "value2": "ok", "output": 1 }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 2,
+      "position": [1280, 400],
+      "id": "api-det-check-input",
+      "name": "Check Input"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ JSON.stringify({ success: false, error: $json.message || 'Invalid input' }) }}",
+        "options": {
+          "responseCode": 400,
+          "responseHeaders": {
+            "entries": [
+              { "name": "Content-Type", "value": "application/json" },
+              { "name": "Access-Control-Allow-Origin", "value": "*" }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1500, 280],
+      "id": "api-det-respond-400",
+      "name": "Respond 400"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Projects/{{ $json.project_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1500, 500],
+      "id": "api-det-fetch-project",
+      "name": "Fetch Project",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const project = $input.first().json;\nconst clientCode = project.fields?.client_code || '';\n\n// Store project data and client_code for next nodes\nreturn [{ json: { project, client_code: clientCode } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1720, 500],
+      "id": "api-det-extract-code",
+      "name": "Extract Client Code"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Concepts?filterByFormula=FIND('{{ $json.client_code }}',ARRAYJOIN({project_id}))>0&pageSize=100",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1940, 400],
+      "id": "api-det-fetch-concepts",
+      "name": "Fetch Concepts",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Scripts?filterByFormula=FIND('{{ $json.client_code }}',ARRAYJOIN({project_id}))>0&pageSize=100",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1940, 600],
+      "id": "api-det-fetch-scripts",
+      "name": "Fetch Scripts",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Gather data (sequential: Extract Client Code → Fetch Concepts → Fetch Scripts → here)\nconst projectData = $('Extract Client Code').first().json.project;\nconst conceptsData = $('Fetch Concepts').first().json;\nconst scriptsData = $input.first().json;\n\nconst conceptRecords = (conceptsData.records || []);\nconst scriptRecords = (scriptsData.records || []);\n\n// Transform project\nconst project = {\n  id: projectData.id,\n  client_code: projectData.fields?.client_code || '',\n  brand_name: projectData.fields?.brand_name || '',\n  status: projectData.fields?.status || projectData.fields?.Status || '',\n  num_scripts: projectData.fields?.num_scripts || 0,\n  created_at: projectData.fields?.created_at || projectData.createdTime || '',\n  pm_email: projectData.fields?.pm_email || '',\n  client_name: projectData.fields?.client_name || '',\n  client_email: projectData.fields?.client_email || '',\n  website_url: projectData.fields?.website_url || '',\n  brand_personality: projectData.fields?.brand_personality || '',\n  target_user: projectData.fields?.target_user || '',\n  target_audience: projectData.fields?.target_user || '',\n  product_feature: projectData.fields?.product_feature || '',\n  differentiator: projectData.fields?.differentiator || ''\n};\n\n// Transform concepts\nconst concepts = conceptRecords.map(c => ({\n  id: c.id,\n  concept_name: c.fields?.concept_name || c.fields?.name || '',\n  title: c.fields?.concept_name || c.fields?.name || '',\n  status: c.fields?.status || c.fields?.Status || '',\n  hook_type: c.fields?.hook_type || '',\n  angle: c.fields?.angle || '',\n  reference_url: c.fields?.reference_url || '',\n  created_at: c.fields?.created_at || c.createdTime || ''\n}));\n\n// Transform scripts\nconst scripts = scriptRecords.map(s => ({\n  id: s.id,\n  title: s.fields?.title || s.fields?.script_title || '',\n  status: s.fields?.status || s.fields?.Status || '',\n  overall_status: s.fields?.status || s.fields?.Status || '',\n  version: s.fields?.version || 1,\n  google_doc_id: s.fields?.google_doc_id || '',\n  google_doc_url: s.fields?.google_doc_url || '',\n  concept_id: s.fields?.concept_id || '',\n  created_at: s.fields?.created_at || s.createdTime || ''\n}));\n\nreturn [{\n  json: {\n    success: true,\n    project: {\n      ...project,\n      concepts,\n      scripts\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2160, 500],
+      "id": "api-det-merge",
+      "name": "Merge & Transform"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              { "name": "Content-Type", "value": "application/json" },
+              { "name": "Access-Control-Allow-Origin", "value": "*" }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2380, 500],
+      "id": "api-det-respond-ok",
+      "name": "Respond"
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          { "node": "Auth Check", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Auth Check": {
+      "main": [
+        [
+          { "node": "Auth Gate", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Auth Gate": {
+      "main": [
+        [
+          { "node": "Respond 401", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "Extract Project ID", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Extract Project ID": {
+      "main": [
+        [
+          { "node": "Check Input", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Check Input": {
+      "main": [
+        [
+          { "node": "Respond 400", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "Fetch Project", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Fetch Project": {
+      "main": [
+        [
+          { "node": "Extract Client Code", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Extract Client Code": {
+      "main": [
+        [
+          { "node": "Fetch Concepts", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Fetch Concepts": {
+      "main": [
+        [
+          { "node": "Fetch Scripts", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Fetch Scripts": {
+      "main": [
+        [
+          { "node": "Merge & Transform", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Merge & Transform": {
+      "main": [
+        [
+          { "node": "Respond", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
