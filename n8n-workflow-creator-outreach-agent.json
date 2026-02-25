@@ -1,9 +1,9 @@
 {
-  "name": "Agent 8 — Creator Outreach (Smashed Agency)",
+  "name": "Agent 8 \u2014 Creator Outreach (Smashed Agency)",
   "nodes": [
     {
       "parameters": {
-        "content": "## AGENT 8: CREATOR OUTREACH\n\n3 entry points:\n1. POST /outreach-creators — Batch email outreach to creators\n2. Schedule 10AM IST — Auto follow-up stale contacts (3+ days)\n3. POST /creator-reply — Handle incoming creator replies\n\nAirtable: Creators table (tbl59nWGcoucE0gjf)\nGemini 2.5 Flash for email drafting\nGmail API for sending emails\nSlack notifications to ugc-agent-notifications",
+        "content": "## AGENT 8: CREATOR OUTREACH\n\n3 entry points:\n1. POST /outreach-creators \u2014 Batch email outreach to creators\n2. Schedule 10AM IST \u2014 Auto follow-up stale contacts (3+ days)\n3. POST /creator-reply \u2014 Handle incoming creator replies\n\nAirtable: Creators table (tbl59nWGcoucE0gjf)\nGemini 2.5 Flash for email drafting\nGmail API for sending emails\nSlack notifications to ugc-outreach",
         "height": 400,
         "width": 520,
         "color": 7
@@ -12,11 +12,14 @@
       "name": "Sticky Note - Overview",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [-280, -60]
+      "position": [
+        -280,
+        -60
+      ]
     },
     {
       "parameters": {
-        "content": "## PATH 1: OUTREACH\nWebhook → Fetch Creators → Filter → Gemini Draft → Build Gmail Payload → Send Email → Update Airtable → Aggregate → Slack + Event + Respond",
+        "content": "## PATH 1: OUTREACH\nWebhook \u2192 Fetch Creators \u2192 Filter \u2192 Gemini Draft \u2192 Build Gmail Payload \u2192 Send Email \u2192 Update Airtable \u2192 Aggregate \u2192 Slack + Event + Respond",
         "height": 100,
         "width": 1200,
         "color": 4
@@ -25,11 +28,14 @@
       "name": "Sticky Note - Outreach Path",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [280, 120]
+      "position": [
+        280,
+        120
+      ]
     },
     {
       "parameters": {
-        "content": "## PATH 2: AUTO FOLLOW-UP\nSchedule 10AM IST → Fetch Contacted → Filter 3+ days → Gemini Draft Follow-up → Send → Update → Slack",
+        "content": "## PATH 2: AUTO FOLLOW-UP\nSchedule 10AM IST \u2192 Fetch Contacted \u2192 Filter 3+ days \u2192 Gemini Draft Follow-up \u2192 Send \u2192 Update \u2192 Slack",
         "height": 100,
         "width": 1200,
         "color": 6
@@ -38,11 +44,14 @@
       "name": "Sticky Note - Follow-up Path",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [280, 860]
+      "position": [
+        280,
+        860
+      ]
     },
     {
       "parameters": {
-        "content": "## PATH 3: HANDLE REPLY\nWebhook → Fetch Creator → Update Status → Gemini Portfolio Check → Update Qualified → Slack + Respond",
+        "content": "## PATH 3: HANDLE REPLY\nWebhook \u2192 Parse Reply \u2192 Validate \u2192 Update Creator Status \u2192 Slack + Respond + Event",
         "height": 100,
         "width": 1000,
         "color": 5
@@ -51,7 +60,10 @@
       "name": "Sticky Note - Reply Path",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [280, 1600]
+      "position": [
+        280,
+        1600
+      ]
     },
     {
       "parameters": {
@@ -61,10 +73,13 @@
         "options": {}
       },
       "id": "co-webhook-outreach",
-      "name": "Webhook — Outreach Creators",
+      "name": "Webhook \u2014 Outreach Creators",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1.1,
-      "position": [280, 280],
+      "position": [
+        280,
+        280
+      ],
       "webhookId": "outreach-creators-webhook"
     },
     {
@@ -75,30 +90,34 @@
       "name": "Parse Outreach Request",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [520, 280]
+      "position": [
+        520,
+        280
+      ]
     },
     {
       "parameters": {
         "method": "GET",
         "url": "={{ 'https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tbl59nWGcoucE0gjf?filterByFormula=' + encodeURIComponent($json.filterFormula) + '&pageSize=100' }}",
-        "authentication": "none",
+        "authentication": "predefinedCredentialType",
         "options": {},
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Authorization",
-              "value": "Bearer AIRTABLE_PAT_PLACEHOLDER"
-            }
-          ]
-        }
+        "nodeCredentialType": "airtableTokenApi"
       },
       "id": "co-fetch-creators",
       "name": "Fetch Target Creators",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [760, 280],
-      "onError": "continueRegularOutput"
+      "position": [
+        760,
+        280
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable account"
+        }
+      }
     },
     {
       "parameters": {
@@ -108,7 +127,10 @@
       "name": "Filter & Prep Email Batch",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1000, 280]
+      "position": [
+        1000,
+        280
+      ]
     },
     {
       "parameters": {
@@ -138,7 +160,10 @@
       "name": "Has Creators?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [1240, 280]
+      "position": [
+        1240,
+        280
+      ]
     },
     {
       "parameters": {
@@ -152,10 +177,13 @@
         "options": {}
       },
       "id": "co-gemini-outreach",
-      "name": "Gemini — Draft Outreach Emails",
+      "name": "Gemini \u2014 Draft Outreach Emails",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1500, 220],
+      "position": [
+        1500,
+        220
+      ],
       "credentials": {
         "googlePalmApi": {
           "id": "rIL63TG4xfMQL8uJ",
@@ -166,13 +194,16 @@
     },
     {
       "parameters": {
-        "jsCode": "// Parse Gemini email drafts and split into individual items\nconst response = $input.first().json;\nconst data = $('Filter & Prep Email Batch').first().json;\n\nlet emails = [];\ntry {\n  let text = response.candidates?.[0]?.content?.parts?.[0]?.text || '[]';\n  text = text.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim();\n  emails = JSON.parse(text);\n} catch (e) {\n  // Fallback: generate generic emails\n  emails = data.creators.map(c => ({\n    email: c.email,\n    name: c.name,\n    subject: `Creator Collaboration Opportunity — ${data.params.niche || 'Brand Campaign'}`,\n    body: `Hi ${c.name.split(' ')[0]},\\n\\nI came across your Instagram (${c.instagram_handle}) and love your content in the ${c.niches.join(', ')} space.\\n\\nWe're Smashed Agency, and we're looking for talented UGC creators for an upcoming brand campaign. Budget is INR ${data.params.budget || 'competitive'} per video.\\n\\nWould you be interested? Please reply with your portfolio and rate card.\\n\\nBest regards,\\nTeam Smashed Agency`\n  }));\n}\n\n// Enrich with creator IDs\nconst enriched = emails.map(e => {\n  const creator = data.creators.find(c => c.email === e.email);\n  return {\n    ...e,\n    creator_id: creator?.id || '',\n    instagram_handle: creator?.instagram_handle || ''\n  };\n});\n\nreturn enriched.map(e => ({ json: e }));"
+        "jsCode": "// Parse Gemini email drafts and split into individual items\nconst response = $input.first().json;\nconst data = $('Filter & Prep Email Batch').first().json;\n\nlet emails = [];\ntry {\n  let text = response.candidates?.[0]?.content?.parts?.[0]?.text || '[]';\n  text = text.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim();\n  emails = JSON.parse(text);\n} catch (e) {\n  // Fallback: generate generic emails\n  emails = data.creators.map(c => ({\n    email: c.email,\n    name: c.name,\n    subject: `Creator Collaboration Opportunity \u2014 ${data.params.niche || 'Brand Campaign'}`,\n    body: `Hi ${c.name.split(' ')[0]},\\n\\nI came across your Instagram (${c.instagram_handle}) and love your content in the ${c.niches.join(', ')} space.\\n\\nWe're Smashed Agency, and we're looking for talented UGC creators for an upcoming brand campaign. Budget is INR ${data.params.budget || 'competitive'} per video.\\n\\nWould you be interested? Please reply with your portfolio and rate card.\\n\\nBest regards,\\nTeam Smashed Agency`\n  }));\n}\n\n// Enrich with creator IDs\nconst enriched = emails.map(e => {\n  const creator = data.creators.find(c => c.email === e.email);\n  return {\n    ...e,\n    creator_id: creator?.id || '',\n    instagram_handle: creator?.instagram_handle || ''\n  };\n});\n\nreturn enriched.map(e => ({ json: e }));"
       },
       "id": "co-parse-emails",
       "name": "Parse Email Drafts",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1740, 220]
+      "position": [
+        1740,
+        220
+      ]
     },
     {
       "parameters": {
@@ -182,7 +213,10 @@
       "name": "Build Gmail Payload",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1980, 220]
+      "position": [
+        1980,
+        220
+      ]
     },
     {
       "parameters": {
@@ -196,10 +230,13 @@
         "options": {}
       },
       "id": "co-gmail-send",
-      "name": "Gmail — Send Outreach",
+      "name": "Gmail \u2014 Send Outreach",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2220, 220],
+      "position": [
+        2220,
+        220
+      ],
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "Aas0vt74gbEuYgmW",
@@ -212,7 +249,7 @@
       "parameters": {
         "method": "PATCH",
         "url": "={{ 'https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tbl59nWGcoucE0gjf/' + $json.creator_id }}",
-        "authentication": "none",
+        "authentication": "predefinedCredentialType",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ fields: { status: 'Active', notes: 'Outreach email sent on ' + new Date().toISOString().split('T')[0] + ' | Subject: ' + ($json.subject || 'Outreach') } }) }}",
@@ -221,22 +258,28 @@
         "headerParameters": {
           "parameters": [
             {
-              "name": "Authorization",
-              "value": "Bearer AIRTABLE_PAT_PLACEHOLDER"
-            },
-            {
               "name": "Content-Type",
               "value": "application/json"
             }
           ]
-        }
+        },
+        "nodeCredentialType": "airtableTokenApi"
       },
       "id": "co-update-status",
-      "name": "Update Creator — Contacted",
+      "name": "Update Creator \u2014 Contacted",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2460, 220],
-      "onError": "continueRegularOutput"
+      "position": [
+        2460,
+        220
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable account"
+        }
+      }
     },
     {
       "parameters": {
@@ -246,24 +289,30 @@
       "name": "Aggregate Results",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2700, 280]
+      "position": [
+        2700,
+        280
+      ]
     },
     {
       "parameters": {
         "select": "channel",
         "channelId": {
           "__rl": true,
-          "value": "C0AFBQ5UF0E",
+          "value": "C0AHQUBGR32",
           "mode": "id"
         },
         "text": "={{ '*Creator Outreach Report*\\n\\nEmails sent: ' + $json.sent + '/' + $json.total + '\\nFailed: ' + $json.failed + '\\n\\n' + ($json.details || []).map(function(d) { return (d.success ? 'Sent' : 'FAILED') + ': ' + d.name + ' (' + d.email + ')'; }).join('\\n') + '\\n\\n_' + $json.timestamp + '_' }}",
         "otherOptions": {}
       },
       "id": "co-slack-outreach",
-      "name": "Slack — Outreach Report",
+      "name": "Slack \u2014 Outreach Report",
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.2,
-      "position": [2940, 180],
+      "position": [
+        2940,
+        180
+      ],
       "credentials": {
         "slackApi": {
           "id": "5Q37UpOjGx4YsbyC",
@@ -288,36 +337,40 @@
         }
       },
       "id": "co-respond-outreach",
-      "name": "Respond — Outreach Done",
+      "name": "Respond \u2014 Outreach Done",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [2940, 380]
+      "position": [
+        2940,
+        380
+      ]
     },
     {
       "parameters": {
         "method": "POST",
         "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblGhzSJ5RXWDS8h8",
-        "authentication": "none",
+        "authentication": "predefinedCredentialType",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ records: [{ fields: { agent: 'creator_outreach', event_type: 'creator_outreach_sent', brand_name: '', client_code: '', severity: 'info', message: 'Outreach emails sent to ' + $json.sent + ' creators (' + $json.failed + ' failed)', payload: JSON.stringify({ total: $json.total, sent: $json.sent, failed: $json.failed }), created_at: new Date().toISOString() } }] }) }}",
         "options": {},
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Authorization",
-              "value": "Bearer AIRTABLE_PAT_PLACEHOLDER"
-            }
-          ]
-        }
+        "nodeCredentialType": "airtableTokenApi"
       },
       "id": "co-write-event",
-      "name": "Write Event — Outreach Sent",
+      "name": "Write Event \u2014 Outreach Sent",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2940, 560],
-      "onError": "continueRegularOutput"
+      "position": [
+        2940,
+        560
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable account"
+        }
+      }
     },
     {
       "parameters": {
@@ -335,10 +388,13 @@
         }
       },
       "id": "co-respond-no-creators",
-      "name": "Respond — No Creators Found",
+      "name": "Respond \u2014 No Creators Found",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [1500, 420]
+      "position": [
+        1500,
+        420
+      ]
     },
     {
       "parameters": {
@@ -352,33 +408,37 @@
         }
       },
       "id": "co-schedule-followup",
-      "name": "Schedule — 10AM IST Follow-up",
+      "name": "Schedule \u2014 10AM IST Follow-up",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [280, 1020]
+      "position": [
+        280,
+        1020
+      ]
     },
     {
       "parameters": {
         "method": "GET",
         "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tbl59nWGcoucE0gjf?filterByFormula={{ encodeURIComponent(\"AND(FIND('Outreach email sent', notes), email!='')\" ) }}&pageSize=100",
-        "authentication": "none",
+        "authentication": "predefinedCredentialType",
         "options": {},
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Authorization",
-              "value": "Bearer AIRTABLE_PAT_PLACEHOLDER"
-            }
-          ]
-        }
+        "nodeCredentialType": "airtableTokenApi"
       },
       "id": "co-fetch-contacted",
       "name": "Fetch Contacted Creators",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [520, 1020],
-      "onError": "continueRegularOutput"
+      "position": [
+        520,
+        1020
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable account"
+        }
+      }
     },
     {
       "parameters": {
@@ -388,7 +448,10 @@
       "name": "Filter Due Follow-ups",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [760, 1020]
+      "position": [
+        760,
+        1020
+      ]
     },
     {
       "parameters": {
@@ -418,7 +481,10 @@
       "name": "Has Follow-ups?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [1000, 1020]
+      "position": [
+        1000,
+        1020
+      ]
     },
     {
       "parameters": {
@@ -432,10 +498,13 @@
         "options": {}
       },
       "id": "co-gemini-followup",
-      "name": "Gemini — Draft Follow-up Emails",
+      "name": "Gemini \u2014 Draft Follow-up Emails",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1260, 960],
+      "position": [
+        1260,
+        960
+      ],
       "credentials": {
         "googlePalmApi": {
           "id": "rIL63TG4xfMQL8uJ",
@@ -446,23 +515,29 @@
     },
     {
       "parameters": {
-        "jsCode": "// Parse Gemini follow-up drafts and split into items\nconst response = $input.first().json;\nconst data = $('Filter Due Follow-ups').first().json;\n\nlet emails = [];\ntry {\n  let text = response.candidates?.[0]?.content?.parts?.[0]?.text || '[]';\n  text = text.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim();\n  emails = JSON.parse(text);\n} catch (e) {\n  // Fallback: generic follow-up\n  emails = data.creators.map(c => ({\n    email: c.email,\n    name: c.name,\n    subject: `Following up — Creator Collaboration with Smashed Agency`,\n    body: `Hi ${c.name.split(' ')[0]},\\n\\nJust following up on my email from ${c.days_since} days ago about a UGC creator collaboration opportunity with Smashed Agency.\\n\\nWe'd love to work with you! If you're interested, please reply with your portfolio and rate card.\\n\\nBest,\\nTeam Smashed Agency`\n  }));\n}\n\nconst enriched = emails.map(e => {\n  const creator = data.creators.find(c => c.email === e.email);\n  return { ...e, creator_id: creator?.id || '', instagram_handle: creator?.instagram_handle || '' };\n});\n\nreturn enriched.map(e => ({ json: e }));"
+        "jsCode": "// Parse Gemini follow-up drafts and split into items, preserving sent_date\nconst response = $input.first().json;\nconst data = $('Filter Due Follow-ups').first().json;\n\nlet emails = [];\ntry {\n  let text = response.candidates?.[0]?.content?.parts?.[0]?.text || '[]';\n  text = text.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim();\n  emails = JSON.parse(text);\n} catch (e) {\n  // Fallback: generic follow-up\n  emails = data.creators.map(c => ({\n    email: c.email,\n    name: c.name,\n    subject: `Following up \u2014 Creator Collaboration with Smashed Agency`,\n    body: `Hi ${c.name.split(' ')[0]},\\n\\nJust following up on my email from ${c.days_since} days ago about a UGC creator collaboration opportunity with Smashed Agency.\\n\\nWe'd love to work with you! If you're interested, please reply with your portfolio and rate card.\\n\\nBest,\\nTeam Smashed Agency`\n  }));\n}\n\nconst enriched = emails.map(e => {\n  const creator = data.creators.find(c => c.email === e.email);\n  return {\n    ...e,\n    creator_id: creator?.id || '',\n    instagram_handle: creator?.instagram_handle || '',\n    sent_date: creator?.sent_date || ''\n  };\n});\n\nreturn enriched.map(e => ({ json: e }));"
       },
       "id": "co-parse-followup",
       "name": "Parse Follow-up Drafts",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1500, 960]
+      "position": [
+        1500,
+        960
+      ]
     },
     {
       "parameters": {
-        "jsCode": "// Build RFC 2822 follow-up email and base64url encode\nconst email = $input.first().json;\n\nconst rawEmail = [\n  'From: Smashed Agency <hello@smashedagency.com>',\n  'To: ' + email.name + ' <' + email.email + '>',\n  'Subject: ' + email.subject,\n  'Content-Type: text/plain; charset=UTF-8',\n  '',\n  email.body\n].join('\\r\\n');\n\nconst base64 = Buffer.from(rawEmail).toString('base64')\n  .replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/, '');\n\nreturn [{ json: {\n  raw: base64,\n  creator_id: email.creator_id,\n  email: email.email,\n  name: email.name,\n  subject: email.subject\n}}];"
+        "jsCode": "// Build RFC 2822 follow-up email and base64url encode\nconst email = $input.first().json;\n\nconst rawEmail = [\n  'From: Smashed Agency <hello@smashedagency.com>',\n  'To: ' + email.name + ' <' + email.email + '>',\n  'Subject: ' + email.subject,\n  'Content-Type: text/plain; charset=UTF-8',\n  '',\n  email.body\n].join('\\r\\n');\n\nconst base64 = Buffer.from(rawEmail).toString('base64')\n  .replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/, '');\n\nreturn [{ json: {\n  raw: base64,\n  creator_id: email.creator_id,\n  email: email.email,\n  name: email.name,\n  subject: email.subject,\n  sent_date: email.sent_date\n}}];"
       },
       "id": "co-build-followup-gmail",
       "name": "Build Follow-up Payload",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1740, 960]
+      "position": [
+        1740,
+        960
+      ]
     },
     {
       "parameters": {
@@ -476,10 +551,13 @@
         "options": {}
       },
       "id": "co-gmail-followup",
-      "name": "Gmail — Send Follow-up",
+      "name": "Gmail \u2014 Send Follow-up",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1980, 960],
+      "position": [
+        1980,
+        960
+      ],
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "Aas0vt74gbEuYgmW",
@@ -492,31 +570,37 @@
       "parameters": {
         "method": "PATCH",
         "url": "={{ 'https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tbl59nWGcoucE0gjf/' + $json.creator_id }}",
-        "authentication": "none",
+        "authentication": "predefinedCredentialType",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ fields: { notes: 'Outreach email sent on ' + ($json.sent_date || '') + ' | Follow-up sent on ' + new Date().toISOString().split('T')[0] } }) }}",
+        "jsonBody": "={{ JSON.stringify({ fields: { notes: 'Outreach email sent on ' + ($json.sent_date || 'unknown') + ' | Follow-up sent on ' + new Date().toISOString().split('T')[0] } }) }}",
         "options": {},
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
-              "name": "Authorization",
-              "value": "Bearer AIRTABLE_PAT_PLACEHOLDER"
-            },
-            {
               "name": "Content-Type",
               "value": "application/json"
             }
           ]
-        }
+        },
+        "nodeCredentialType": "airtableTokenApi"
       },
       "id": "co-update-followup",
-      "name": "Update Creator — Follow-up",
+      "name": "Update Creator \u2014 Follow-up",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2220, 960],
-      "onError": "continueRegularOutput"
+      "position": [
+        2220,
+        960
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable account"
+        }
+      }
     },
     {
       "parameters": {
@@ -526,24 +610,30 @@
       "name": "Aggregate Follow-up Results",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2460, 1020]
+      "position": [
+        2460,
+        1020
+      ]
     },
     {
       "parameters": {
         "select": "channel",
         "channelId": {
           "__rl": true,
-          "value": "C0AFBQ5UF0E",
+          "value": "C0AHQUBGR32",
           "mode": "id"
         },
         "text": "={{ '*Creator Follow-up Report*\\n\\nFollow-up emails sent: ' + $json.follow_up_count + '\\nCreators: ' + $json.names + '\\n\\n_Auto follow-up for creators contacted 3+ days ago with no reply_\\n_' + $json.timestamp + '_' }}",
         "otherOptions": {}
       },
       "id": "co-slack-followup",
-      "name": "Slack — Follow-up Report",
+      "name": "Slack \u2014 Follow-up Report",
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.2,
-      "position": [2700, 1020],
+      "position": [
+        2700,
+        1020
+      ],
       "credentials": {
         "slackApi": {
           "id": "5Q37UpOjGx4YsbyC",
@@ -560,10 +650,13 @@
         "options": {}
       },
       "id": "co-webhook-reply",
-      "name": "Webhook — Creator Reply",
+      "name": "Webhook \u2014 Creator Reply",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1.1,
-      "position": [280, 1760],
+      "position": [
+        280,
+        1760
+      ],
       "webhookId": "creator-reply-webhook"
     },
     {
@@ -574,7 +667,10 @@
       "name": "Parse Reply",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [520, 1760]
+      "position": [
+        520,
+        1760
+      ]
     },
     {
       "parameters": {
@@ -603,7 +699,10 @@
       "name": "Has Creator ID?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [760, 1760]
+      "position": [
+        760,
+        1760
+      ]
     },
     {
       "parameters": {
@@ -613,13 +712,16 @@
       "name": "Prep Reply Update",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1000, 1700]
+      "position": [
+        1000,
+        1700
+      ]
     },
     {
       "parameters": {
         "method": "PATCH",
         "url": "={{ 'https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tbl59nWGcoucE0gjf/' + $json.creator_id }}",
-        "authentication": "none",
+        "authentication": "predefinedCredentialType",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify($json.update_body) }}",
@@ -628,39 +730,48 @@
         "headerParameters": {
           "parameters": [
             {
-              "name": "Authorization",
-              "value": "Bearer AIRTABLE_PAT_PLACEHOLDER"
-            },
-            {
               "name": "Content-Type",
               "value": "application/json"
             }
           ]
-        }
+        },
+        "nodeCredentialType": "airtableTokenApi"
       },
       "id": "co-update-reply",
-      "name": "Update Creator — Replied",
+      "name": "Update Creator \u2014 Replied",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1240, 1700],
-      "onError": "continueRegularOutput"
+      "position": [
+        1240,
+        1700
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable account"
+        }
+      }
     },
     {
       "parameters": {
         "select": "channel",
         "channelId": {
           "__rl": true,
-          "value": "C0AFBQ5UF0E",
+          "value": "C0AHQUBGR32",
           "mode": "id"
         },
         "text": "={{ '*Creator Reply Received*\\n\\n*Creator:* ' + (($json.fields || {}).name || 'Unknown') + '\\n*Reply:* ' + ($('Parse Reply').first().json.reply_text || 'N/A').substring(0, 300) + '\\n' + ($('Parse Reply').first().json.portfolio_url ? '*Portfolio:* ' + $('Parse Reply').first().json.portfolio_url : '_No portfolio link provided_') }}",
         "otherOptions": {}
       },
       "id": "co-slack-reply",
-      "name": "Slack — Creator Reply",
+      "name": "Slack \u2014 Creator Reply",
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.2,
-      "position": [1500, 1640],
+      "position": [
+        1500,
+        1640
+      ],
       "credentials": {
         "slackApi": {
           "id": "5Q37UpOjGx4YsbyC",
@@ -685,10 +796,13 @@
         }
       },
       "id": "co-respond-reply",
-      "name": "Respond — Reply Processed",
+      "name": "Respond \u2014 Reply Processed",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [1500, 1840]
+      "position": [
+        1500,
+        1840
+      ]
     },
     {
       "parameters": {
@@ -706,48 +820,55 @@
         }
       },
       "id": "co-respond-reply-error",
-      "name": "Respond — Reply Error",
+      "name": "Respond \u2014 Reply Error",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [1000, 1900]
+      "position": [
+        1000,
+        1900
+      ]
     },
     {
       "parameters": {
         "method": "POST",
         "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblGhzSJ5RXWDS8h8",
-        "authentication": "none",
+        "authentication": "predefinedCredentialType",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ records: [{ fields: { agent: 'creator_outreach', event_type: 'creator_reply_received', brand_name: '', client_code: '', severity: 'info', message: 'Creator ' + (($json.fields || {}).name || 'Unknown') + ' replied' + ($('Parse Reply').first().json.portfolio_url ? ' with portfolio' : ''), payload: JSON.stringify({ creator_id: $json.id, reply: ($('Parse Reply').first().json.reply_text || '').substring(0, 200) }), created_at: new Date().toISOString() } }] }) }}",
         "options": {},
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Authorization",
-              "value": "Bearer AIRTABLE_PAT_PLACEHOLDER"
-            }
-          ]
-        }
+        "nodeCredentialType": "airtableTokenApi"
       },
       "id": "co-write-event-reply",
-      "name": "Write Event — Creator Reply",
+      "name": "Write Event \u2014 Creator Reply",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1760, 1700],
-      "onError": "continueRegularOutput"
+      "position": [
+        1760,
+        1700
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable account"
+        }
+      }
     },
     {
       "parameters": {},
       "id": "co-manual-trigger",
-      "name": "Manual Trigger — Test",
+      "name": "Manual Trigger \u2014 Test",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
-      "position": [280, 520]
+      "position": [
+        280,
+        520
+      ]
     }
   ],
   "connections": {
-    "Webhook — Outreach Creators": {
+    "Webhook \u2014 Outreach Creators": {
       "main": [
         [
           {
@@ -758,7 +879,7 @@
         ]
       ]
     },
-    "Manual Trigger — Test": {
+    "Manual Trigger \u2014 Test": {
       "main": [
         [
           {
@@ -806,21 +927,21 @@
       "main": [
         [
           {
-            "node": "Gemini — Draft Outreach Emails",
+            "node": "Gemini \u2014 Draft Outreach Emails",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Respond — No Creators Found",
+            "node": "Respond \u2014 No Creators Found",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Gemini — Draft Outreach Emails": {
+    "Gemini \u2014 Draft Outreach Emails": {
       "main": [
         [
           {
@@ -846,25 +967,25 @@
       "main": [
         [
           {
-            "node": "Gmail — Send Outreach",
+            "node": "Gmail \u2014 Send Outreach",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Gmail — Send Outreach": {
+    "Gmail \u2014 Send Outreach": {
       "main": [
         [
           {
-            "node": "Update Creator — Contacted",
+            "node": "Update Creator \u2014 Contacted",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Update Creator — Contacted": {
+    "Update Creator \u2014 Contacted": {
       "main": [
         [
           {
@@ -879,24 +1000,24 @@
       "main": [
         [
           {
-            "node": "Slack — Outreach Report",
+            "node": "Slack \u2014 Outreach Report",
             "type": "main",
             "index": 0
           },
           {
-            "node": "Respond — Outreach Done",
+            "node": "Respond \u2014 Outreach Done",
             "type": "main",
             "index": 0
           },
           {
-            "node": "Write Event — Outreach Sent",
+            "node": "Write Event \u2014 Outreach Sent",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Schedule — 10AM IST Follow-up": {
+    "Schedule \u2014 10AM IST Follow-up": {
       "main": [
         [
           {
@@ -933,7 +1054,7 @@
       "main": [
         [
           {
-            "node": "Gemini — Draft Follow-up Emails",
+            "node": "Gemini \u2014 Draft Follow-up Emails",
             "type": "main",
             "index": 0
           }
@@ -941,7 +1062,7 @@
         []
       ]
     },
-    "Gemini — Draft Follow-up Emails": {
+    "Gemini \u2014 Draft Follow-up Emails": {
       "main": [
         [
           {
@@ -967,25 +1088,25 @@
       "main": [
         [
           {
-            "node": "Gmail — Send Follow-up",
+            "node": "Gmail \u2014 Send Follow-up",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Gmail — Send Follow-up": {
+    "Gmail \u2014 Send Follow-up": {
       "main": [
         [
           {
-            "node": "Update Creator — Follow-up",
+            "node": "Update Creator \u2014 Follow-up",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Update Creator — Follow-up": {
+    "Update Creator \u2014 Follow-up": {
       "main": [
         [
           {
@@ -1000,14 +1121,14 @@
       "main": [
         [
           {
-            "node": "Slack — Follow-up Report",
+            "node": "Slack \u2014 Follow-up Report",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Webhook — Creator Reply": {
+    "Webhook \u2014 Creator Reply": {
       "main": [
         [
           {
@@ -1040,7 +1161,7 @@
         ],
         [
           {
-            "node": "Respond — Reply Error",
+            "node": "Respond \u2014 Reply Error",
             "type": "main",
             "index": 0
           }
@@ -1051,28 +1172,28 @@
       "main": [
         [
           {
-            "node": "Update Creator — Replied",
+            "node": "Update Creator \u2014 Replied",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Update Creator — Replied": {
+    "Update Creator \u2014 Replied": {
       "main": [
         [
           {
-            "node": "Slack — Creator Reply",
+            "node": "Slack \u2014 Creator Reply",
             "type": "main",
             "index": 0
           },
           {
-            "node": "Respond — Reply Processed",
+            "node": "Respond \u2014 Reply Processed",
             "type": "main",
             "index": 0
           },
           {
-            "node": "Write Event — Creator Reply",
+            "node": "Write Event \u2014 Creator Reply",
             "type": "main",
             "index": 0
           }
