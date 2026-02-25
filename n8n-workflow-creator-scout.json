@@ -56,8 +56,21 @@
         },
         {
             "parameters": {
-                "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Creators?filterByFormula=AND(%7Bstatus%7D%3D'Active'%2C%7Bavailability%7D%3D'Available')&pageSize=100",
+                "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tbl59nWGcoucE0gjf",
                 "authentication": "predefinedCredentialType",
+                "sendQuery": true,
+                "queryParameters": {
+                    "parameters": [
+                        {
+                            "name": "filterByFormula",
+                            "value": "AND({status}='Active',{availability}='Available')"
+                        },
+                        {
+                            "name": "pageSize",
+                            "value": "100"
+                        }
+                    ]
+                },
                 "options": {},
                 "nodeCredentialType": "airtableTokenApi"
             },
@@ -69,6 +82,7 @@
                 720,
                 304
             ],
+            "onError": "continueRegularOutput",
             "credentials": {
                 "airtableTokenApi": {
                     "id": "WelvlJEjoHaI3l9G",
