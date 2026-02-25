@@ -1,8 +1,8 @@
 {
-  "updatedAt": "2026-02-17T09:37:14.245Z",
+  "updatedAt": "2026-02-18T08:07:18.402Z",
   "createdAt": "2026-02-16T08:01:54.249Z",
   "id": "U2bxLckriORGZIyU",
-  "name": "UGC Phase 2 \u2014 Concept Approval (PM + Client)",
+  "name": "UGC Phase 2 — Concept Approval (PM + Client)",
   "description": null,
   "active": true,
   "isArchived": false,
@@ -32,7 +32,7 @@
         "options": {}
       },
       "id": "w2-webhook",
-      "name": "Webhook \u2014 Concept Approval",
+      "name": "Webhook — Concept Approval",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1.1,
       "position": [
@@ -45,7 +45,7 @@
     {
       "parameters": {},
       "id": "w2-manual-trigger",
-      "name": "Manual Trigger \u2014 Test",
+      "name": "Manual Trigger — Test",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
       "position": [
@@ -84,25 +84,16 @@
     },
     {
       "parameters": {
-        "resource": "record",
-        "operation": "search",
-        "base": {
-          "__rl": true,
-          "value": "appvFxwZc9yU8o8pK",
-          "mode": "id"
-        },
-        "table": {
-          "__rl": true,
-          "value": "Projects",
-          "mode": "name"
-        },
-        "filterByFormula": "=RECORD_ID() = '{{ $json.project_id }}'",
+        "method": "GET",
+        "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Projects/{{ $json.project_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
         "options": {}
       },
       "id": "w2-fetch-project",
       "name": "Fetch Project from Airtable",
-      "type": "n8n-nodes-base.airtable",
-      "typeVersion": 2.1,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         940,
         320
@@ -112,29 +103,21 @@
           "id": "WelvlJEjoHaI3l9G",
           "name": "Airtable Personal Access Token account"
         }
-      }
+      },
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "resource": "record",
-        "operation": "search",
-        "base": {
-          "__rl": true,
-          "value": "appvFxwZc9yU8o8pK",
-          "mode": "id"
-        },
-        "table": {
-          "__rl": true,
-          "value": "Concepts",
-          "mode": "name"
-        },
-        "filterByFormula": "=FIND('{{ $('Fetch Project from Airtable').first().json.client_code }}', ARRAYJOIN({project_id})) > 0",
+        "method": "GET",
+        "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Concepts?filterByFormula={{ encodeURIComponent(\"FIND('\" + $('Fetch Project from Airtable').first().json.fields.client_code + \"', ARRAYJOIN({project_id})) > 0\") }}&pageSize=100",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
         "options": {}
       },
       "id": "w2-fetch-concepts",
       "name": "Fetch Concepts from Airtable",
-      "type": "n8n-nodes-base.airtable",
-      "typeVersion": 2.1,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         1300,
         320
@@ -144,11 +127,12 @@
           "id": "WelvlJEjoHaI3l9G",
           "name": "Airtable Personal Access Token account"
         }
-      }
+      },
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "jsCode": "// ============================================================\n// Merge project + concepts + payload into single context\n// ============================================================\nconst payload = $('Extract Approval Payload').first().json;\nconst project = $('Fetch Project from Airtable').first().json;\nconst concepts = $input.all().map(item => item.json);\n\nreturn [{ json: {\n  ...payload,\n  project,\n  concepts,\n  concept_count: concepts.length\n} }];"
+        "jsCode": "// ============================================================\n// Merge project + concepts + payload into single context\n// Handles HTTP Request Airtable response format\n// ============================================================\nconst payload = $('Extract Approval Payload').first().json;\n\n// HTTP Request returns {id, fields: {...}} for single record GET\nconst rawProject = $('Fetch Project from Airtable').first().json;\nconst project = rawProject.fields\n  ? { id: rawProject.id, ...rawProject.fields }\n  : rawProject;\n\n// HTTP Request returns {records: [{id, fields: {...}}]} for list/search\nconst rawConcepts = $input.all();\nlet concepts;\nif (rawConcepts.length === 1 && rawConcepts[0].json.records) {\n  concepts = rawConcepts[0].json.records.map(r => ({ id: r.id, ...r.fields }));\n} else {\n  concepts = rawConcepts.map(item => item.json);\n}\n\nreturn [{ json: {\n  ...payload,\n  project,\n  concepts,\n  concept_count: concepts.length\n} }];"
       },
       "id": "w2-merge-data",
       "name": "Merge Context",
@@ -238,7 +222,7 @@
         "options": {}
       },
       "id": "w2-update-concepts-pm",
-      "name": "Update Concepts \u2014 PM Decision",
+      "name": "Update Concepts — PM Decision",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -265,7 +249,7 @@
         "options": {}
       },
       "id": "w2-update-project-client-review",
-      "name": "Update Project \u2014 Client Review",
+      "name": "Update Project — Client Review",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -282,14 +266,14 @@
     },
     {
       "parameters": {
-        "jsCode": "// ============================================================\n// Build Slack notification for client concept review\n// ============================================================\nconst data = $('Merge Context').first().json;\nconst project = data.project;\nconst concepts = data.concepts.filter(c => {\n  const ids = data.concept_ids || [];\n  return ids.length === 0 || ids.includes(c.id);\n});\n\nconst conceptSummary = concepts.map((c, i) =>\n  `${i + 1}. *${c.concept_name || c.fields?.concept_name || 'Concept'}*\\n   _\"${c.hook_text || c.fields?.hook_text || ''}\"_\\n   ${c.concept_pitch || c.fields?.concept_pitch || ''}`\n).join('\\n\\n');\n\nconst brandName = project.brand_name || project.fields?.brand_name || 'Client';\nconst clientEmail = project.client_email || project.fields?.client_email || '';\nconst clientName = project.client_name || project.fields?.client_name || 'Client';\nconst projectId = data.project_id;\n\nconst slackBlocks = [\n  {\n    \"type\": \"header\",\n    \"text\": { \"type\": \"plain_text\", \"text\": `Client Review: ${brandName} Concepts` }\n  },\n  {\n    \"type\": \"section\",\n    \"text\": {\n      \"type\": \"mrkdwn\",\n      \"text\": `PM has approved *${concepts.length} concepts* for ${brandName}.\\nClient: ${clientName} (${clientEmail})\\n\\n*Approved Concepts:*\\n\\n${conceptSummary}\\n\\nConcepts are ready for client review. Share the Airtable view link with the client.`\n    }\n  },\n  {\n    \"type\": \"actions\",\n    \"elements\": [\n      {\n        \"type\": \"button\",\n        \"text\": { \"type\": \"plain_text\", \"text\": \"Client Airtable View\" },\n        \"url\": `https://airtable.com/appvFxwZc9yU8o8pK/Concepts?filter_project_id=${projectId}`\n      }\n    ]\n  }\n];\n\nreturn [{ json: {\n  project_id: projectId,\n  slack_blocks: JSON.stringify(slackBlocks),\n  slack_text: `PM approved ${concepts.length} concepts for ${brandName}. Ready for client review.`,\n  client_email: clientEmail,\n  client_name: clientName,\n  brand_name: brandName,\n  approved_count: concepts.length\n} }];"
+        "jsCode": "// ============================================================\n// Build Slack notification for client concept review\n// Includes Google Slides deck link if available\n// ============================================================\nconst data = $('Merge Context').first().json;\nconst project = data.project;\nconst concepts = data.concepts.filter(c => {\n  const ids = data.concept_ids || [];\n  return ids.length === 0 || ids.includes(c.id);\n});\n\nconst conceptSummary = concepts.map((c, i) =>\n  `${i + 1}. *${c.concept_name || c.fields?.concept_name || 'Concept'}*\\n   _\"${c.hook_text || c.fields?.hook_text || ''}\"_\\n   ${c.concept_pitch || c.fields?.concept_pitch || ''}`\n).join('\\n\\n');\n\nconst brandName = project.brand_name || project.fields?.brand_name || 'Client';\nconst clientEmail = project.client_email || project.fields?.client_email || '';\nconst clientName = project.client_name || project.fields?.client_name || 'Client';\nconst projectId = data.project_id;\n\n// Try to get deck link from upstream node\nlet deckLink = '';\ntry {\n  const replaceData = $('Build Replace Requests').first().json;\n  if (replaceData && replaceData.deck_link && !replaceData.deck_failed) {\n    deckLink = replaceData.deck_link;\n  }\n} catch (e) {\n  // Deck generation failed — continue without link\n}\n\nconst actionButtons = [];\nif (deckLink) {\n  actionButtons.push({\n    \"type\": \"button\",\n    \"text\": { \"type\": \"plain_text\", \"text\": \"View Concept Deck\" },\n    \"style\": \"primary\",\n    \"url\": deckLink\n  });\n}\nactionButtons.push({\n  \"type\": \"button\",\n  \"text\": { \"type\": \"plain_text\", \"text\": \"Airtable View\" },\n  \"url\": `https://airtable.com/appvFxwZc9yU8o8pK/Concepts?filter_project_id=${projectId}`\n});\n\nconst deckNote = deckLink ? `\\n\\n:page_facing_up: <${deckLink}|Concept Deck> is ready to share with the client.` : '';\n\nconst slackBlocks = [\n  {\n    \"type\": \"header\",\n    \"text\": { \"type\": \"plain_text\", \"text\": `Client Review: ${brandName} Concepts` }\n  },\n  {\n    \"type\": \"section\",\n    \"text\": {\n      \"type\": \"mrkdwn\",\n      \"text\": `PM has approved *${concepts.length} concepts* for ${brandName}.\\nClient: ${clientName} (${clientEmail})\\n\\n*Approved Concepts:*\\n\\n${conceptSummary}\\n\\nConcepts are ready for client review.${deckNote}`\n    }\n  },\n  {\n    \"type\": \"actions\",\n    \"elements\": actionButtons\n  }\n];\n\nreturn [{ json: {\n  project_id: projectId,\n  slack_blocks: JSON.stringify(slackBlocks),\n  slack_text: `PM approved ${concepts.length} concepts for ${brandName}. Ready for client review.${deckLink ? ' Concept deck: ' + deckLink : ''}`,\n  client_email: clientEmail,\n  client_name: clientName,\n  brand_name: brandName,\n  approved_count: concepts.length,\n  deck_link: deckLink\n} }];"
       },
       "id": "w2-pm-approve-notify-prep",
       "name": "Prepare Client Review Notification",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        3500,
+        6560,
         60
       ],
       "credentials": {}
@@ -308,11 +292,11 @@
         }
       },
       "id": "w2-slack-client-review",
-      "name": "Slack \u2014 Client Review Ready",
+      "name": "Slack — Client Review Ready",
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.2,
       "position": [
-        3860,
+        6920,
         60
       ],
       "credentials": {
@@ -330,11 +314,11 @@
         "options": {}
       },
       "id": "w2-respond-pm-approve",
-      "name": "Respond \u2014 PM Approve",
+      "name": "Respond — PM Approve",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        4220,
+        7280,
         60
       ],
       "credentials": {}
@@ -382,7 +366,7 @@
         "options": {}
       },
       "id": "w2-update-concepts-pm-reject",
-      "name": "Update Concepts \u2014 PM Revision",
+      "name": "Update Concepts — PM Revision",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -409,7 +393,7 @@
         "otherOptions": {}
       },
       "id": "w2-slack-pm-reject",
-      "name": "Slack \u2014 Revision Needed",
+      "name": "Slack — Revision Needed",
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.2,
       "position": [
@@ -431,11 +415,11 @@
         "options": {}
       },
       "id": "w2-respond-pm-reject",
-      "name": "Respond \u2014 PM Reject",
+      "name": "Respond — PM Reject",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        3500,
+        3680,
         320
       ],
       "credentials": {}
@@ -483,7 +467,7 @@
         "options": {}
       },
       "id": "w2-update-concepts-client",
-      "name": "Update Concepts \u2014 Client Decision",
+      "name": "Update Concepts — Client Decision",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -510,7 +494,7 @@
         "options": {}
       },
       "id": "w2-update-project-scripting",
-      "name": "Update Project \u2014 Scripting",
+      "name": "Update Project — Scripting",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -534,7 +518,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        3500,
+        3680,
         580
       ],
       "credentials": {}
@@ -551,11 +535,11 @@
         }
       },
       "id": "w2-trigger-wf3",
-      "name": "Trigger Workflow 3 \u2014 Script Writing",
+      "name": "Trigger Workflow 3 — Script Writing",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        3860,
+        4040,
         580
       ],
       "onError": "continueRegularOutput",
@@ -573,11 +557,11 @@
         "otherOptions": {}
       },
       "id": "w2-slack-client-approve",
-      "name": "Slack \u2014 Scripts Starting",
+      "name": "Slack — Scripts Starting",
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.2,
       "position": [
-        4220,
+        4400,
         580
       ],
       "credentials": {
@@ -595,11 +579,11 @@
         "options": {}
       },
       "id": "w2-respond-client-approve",
-      "name": "Respond \u2014 Client Approve",
+      "name": "Respond — Client Approve",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        4580,
+        4760,
         580
       ],
       "credentials": {}
@@ -647,7 +631,7 @@
         "options": {}
       },
       "id": "w2-update-concepts-client-reject",
-      "name": "Update Concepts \u2014 Client Revision",
+      "name": "Update Concepts — Client Revision",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -674,7 +658,7 @@
         "otherOptions": {}
       },
       "id": "w2-slack-client-reject",
-      "name": "Slack \u2014 Client Feedback",
+      "name": "Slack — Client Feedback",
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.2,
       "position": [
@@ -696,11 +680,11 @@
         "options": {}
       },
       "id": "w2-respond-client-reject",
-      "name": "Respond \u2014 Client Reject",
+      "name": "Respond — Client Reject",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        3500,
+        3680,
         840
       ],
       "credentials": {}
@@ -714,7 +698,7 @@
         }
       },
       "id": "w2-respond-fallback",
-      "name": "Respond \u2014 Invalid Action",
+      "name": "Respond — Invalid Action",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
@@ -722,10 +706,367 @@
         1060
       ],
       "credentials": {}
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://www.googleapis.com/drive/v3/files/1gaQD5YJwF2kckEjbsTIlSRONvluuDvwpA_uy2RltuT4/copy",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ name: ($('Merge Context').first().json.project.brand_name || 'Brand') + ' — Concept Deck — ' + new Date().toISOString().slice(0,10), parents: ($json.files && $json.files[0] && $json.files[0].id) ? [$json.files[0].id] : [] }) }}",
+        "options": {}
+      },
+      "id": "w2-copy-template-deck",
+      "name": "Copy Template Deck",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3680,
+        60
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "ZYBF6pP5UxUqJgVI",
+          "name": "Google Drive account - vishant"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://slides.googleapis.com/v1/presentations/{{ $json.id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "options": {}
+      },
+      "id": "w2-read-presentation",
+      "name": "Read Presentation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4040,
+        60
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "ZYBF6pP5UxUqJgVI",
+          "name": "Google Drive account - vishant"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Build batchUpdate requests:\n// 1. Duplicate concept template slide (slide index 1) N-1 times\n// 2. Replace title slide placeholders (brand_name, date)\n// Template has 3 slides: title (0), concept template (1), thank you (2)\n// ============================================================\nconst presentation = $input.first().json;\nconst data = $('Merge Context').first().json;\nconst concepts = data.concepts.filter(c => {\n  const ids = data.concept_ids || [];\n  return ids.length === 0 || ids.includes(c.id);\n});\nconst brandName = data.project.brand_name || data.project.fields?.brand_name || 'Brand';\nconst today = new Date().toISOString().slice(0, 10);\n\nif (!presentation.slides || presentation.slides.length < 2) {\n  return [{ json: { deck_failed: true, error: 'Template needs at least 2 slides', presentationId: presentation.presentationId } }];\n}\n\nconst presentationId = presentation.presentationId;\nconst templateSlideId = presentation.slides[1].objectId; // Slide 1 = concept template\nconst conceptCount = concepts.length;\nconst requests = [];\n\n// Duplicate the concept template slide N-1 times\nfor (let i = 0; i < conceptCount - 1; i++) {\n  requests.push({ duplicateObject: { objectId: templateSlideId } });\n}\n\n// Replace title slide placeholders\nrequests.push({\n  replaceAllText: {\n    containsText: { text: '{{brand_name}}', matchCase: false },\n    replaceText: brandName\n  }\n});\nrequests.push({\n  replaceAllText: {\n    containsText: { text: '{{date}}', matchCase: false },\n    replaceText: today\n  }\n});\n\nreturn [{ json: {\n  presentationId,\n  requests: JSON.stringify({ requests }),\n  conceptCount,\n  concepts: concepts.map((c, i) => ({\n    index: i,\n    concept_name: c.concept_name || '',\n    hook_text: c.hook_text || '',\n    concept_pitch: c.concept_pitch || '',\n    format: c.format || '',\n    framework: c.framework || '',\n    platform: c.platform || '',\n    emotional_journey: c.emotional_journey || '',\n    funnel_stage: c.funnel_stage || '',\n    reference_url: c.reference_video_url || ''\n  })),\n  deck_failed: false\n} }];"
+      },
+      "id": "w2-build-dup-requests",
+      "name": "Build Duplicate Requests",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4400,
+        60
+      ],
+      "credentials": {}
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://slides.googleapis.com/v1/presentations/{{ $json.presentationId }}:batchUpdate",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.requests }}",
+        "options": {}
+      },
+      "id": "w2-duplicate-slides",
+      "name": "Duplicate Slides",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4760,
+        60
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "ZYBF6pP5UxUqJgVI",
+          "name": "Google Drive account - vishant"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://slides.googleapis.com/v1/presentations/{{ $('Build Duplicate Requests').first().json.presentationId }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "options": {}
+      },
+      "id": "w2-read-updated-deck",
+      "name": "Read Updated Deck",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5120,
+        60
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "ZYBF6pP5UxUqJgVI",
+          "name": "Google Drive account - vishant"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Build per-slide replaceAllText + reference video thumbnails\n// Google Slides API auto-calculates scaleX/Y from size; transform sets position\n// ============================================================\nconst dupData = $('Build Duplicate Requests').first().json;\n\nif (dupData.deck_failed) {\n  return [{ json: { deck_failed: true, presentationId: dupData.presentationId, deck_link: '' } }];\n}\n\nconst presentation = $input.first().json;\nconst concepts = dupData.concepts;\nconst conceptCount = dupData.conceptCount;\nconst presentationId = dupData.presentationId;\n\nif (!presentation.slides) {\n  return [{ json: { deck_failed: true, presentationId, deck_link: '' } }];\n}\n\nconst conceptSlides = presentation.slides.slice(1, 1 + conceptCount);\nconst extraSlides = presentation.slides.slice(1 + conceptCount, -1);\n\nconst requests = [];\n\n// Delete extra duplicate slides\nfor (const slide of extraSlides) {\n  requests.push({ deleteObject: { objectId: slide.objectId } });\n}\n\n// For each concept, replace text scoped to that slide\nfor (let i = 0; i < conceptCount && i < conceptSlides.length; i++) {\n  const concept = concepts[i];\n  const slideId = conceptSlides[i].objectId;\n\n  const replacements = {\n    '{{concept_number}}': String(i + 1),\n    '{{concept_name}}': concept.concept_name,\n    '{{hook_text}}': concept.hook_text,\n    '{{concept_pitch}}': concept.concept_pitch,\n    '{{format}}': concept.format,\n    '{{platform}}': concept.platform,\n    '{{framework}}': concept.framework,\n    '{{emotional_journey}}': concept.emotional_journey,\n    '{{funnel_stage}}': concept.funnel_stage,\n    '{{reference_url}}': concept.reference_url\n  };\n\n  for (const [placeholder, value] of Object.entries(replacements)) {\n    requests.push({\n      replaceAllText: {\n        containsText: { text: placeholder, matchCase: false },\n        replaceText: value || '',\n        pageObjectIds: [slideId]\n      }\n    });\n  }\n\n  // Add reference video thumbnail if URL is YouTube\n  if (concept.reference_url) {\n    let thumbnailUrl = '';\n    const ytMatch = concept.reference_url.match(/(?:youtube\\.com\\/watch\\?v=|youtu\\.be\\/|youtube\\.com\\/shorts\\/)([a-zA-Z0-9_-]{11})/);\n    if (ytMatch) {\n      thumbnailUrl = 'https://img.youtube.com/vi/' + ytMatch[1] + '/hqdefault.jpg';\n    }\n\n    if (thumbnailUrl) {\n      const thumbId = 'thumb_' + i;\n      const EMU = 914400;\n      // Single createImage with size + transform\n      // API auto-calculates scaleX/Y from size; translateX/Y positions the image\n      // Size: 2.8\" x 2.1\" (4:3 aspect ratio matching YouTube thumbnails)\n      // Position: right side of slide at (6.2\", 1.5\")\n      requests.push({\n        createImage: {\n          objectId: thumbId,\n          url: thumbnailUrl,\n          elementProperties: {\n            pageObjectId: slideId,\n            size: {\n              width: { magnitude: Math.round(2.8 * EMU), unit: 'EMU' },\n              height: { magnitude: Math.round(2.1 * EMU), unit: 'EMU' }\n            },\n            transform: {\n              scaleX: 1,\n              scaleY: 1,\n              shearX: 0,\n              shearY: 0,\n              translateX: Math.round(6.2 * EMU),\n              translateY: Math.round(1.5 * EMU),\n              unit: 'EMU'\n            }\n          }\n        }\n      });\n    }\n  }\n}\n\nconst deckLink = 'https://docs.google.com/presentation/d/' + presentationId + '/edit';\n\nreturn [{ json: {\n  presentationId,\n  requests: JSON.stringify({ requests }),\n  deck_link: deckLink,\n  deck_failed: false\n} }];"
+      },
+      "id": "w2-build-replace-requests",
+      "name": "Build Replace Requests",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5480,
+        60
+      ],
+      "credentials": {}
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://slides.googleapis.com/v1/presentations/{{ $json.presentationId }}:batchUpdate",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.requests }}",
+        "options": {}
+      },
+      "id": "w2-replace-slide-text",
+      "name": "Replace Slide Text",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5840,
+        60
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "ZYBF6pP5UxUqJgVI",
+          "name": "Google Drive account - vishant"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://www.googleapis.com/drive/v3/files/{{ $('Build Replace Requests').first().json.presentationId }}/permissions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ role: \"reader\", type: \"anyone\" }) }}",
+        "options": {}
+      },
+      "id": "w2-share-deck",
+      "name": "Share Deck",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        6200,
+        60
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "ZYBF6pP5UxUqJgVI",
+          "name": "Google Drive account - vishant"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://www.googleapis.com/drive/v3/files?q={{ encodeURIComponent(\"name='\" + $('Merge Context').first().json.project.brand_name + \"' and mimeType='application/vnd.google-apps.folder' and '1ouoAy-XmcTaf53xG7n6H7_WCUHh73n5l' in parents and trashed=false\") }}&fields=files(id,name)",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "options": {}
+      },
+      "id": "w2-search-client-folder",
+      "name": "Search Client Folder",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3320,
+        60
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "ZYBF6pP5UxUqJgVI",
+          "name": "Google Drive account - vishant"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "content": "## CONCEPT GAP CHECK\nIf PM approved fewer concepts than num_scripts,\nauto-trigger Phase 1 in regeneration mode\nto generate replacement concepts.",
+        "height": 140,
+        "width": 400,
+        "color": 5
+      },
+      "id": "w2-sticky-regen",
+      "name": "Sticky Note - Regeneration",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        3100,
+        -280
+      ],
+      "credentials": {}
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Check if enough concepts were approved for num_scripts\n// If gap > 0, route to regeneration; otherwise proceed normally\n// ============================================================\nconst data = $('Merge Context').first().json;\nconst concept_ids = data.concept_ids || [];\nconst concepts = data.concepts;\nconst project = data.project;\nconst notes = data.notes || '';\nconst numScripts = parseInt(project.num_scripts || project.fields?.num_scripts || 6);\n\nconst approvedConcepts = concept_ids.length > 0\n  ? concepts.filter(c => concept_ids.includes(c.id))\n  : concepts;\nconst approvedCount = approvedConcepts.length;\nconst gap = numScripts - approvedCount;\n\nreturn [{ json: {\n  needs_regeneration: gap > 0,\n  approved_count: approvedCount,\n  num_scripts: numScripts,\n  gap: gap > 0 ? gap : 0,\n  rejection_notes: notes,\n  approved_names: approvedConcepts.map(c => c.concept_name || c.fields?.concept_name || ''),\n  project_id: data.project_id,\n  client_code: project.client_code || project.fields?.client_code || '',\n  brand_name: project.brand_name || project.fields?.brand_name || 'Brand'\n} }];"
+      },
+      "id": "w2-check-concept-gap",
+      "name": "Check Concept Gap",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3140,
+        -80
+      ],
+      "credentials": {}
+    },
+    {
+      "parameters": {
+        "dataType": "string",
+        "value1": "={{ $json.needs_regeneration ? 'regen' : 'proceed' }}",
+        "rules": {
+          "rules": [
+            {
+              "value2": "regen",
+              "output": 0
+            },
+            {
+              "value2": "proceed",
+              "output": 1
+            }
+          ]
+        }
+      },
+      "id": "w2-route-regen",
+      "name": "Route Regeneration",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 2,
+      "position": [
+        3500,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://n8n-jeet.duckdns.org:5678/webhook/ugc-phase1",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ client_code: $json.client_code, regenerate: true, num_needed: $json.gap, rejection_notes: $json.rejection_notes, exclude_concepts: $json.approved_names }) }}",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "w2-trigger-regen",
+      "name": "Trigger Regeneration — Phase 1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3860,
+        -180
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {}
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0AG86W1XT2",
+          "mode": "id"
+        },
+        "text": "={{ `PM approved ${$('Check Concept Gap').first().json.approved_count}/${$('Check Concept Gap').first().json.num_scripts} concepts for ${$('Check Concept Gap').first().json.brand_name}. ${$('Check Concept Gap').first().json.gap} more needed. Generating new concepts based on PM feedback...` }}",
+        "otherOptions": {}
+      },
+      "id": "w2-slack-regen",
+      "name": "Slack — Regeneration Started",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        4220,
+        -180
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "5Q37UpOjGx4YsbyC",
+          "name": "Slack account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'success', action: 'pm_approve_regeneration', project_id: $('Check Concept Gap').first().json.project_id, approved_concepts: $('Check Concept Gap').first().json.approved_count, gap: $('Check Concept Gap').first().json.gap, message: 'Concepts partially approved. Regenerating ' + $('Check Concept Gap').first().json.gap + ' additional concepts.' }) }}",
+        "options": {}
+      },
+      "id": "w2-respond-regen",
+      "name": "Respond — Regeneration",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        4580,
+        -180
+      ],
+      "credentials": {}
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblGhzSJ5RXWDS8h8",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ records: [{ fields: { agent: \"phase_2\", event_type: \"phase_complete\", project_id: $json.project_id || \"\", brand_name: $json.brand_name || \"\", client_code: $('Merge Context').first().json.project.client_code || \"\", severity: \"info\", message: \"Concepts approved for \" + $json.brand_name, payload: JSON.stringify({ project_id: $json.project_id, approved_count: $json.approved_count }), created_at: new Date().toISOString() } }] }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3880,
+        380
+      ],
+      "id": "8804e29d-2b42-49d0-bbd1-61a014b6d618",
+      "name": "Write Event — Concepts Approved",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable account"
+        }
+      },
+      "onError": "continueRegularOutput"
     }
   ],
   "connections": {
-    "Webhook \u2014 Concept Approval": {
+    "Webhook — Concept Approval": {
       "main": [
         [
           {
@@ -736,7 +1077,7 @@
         ]
       ]
     },
-    "Manual Trigger \u2014 Test": {
+    "Manual Trigger — Test": {
       "main": [
         [
           {
@@ -834,7 +1175,7 @@
         ],
         [
           {
-            "node": "Respond \u2014 Invalid Action",
+            "node": "Respond — Invalid Action",
             "type": "main",
             "index": 0
           }
@@ -845,29 +1186,80 @@
       "main": [
         [
           {
-            "node": "Update Concepts \u2014 PM Decision",
+            "node": "Update Concepts — PM Decision",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Update Concepts \u2014 PM Decision": {
+    "Update Concepts — PM Decision": {
       "main": [
         [
           {
-            "node": "Update Project \u2014 Client Review",
+            "node": "Check Concept Gap",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Update Project \u2014 Client Review": {
+    "Check Concept Gap": {
       "main": [
         [
           {
-            "node": "Prepare Client Review Notification",
+            "node": "Route Regeneration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Regeneration": {
+      "main": [
+        [
+          {
+            "node": "Trigger Regeneration — Phase 1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Project — Client Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger Regeneration — Phase 1": {
+      "main": [
+        [
+          {
+            "node": "Slack — Regeneration Started",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack — Regeneration Started": {
+      "main": [
+        [
+          {
+            "node": "Respond — Regeneration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Project — Client Review": {
+      "main": [
+        [
+          {
+            "node": "Search Client Folder",
             "type": "main",
             "index": 0
           }
@@ -878,18 +1270,18 @@
       "main": [
         [
           {
-            "node": "Slack \u2014 Client Review Ready",
+            "node": "Slack — Client Review Ready",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Slack \u2014 Client Review Ready": {
+    "Slack — Client Review Ready": {
       "main": [
         [
           {
-            "node": "Respond \u2014 PM Approve",
+            "node": "Respond — PM Approve",
             "type": "main",
             "index": 0
           }
@@ -900,29 +1292,29 @@
       "main": [
         [
           {
-            "node": "Update Concepts \u2014 PM Revision",
+            "node": "Update Concepts — PM Revision",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Update Concepts \u2014 PM Revision": {
+    "Update Concepts — PM Revision": {
       "main": [
         [
           {
-            "node": "Slack \u2014 Revision Needed",
+            "node": "Slack — Revision Needed",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Slack \u2014 Revision Needed": {
+    "Slack — Revision Needed": {
       "main": [
         [
           {
-            "node": "Respond \u2014 PM Reject",
+            "node": "Respond — PM Reject",
             "type": "main",
             "index": 0
           }
@@ -933,25 +1325,25 @@
       "main": [
         [
           {
-            "node": "Update Concepts \u2014 Client Decision",
+            "node": "Update Concepts — Client Decision",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Update Concepts \u2014 Client Decision": {
+    "Update Concepts — Client Decision": {
       "main": [
         [
           {
-            "node": "Update Project \u2014 Scripting",
+            "node": "Update Project — Scripting",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Update Project \u2014 Scripting": {
+    "Update Project — Scripting": {
       "main": [
         [
           {
@@ -966,29 +1358,34 @@
       "main": [
         [
           {
-            "node": "Trigger Workflow 3 \u2014 Script Writing",
+            "node": "Trigger Workflow 3 — Script Writing",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Write Event — Concepts Approved",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Trigger Workflow 3 \u2014 Script Writing": {
+    "Trigger Workflow 3 — Script Writing": {
       "main": [
         [
           {
-            "node": "Slack \u2014 Scripts Starting",
+            "node": "Slack — Scripts Starting",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Slack \u2014 Scripts Starting": {
+    "Slack — Scripts Starting": {
       "main": [
         [
           {
-            "node": "Respond \u2014 Client Approve",
+            "node": "Respond — Client Approve",
             "type": "main",
             "index": 0
           }
@@ -999,29 +1396,128 @@
       "main": [
         [
           {
-            "node": "Update Concepts \u2014 Client Revision",
+            "node": "Update Concepts — Client Revision",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Update Concepts \u2014 Client Revision": {
+    "Update Concepts — Client Revision": {
       "main": [
         [
           {
-            "node": "Slack \u2014 Client Feedback",
+            "node": "Slack — Client Feedback",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Slack \u2014 Client Feedback": {
+    "Slack — Client Feedback": {
       "main": [
         [
           {
-            "node": "Respond \u2014 Client Reject",
+            "node": "Respond — Client Reject",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Copy Template Deck": {
+      "main": [
+        [
+          {
+            "node": "Read Presentation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Presentation": {
+      "main": [
+        [
+          {
+            "node": "Build Duplicate Requests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Duplicate Requests": {
+      "main": [
+        [
+          {
+            "node": "Duplicate Slides",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Duplicate Slides": {
+      "main": [
+        [
+          {
+            "node": "Read Updated Deck",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Updated Deck": {
+      "main": [
+        [
+          {
+            "node": "Build Replace Requests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Replace Requests": {
+      "main": [
+        [
+          {
+            "node": "Replace Slide Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Replace Slide Text": {
+      "main": [
+        [
+          {
+            "node": "Share Deck",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Share Deck": {
+      "main": [
+        [
+          {
+            "node": "Prepare Client Review Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Client Folder": {
+      "main": [
+        [
+          {
+            "node": "Copy Template Deck",
             "type": "main",
             "index": 0
           }
@@ -1037,9 +1533,9 @@
   "staticData": null,
   "meta": null,
   "pinData": null,
-  "versionId": "e67789bf-0aa5-48a2-af94-90fcaa712618",
-  "activeVersionId": "e67789bf-0aa5-48a2-af94-90fcaa712618",
-  "versionCounter": 29,
+  "versionId": "c1de3209-bd80-488e-a422-ffa9206fa40b",
+  "activeVersionId": "c1de3209-bd80-488e-a422-ffa9206fa40b",
+  "versionCounter": 34,
   "triggerCount": 1,
   "shared": [
     {
@@ -1064,7 +1560,7 @@
             "userId": "ed50a507-d93d-45c3-9412-d80babb81dd0",
             "projectId": "AD8mXtbIf5cdYNIV",
             "user": {
-              "updatedAt": "2026-02-16T19:22:13.000Z",
+              "updatedAt": "2026-02-17T18:53:18.000Z",
               "createdAt": "2026-01-26T04:34:34.578Z",
               "id": "ed50a507-d93d-45c3-9412-d80babb81dd0",
               "email": "senseinfotechno@gmail.com",
@@ -1092,7 +1588,7 @@
               },
               "disabled": false,
               "mfaEnabled": false,
-              "lastActiveAt": "2026-02-16",
+              "lastActiveAt": "2026-02-17",
               "isPending": false
             }
           }
@@ -1102,9 +1598,9 @@
   ],
   "tags": [],
   "activeVersion": {
-    "updatedAt": "2026-02-17T09:37:14.247Z",
-    "createdAt": "2026-02-17T09:37:14.247Z",
-    "versionId": "e67789bf-0aa5-48a2-af94-90fcaa712618",
+    "updatedAt": "2026-02-18T08:07:18.404Z",
+    "createdAt": "2026-02-18T08:07:18.404Z",
+    "versionId": "c1de3209-bd80-488e-a422-ffa9206fa40b",
     "workflowId": "U2bxLckriORGZIyU",
     "nodes": [
       {
@@ -1132,7 +1628,7 @@
           "options": {}
         },
         "id": "w2-webhook",
-        "name": "Webhook \u2014 Concept Approval",
+        "name": "Webhook — Concept Approval",
         "type": "n8n-nodes-base.webhook",
         "typeVersion": 1.1,
         "position": [
@@ -1145,7 +1641,7 @@
       {
         "parameters": {},
         "id": "w2-manual-trigger",
-        "name": "Manual Trigger \u2014 Test",
+        "name": "Manual Trigger — Test",
         "type": "n8n-nodes-base.manualTrigger",
         "typeVersion": 1,
         "position": [
@@ -1184,25 +1680,16 @@
       },
       {
         "parameters": {
-          "resource": "record",
-          "operation": "search",
-          "base": {
-            "__rl": true,
-            "value": "appvFxwZc9yU8o8pK",
-            "mode": "id"
-          },
-          "table": {
-            "__rl": true,
-            "value": "Projects",
-            "mode": "name"
-          },
-          "filterByFormula": "=RECORD_ID() = '{{ $json.project_id }}'",
+          "method": "GET",
+          "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Projects/{{ $json.project_id }}",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "airtableTokenApi",
           "options": {}
         },
         "id": "w2-fetch-project",
         "name": "Fetch Project from Airtable",
-        "type": "n8n-nodes-base.airtable",
-        "typeVersion": 2.1,
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
         "position": [
           940,
           320
@@ -1212,29 +1699,21 @@
             "id": "WelvlJEjoHaI3l9G",
             "name": "Airtable Personal Access Token account"
           }
-        }
+        },
+        "onError": "continueRegularOutput"
       },
       {
         "parameters": {
-          "resource": "record",
-          "operation": "search",
-          "base": {
-            "__rl": true,
-            "value": "appvFxwZc9yU8o8pK",
-            "mode": "id"
-          },
-          "table": {
-            "__rl": true,
-            "value": "Concepts",
-            "mode": "name"
-          },
-          "filterByFormula": "=FIND('{{ $('Fetch Project from Airtable').first().json.client_code }}', ARRAYJOIN({project_id})) > 0",
+          "method": "GET",
+          "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Concepts?filterByFormula={{ encodeURIComponent(\"FIND('\" + $('Fetch Project from Airtable').first().json.fields.client_code + \"', ARRAYJOIN({project_id})) > 0\") }}&pageSize=100",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "airtableTokenApi",
           "options": {}
         },
         "id": "w2-fetch-concepts",
         "name": "Fetch Concepts from Airtable",
-        "type": "n8n-nodes-base.airtable",
-        "typeVersion": 2.1,
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
         "position": [
           1300,
           320
@@ -1244,11 +1723,12 @@
             "id": "WelvlJEjoHaI3l9G",
             "name": "Airtable Personal Access Token account"
           }
-        }
+        },
+        "onError": "continueRegularOutput"
       },
       {
         "parameters": {
-          "jsCode": "// ============================================================\n// Merge project + concepts + payload into single context\n// ============================================================\nconst payload = $('Extract Approval Payload').first().json;\nconst project = $('Fetch Project from Airtable').first().json;\nconst concepts = $input.all().map(item => item.json);\n\nreturn [{ json: {\n  ...payload,\n  project,\n  concepts,\n  concept_count: concepts.length\n} }];"
+          "jsCode": "// ============================================================\n// Merge project + concepts + payload into single context\n// Handles HTTP Request Airtable response format\n// ============================================================\nconst payload = $('Extract Approval Payload').first().json;\n\n// HTTP Request returns {id, fields: {...}} for single record GET\nconst rawProject = $('Fetch Project from Airtable').first().json;\nconst project = rawProject.fields\n  ? { id: rawProject.id, ...rawProject.fields }\n  : rawProject;\n\n// HTTP Request returns {records: [{id, fields: {...}}]} for list/search\nconst rawConcepts = $input.all();\nlet concepts;\nif (rawConcepts.length === 1 && rawConcepts[0].json.records) {\n  concepts = rawConcepts[0].json.records.map(r => ({ id: r.id, ...r.fields }));\n} else {\n  concepts = rawConcepts.map(item => item.json);\n}\n\nreturn [{ json: {\n  ...payload,\n  project,\n  concepts,\n  concept_count: concepts.length\n} }];"
         },
         "id": "w2-merge-data",
         "name": "Merge Context",
@@ -1338,7 +1818,7 @@
           "options": {}
         },
         "id": "w2-update-concepts-pm",
-        "name": "Update Concepts \u2014 PM Decision",
+        "name": "Update Concepts — PM Decision",
         "type": "n8n-nodes-base.httpRequest",
         "typeVersion": 4.2,
         "position": [
@@ -1365,7 +1845,7 @@
           "options": {}
         },
         "id": "w2-update-project-client-review",
-        "name": "Update Project \u2014 Client Review",
+        "name": "Update Project — Client Review",
         "type": "n8n-nodes-base.httpRequest",
         "typeVersion": 4.2,
         "position": [
@@ -1382,14 +1862,14 @@
       },
       {
         "parameters": {
-          "jsCode": "// ============================================================\n// Build Slack notification for client concept review\n// ============================================================\nconst data = $('Merge Context').first().json;\nconst project = data.project;\nconst concepts = data.concepts.filter(c => {\n  const ids = data.concept_ids || [];\n  return ids.length === 0 || ids.includes(c.id);\n});\n\nconst conceptSummary = concepts.map((c, i) =>\n  `${i + 1}. *${c.concept_name || c.fields?.concept_name || 'Concept'}*\\n   _\"${c.hook_text || c.fields?.hook_text || ''}\"_\\n   ${c.concept_pitch || c.fields?.concept_pitch || ''}`\n).join('\\n\\n');\n\nconst brandName = project.brand_name || project.fields?.brand_name || 'Client';\nconst clientEmail = project.client_email || project.fields?.client_email || '';\nconst clientName = project.client_name || project.fields?.client_name || 'Client';\nconst projectId = data.project_id;\n\nconst slackBlocks = [\n  {\n    \"type\": \"header\",\n    \"text\": { \"type\": \"plain_text\", \"text\": `Client Review: ${brandName} Concepts` }\n  },\n  {\n    \"type\": \"section\",\n    \"text\": {\n      \"type\": \"mrkdwn\",\n      \"text\": `PM has approved *${concepts.length} concepts* for ${brandName}.\\nClient: ${clientName} (${clientEmail})\\n\\n*Approved Concepts:*\\n\\n${conceptSummary}\\n\\nConcepts are ready for client review. Share the Airtable view link with the client.`\n    }\n  },\n  {\n    \"type\": \"actions\",\n    \"elements\": [\n      {\n        \"type\": \"button\",\n        \"text\": { \"type\": \"plain_text\", \"text\": \"Client Airtable View\" },\n        \"url\": `https://airtable.com/appvFxwZc9yU8o8pK/Concepts?filter_project_id=${projectId}`\n      }\n    ]\n  }\n];\n\nreturn [{ json: {\n  project_id: projectId,\n  slack_blocks: JSON.stringify(slackBlocks),\n  slack_text: `PM approved ${concepts.length} concepts for ${brandName}. Ready for client review.`,\n  client_email: clientEmail,\n  client_name: clientName,\n  brand_name: brandName,\n  approved_count: concepts.length\n} }];"
+          "jsCode": "// ============================================================\n// Build Slack notification for client concept review\n// Includes Google Slides deck link if available\n// ============================================================\nconst data = $('Merge Context').first().json;\nconst project = data.project;\nconst concepts = data.concepts.filter(c => {\n  const ids = data.concept_ids || [];\n  return ids.length === 0 || ids.includes(c.id);\n});\n\nconst conceptSummary = concepts.map((c, i) =>\n  `${i + 1}. *${c.concept_name || c.fields?.concept_name || 'Concept'}*\\n   _\"${c.hook_text || c.fields?.hook_text || ''}\"_\\n   ${c.concept_pitch || c.fields?.concept_pitch || ''}`\n).join('\\n\\n');\n\nconst brandName = project.brand_name || project.fields?.brand_name || 'Client';\nconst clientEmail = project.client_email || project.fields?.client_email || '';\nconst clientName = project.client_name || project.fields?.client_name || 'Client';\nconst projectId = data.project_id;\n\n// Try to get deck link from upstream node\nlet deckLink = '';\ntry {\n  const replaceData = $('Build Replace Requests').first().json;\n  if (replaceData && replaceData.deck_link && !replaceData.deck_failed) {\n    deckLink = replaceData.deck_link;\n  }\n} catch (e) {\n  // Deck generation failed — continue without link\n}\n\nconst actionButtons = [];\nif (deckLink) {\n  actionButtons.push({\n    \"type\": \"button\",\n    \"text\": { \"type\": \"plain_text\", \"text\": \"View Concept Deck\" },\n    \"style\": \"primary\",\n    \"url\": deckLink\n  });\n}\nactionButtons.push({\n  \"type\": \"button\",\n  \"text\": { \"type\": \"plain_text\", \"text\": \"Airtable View\" },\n  \"url\": `https://airtable.com/appvFxwZc9yU8o8pK/Concepts?filter_project_id=${projectId}`\n});\n\nconst deckNote = deckLink ? `\\n\\n:page_facing_up: <${deckLink}|Concept Deck> is ready to share with the client.` : '';\n\nconst slackBlocks = [\n  {\n    \"type\": \"header\",\n    \"text\": { \"type\": \"plain_text\", \"text\": `Client Review: ${brandName} Concepts` }\n  },\n  {\n    \"type\": \"section\",\n    \"text\": {\n      \"type\": \"mrkdwn\",\n      \"text\": `PM has approved *${concepts.length} concepts* for ${brandName}.\\nClient: ${clientName} (${clientEmail})\\n\\n*Approved Concepts:*\\n\\n${conceptSummary}\\n\\nConcepts are ready for client review.${deckNote}`\n    }\n  },\n  {\n    \"type\": \"actions\",\n    \"elements\": actionButtons\n  }\n];\n\nreturn [{ json: {\n  project_id: projectId,\n  slack_blocks: JSON.stringify(slackBlocks),\n  slack_text: `PM approved ${concepts.length} concepts for ${brandName}. Ready for client review.${deckLink ? ' Concept deck: ' + deckLink : ''}`,\n  client_email: clientEmail,\n  client_name: clientName,\n  brand_name: brandName,\n  approved_count: concepts.length,\n  deck_link: deckLink\n} }];"
         },
         "id": "w2-pm-approve-notify-prep",
         "name": "Prepare Client Review Notification",
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
         "position": [
-          3500,
+          6560,
           60
         ],
         "credentials": {}
@@ -1408,11 +1888,11 @@
           }
         },
         "id": "w2-slack-client-review",
-        "name": "Slack \u2014 Client Review Ready",
+        "name": "Slack — Client Review Ready",
         "type": "n8n-nodes-base.slack",
         "typeVersion": 2.2,
         "position": [
-          3860,
+          6920,
           60
         ],
         "credentials": {
@@ -1430,11 +1910,11 @@
           "options": {}
         },
         "id": "w2-respond-pm-approve",
-        "name": "Respond \u2014 PM Approve",
+        "name": "Respond — PM Approve",
         "type": "n8n-nodes-base.respondToWebhook",
         "typeVersion": 1.1,
         "position": [
-          4220,
+          7280,
           60
         ],
         "credentials": {}
@@ -1482,7 +1962,7 @@
           "options": {}
         },
         "id": "w2-update-concepts-pm-reject",
-        "name": "Update Concepts \u2014 PM Revision",
+        "name": "Update Concepts — PM Revision",
         "type": "n8n-nodes-base.httpRequest",
         "typeVersion": 4.2,
         "position": [
@@ -1509,7 +1989,7 @@
           "otherOptions": {}
         },
         "id": "w2-slack-pm-reject",
-        "name": "Slack \u2014 Revision Needed",
+        "name": "Slack — Revision Needed",
         "type": "n8n-nodes-base.slack",
         "typeVersion": 2.2,
         "position": [
@@ -1531,11 +2011,11 @@
           "options": {}
         },
         "id": "w2-respond-pm-reject",
-        "name": "Respond \u2014 PM Reject",
+        "name": "Respond — PM Reject",
         "type": "n8n-nodes-base.respondToWebhook",
         "typeVersion": 1.1,
         "position": [
-          3500,
+          3680,
           320
         ],
         "credentials": {}
@@ -1583,7 +2063,7 @@
           "options": {}
         },
         "id": "w2-update-concepts-client",
-        "name": "Update Concepts \u2014 Client Decision",
+        "name": "Update Concepts — Client Decision",
         "type": "n8n-nodes-base.httpRequest",
         "typeVersion": 4.2,
         "position": [
@@ -1610,7 +2090,7 @@
           "options": {}
         },
         "id": "w2-update-project-scripting",
-        "name": "Update Project \u2014 Scripting",
+        "name": "Update Project — Scripting",
         "type": "n8n-nodes-base.httpRequest",
         "typeVersion": 4.2,
         "position": [
@@ -1634,7 +2114,7 @@
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
         "position": [
-          3500,
+          3680,
           580
         ],
         "credentials": {}
@@ -1651,11 +2131,11 @@
           }
         },
         "id": "w2-trigger-wf3",
-        "name": "Trigger Workflow 3 \u2014 Script Writing",
+        "name": "Trigger Workflow 3 — Script Writing",
         "type": "n8n-nodes-base.httpRequest",
         "typeVersion": 4.2,
         "position": [
-          3860,
+          4040,
           580
         ],
         "onError": "continueRegularOutput",
@@ -1673,11 +2153,11 @@
           "otherOptions": {}
         },
         "id": "w2-slack-client-approve",
-        "name": "Slack \u2014 Scripts Starting",
+        "name": "Slack — Scripts Starting",
         "type": "n8n-nodes-base.slack",
         "typeVersion": 2.2,
         "position": [
-          4220,
+          4400,
           580
         ],
         "credentials": {
@@ -1695,11 +2175,11 @@
           "options": {}
         },
         "id": "w2-respond-client-approve",
-        "name": "Respond \u2014 Client Approve",
+        "name": "Respond — Client Approve",
         "type": "n8n-nodes-base.respondToWebhook",
         "typeVersion": 1.1,
         "position": [
-          4580,
+          4760,
           580
         ],
         "credentials": {}
@@ -1747,7 +2227,7 @@
           "options": {}
         },
         "id": "w2-update-concepts-client-reject",
-        "name": "Update Concepts \u2014 Client Revision",
+        "name": "Update Concepts — Client Revision",
         "type": "n8n-nodes-base.httpRequest",
         "typeVersion": 4.2,
         "position": [
@@ -1774,7 +2254,7 @@
           "otherOptions": {}
         },
         "id": "w2-slack-client-reject",
-        "name": "Slack \u2014 Client Feedback",
+        "name": "Slack — Client Feedback",
         "type": "n8n-nodes-base.slack",
         "typeVersion": 2.2,
         "position": [
@@ -1796,11 +2276,11 @@
           "options": {}
         },
         "id": "w2-respond-client-reject",
-        "name": "Respond \u2014 Client Reject",
+        "name": "Respond — Client Reject",
         "type": "n8n-nodes-base.respondToWebhook",
         "typeVersion": 1.1,
         "position": [
-          3500,
+          3680,
           840
         ],
         "credentials": {}
@@ -1814,7 +2294,7 @@
           }
         },
         "id": "w2-respond-fallback",
-        "name": "Respond \u2014 Invalid Action",
+        "name": "Respond — Invalid Action",
         "type": "n8n-nodes-base.respondToWebhook",
         "typeVersion": 1.1,
         "position": [
@@ -1822,10 +2302,218 @@
           1060
         ],
         "credentials": {}
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "=https://www.googleapis.com/drive/v3/files/1gaQD5YJwF2kckEjbsTIlSRONvluuDvwpA_uy2RltuT4/copy",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "googleDriveOAuth2Api",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ name: ($('Merge Context').first().json.project.brand_name || 'Brand') + ' — Concept Deck — ' + new Date().toISOString().slice(0,10), parents: ($json.files && $json.files[0] && $json.files[0].id) ? [$json.files[0].id] : [] }) }}",
+          "options": {}
+        },
+        "id": "w2-copy-template-deck",
+        "name": "Copy Template Deck",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          3680,
+          60
+        ],
+        "credentials": {
+          "googleDriveOAuth2Api": {
+            "id": "ZYBF6pP5UxUqJgVI",
+            "name": "Google Drive account - vishant"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "=https://slides.googleapis.com/v1/presentations/{{ $json.id }}",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "googleDriveOAuth2Api",
+          "options": {}
+        },
+        "id": "w2-read-presentation",
+        "name": "Read Presentation",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          4040,
+          60
+        ],
+        "credentials": {
+          "googleDriveOAuth2Api": {
+            "id": "ZYBF6pP5UxUqJgVI",
+            "name": "Google Drive account - vishant"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "// ============================================================\n// Build batchUpdate requests:\n// 1. Duplicate concept template slide (slide index 1) N-1 times\n// 2. Replace title slide placeholders (brand_name, date)\n// Template has 3 slides: title (0), concept template (1), thank you (2)\n// ============================================================\nconst presentation = $input.first().json;\nconst data = $('Merge Context').first().json;\nconst concepts = data.concepts.filter(c => {\n  const ids = data.concept_ids || [];\n  return ids.length === 0 || ids.includes(c.id);\n});\nconst brandName = data.project.brand_name || data.project.fields?.brand_name || 'Brand';\nconst today = new Date().toISOString().slice(0, 10);\n\nif (!presentation.slides || presentation.slides.length < 2) {\n  return [{ json: { deck_failed: true, error: 'Template needs at least 2 slides', presentationId: presentation.presentationId } }];\n}\n\nconst presentationId = presentation.presentationId;\nconst templateSlideId = presentation.slides[1].objectId; // Slide 1 = concept template\nconst conceptCount = concepts.length;\nconst requests = [];\n\n// Duplicate the concept template slide N-1 times\nfor (let i = 0; i < conceptCount - 1; i++) {\n  requests.push({ duplicateObject: { objectId: templateSlideId } });\n}\n\n// Replace title slide placeholders\nrequests.push({\n  replaceAllText: {\n    containsText: { text: '{{brand_name}}', matchCase: false },\n    replaceText: brandName\n  }\n});\nrequests.push({\n  replaceAllText: {\n    containsText: { text: '{{date}}', matchCase: false },\n    replaceText: today\n  }\n});\n\nreturn [{ json: {\n  presentationId,\n  requests: JSON.stringify({ requests }),\n  conceptCount,\n  concepts: concepts.map((c, i) => ({\n    index: i,\n    concept_name: c.concept_name || '',\n    hook_text: c.hook_text || '',\n    concept_pitch: c.concept_pitch || '',\n    format: c.format || '',\n    framework: c.framework || '',\n    platform: c.platform || '',\n    emotional_journey: c.emotional_journey || '',\n    funnel_stage: c.funnel_stage || '',\n    reference_url: c.reference_video_url || ''\n  })),\n  deck_failed: false\n} }];"
+        },
+        "id": "w2-build-dup-requests",
+        "name": "Build Duplicate Requests",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          4400,
+          60
+        ],
+        "credentials": {}
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "=https://slides.googleapis.com/v1/presentations/{{ $json.presentationId }}:batchUpdate",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "googleDriveOAuth2Api",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ $json.requests }}",
+          "options": {}
+        },
+        "id": "w2-duplicate-slides",
+        "name": "Duplicate Slides",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          4760,
+          60
+        ],
+        "credentials": {
+          "googleDriveOAuth2Api": {
+            "id": "ZYBF6pP5UxUqJgVI",
+            "name": "Google Drive account - vishant"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "=https://slides.googleapis.com/v1/presentations/{{ $('Build Duplicate Requests').first().json.presentationId }}",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "googleDriveOAuth2Api",
+          "options": {}
+        },
+        "id": "w2-read-updated-deck",
+        "name": "Read Updated Deck",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          5120,
+          60
+        ],
+        "credentials": {
+          "googleDriveOAuth2Api": {
+            "id": "ZYBF6pP5UxUqJgVI",
+            "name": "Google Drive account - vishant"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "// ============================================================\n// Build per-slide replaceAllText + reference video thumbnails\n// Google Slides API auto-calculates scaleX/Y from size; transform sets position\n// ============================================================\nconst dupData = $('Build Duplicate Requests').first().json;\n\nif (dupData.deck_failed) {\n  return [{ json: { deck_failed: true, presentationId: dupData.presentationId, deck_link: '' } }];\n}\n\nconst presentation = $input.first().json;\nconst concepts = dupData.concepts;\nconst conceptCount = dupData.conceptCount;\nconst presentationId = dupData.presentationId;\n\nif (!presentation.slides) {\n  return [{ json: { deck_failed: true, presentationId, deck_link: '' } }];\n}\n\nconst conceptSlides = presentation.slides.slice(1, 1 + conceptCount);\nconst extraSlides = presentation.slides.slice(1 + conceptCount, -1);\n\nconst requests = [];\n\n// Delete extra duplicate slides\nfor (const slide of extraSlides) {\n  requests.push({ deleteObject: { objectId: slide.objectId } });\n}\n\n// For each concept, replace text scoped to that slide\nfor (let i = 0; i < conceptCount && i < conceptSlides.length; i++) {\n  const concept = concepts[i];\n  const slideId = conceptSlides[i].objectId;\n\n  const replacements = {\n    '{{concept_number}}': String(i + 1),\n    '{{concept_name}}': concept.concept_name,\n    '{{hook_text}}': concept.hook_text,\n    '{{concept_pitch}}': concept.concept_pitch,\n    '{{format}}': concept.format,\n    '{{platform}}': concept.platform,\n    '{{framework}}': concept.framework,\n    '{{emotional_journey}}': concept.emotional_journey,\n    '{{funnel_stage}}': concept.funnel_stage,\n    '{{reference_url}}': concept.reference_url\n  };\n\n  for (const [placeholder, value] of Object.entries(replacements)) {\n    requests.push({\n      replaceAllText: {\n        containsText: { text: placeholder, matchCase: false },\n        replaceText: value || '',\n        pageObjectIds: [slideId]\n      }\n    });\n  }\n\n  // Add reference video thumbnail if URL is YouTube\n  if (concept.reference_url) {\n    let thumbnailUrl = '';\n    const ytMatch = concept.reference_url.match(/(?:youtube\\.com\\/watch\\?v=|youtu\\.be\\/|youtube\\.com\\/shorts\\/)([a-zA-Z0-9_-]{11})/);\n    if (ytMatch) {\n      thumbnailUrl = 'https://img.youtube.com/vi/' + ytMatch[1] + '/hqdefault.jpg';\n    }\n\n    if (thumbnailUrl) {\n      const thumbId = 'thumb_' + i;\n      const EMU = 914400;\n      // Single createImage with size + transform\n      // API auto-calculates scaleX/Y from size; translateX/Y positions the image\n      // Size: 2.8\" x 2.1\" (4:3 aspect ratio matching YouTube thumbnails)\n      // Position: right side of slide at (6.2\", 1.5\")\n      requests.push({\n        createImage: {\n          objectId: thumbId,\n          url: thumbnailUrl,\n          elementProperties: {\n            pageObjectId: slideId,\n            size: {\n              width: { magnitude: Math.round(2.8 * EMU), unit: 'EMU' },\n              height: { magnitude: Math.round(2.1 * EMU), unit: 'EMU' }\n            },\n            transform: {\n              scaleX: 1,\n              scaleY: 1,\n              shearX: 0,\n              shearY: 0,\n              translateX: Math.round(6.2 * EMU),\n              translateY: Math.round(1.5 * EMU),\n              unit: 'EMU'\n            }\n          }\n        }\n      });\n    }\n  }\n}\n\nconst deckLink = 'https://docs.google.com/presentation/d/' + presentationId + '/edit';\n\nreturn [{ json: {\n  presentationId,\n  requests: JSON.stringify({ requests }),\n  deck_link: deckLink,\n  deck_failed: false\n} }];"
+        },
+        "id": "w2-build-replace-requests",
+        "name": "Build Replace Requests",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          5480,
+          60
+        ],
+        "credentials": {}
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "=https://slides.googleapis.com/v1/presentations/{{ $json.presentationId }}:batchUpdate",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "googleDriveOAuth2Api",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ $json.requests }}",
+          "options": {}
+        },
+        "id": "w2-replace-slide-text",
+        "name": "Replace Slide Text",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          5840,
+          60
+        ],
+        "credentials": {
+          "googleDriveOAuth2Api": {
+            "id": "ZYBF6pP5UxUqJgVI",
+            "name": "Google Drive account - vishant"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "=https://www.googleapis.com/drive/v3/files/{{ $('Build Replace Requests').first().json.presentationId }}/permissions",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "googleDriveOAuth2Api",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ role: \"reader\", type: \"anyone\" }) }}",
+          "options": {}
+        },
+        "id": "w2-share-deck",
+        "name": "Share Deck",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          6200,
+          60
+        ],
+        "credentials": {
+          "googleDriveOAuth2Api": {
+            "id": "ZYBF6pP5UxUqJgVI",
+            "name": "Google Drive account - vishant"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "=https://www.googleapis.com/drive/v3/files?q={{ encodeURIComponent(\"name='\" + $('Merge Context').first().json.project.brand_name + \"' and mimeType='application/vnd.google-apps.folder' and '1ouoAy-XmcTaf53xG7n6H7_WCUHh73n5l' in parents and trashed=false\") }}&fields=files(id,name)",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "googleDriveOAuth2Api",
+          "options": {}
+        },
+        "id": "w2-search-client-folder",
+        "name": "Search Client Folder",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          3320,
+          60
+        ],
+        "credentials": {
+          "googleDriveOAuth2Api": {
+            "id": "ZYBF6pP5UxUqJgVI",
+            "name": "Google Drive account - vishant"
+          }
+        },
+        "onError": "continueRegularOutput"
       }
     ],
     "connections": {
-      "Webhook \u2014 Concept Approval": {
+      "Webhook — Concept Approval": {
         "main": [
           [
             {
@@ -1836,7 +2524,7 @@
           ]
         ]
       },
-      "Manual Trigger \u2014 Test": {
+      "Manual Trigger — Test": {
         "main": [
           [
             {
@@ -1934,7 +2622,7 @@
           ],
           [
             {
-              "node": "Respond \u2014 Invalid Action",
+              "node": "Respond — Invalid Action",
               "type": "main",
               "index": 0
             }
@@ -1945,29 +2633,29 @@
         "main": [
           [
             {
-              "node": "Update Concepts \u2014 PM Decision",
+              "node": "Update Concepts — PM Decision",
               "type": "main",
               "index": 0
             }
           ]
         ]
       },
-      "Update Concepts \u2014 PM Decision": {
+      "Update Concepts — PM Decision": {
         "main": [
           [
             {
-              "node": "Update Project \u2014 Client Review",
+              "node": "Update Project — Client Review",
               "type": "main",
               "index": 0
             }
           ]
         ]
       },
-      "Update Project \u2014 Client Review": {
+      "Update Project — Client Review": {
         "main": [
           [
             {
-              "node": "Prepare Client Review Notification",
+              "node": "Search Client Folder",
               "type": "main",
               "index": 0
             }
@@ -1978,18 +2666,18 @@
         "main": [
           [
             {
-              "node": "Slack \u2014 Client Review Ready",
+              "node": "Slack — Client Review Ready",
               "type": "main",
               "index": 0
             }
           ]
         ]
       },
-      "Slack \u2014 Client Review Ready": {
+      "Slack — Client Review Ready": {
         "main": [
           [
             {
-              "node": "Respond \u2014 PM Approve",
+              "node": "Respond — PM Approve",
               "type": "main",
               "index": 0
             }
@@ -2000,29 +2688,29 @@
         "main": [
           [
             {
-              "node": "Update Concepts \u2014 PM Revision",
+              "node": "Update Concepts — PM Revision",
               "type": "main",
               "index": 0
             }
           ]
         ]
       },
-      "Update Concepts \u2014 PM Revision": {
+      "Update Concepts — PM Revision": {
         "main": [
           [
             {
-              "node": "Slack \u2014 Revision Needed",
+              "node": "Slack — Revision Needed",
               "type": "main",
               "index": 0
             }
           ]
         ]
       },
-      "Slack \u2014 Revision Needed": {
+      "Slack — Revision Needed": {
         "main": [
           [
             {
-              "node": "Respond \u2014 PM Reject",
+              "node": "Respond — PM Reject",
               "type": "main",
               "index": 0
             }
@@ -2033,25 +2721,25 @@
         "main": [
           [
             {
-              "node": "Update Concepts \u2014 Client Decision",
+              "node": "Update Concepts — Client Decision",
               "type": "main",
               "index": 0
             }
           ]
         ]
       },
-      "Update Concepts \u2014 Client Decision": {
+      "Update Concepts — Client Decision": {
         "main": [
           [
             {
-              "node": "Update Project \u2014 Scripting",
+              "node": "Update Project — Scripting",
               "type": "main",
               "index": 0
             }
           ]
         ]
       },
-      "Update Project \u2014 Scripting": {
+      "Update Project — Scripting": {
         "main": [
           [
             {
@@ -2066,29 +2754,29 @@
         "main": [
           [
             {
-              "node": "Trigger Workflow 3 \u2014 Script Writing",
+              "node": "Trigger Workflow 3 — Script Writing",
               "type": "main",
               "index": 0
             }
           ]
         ]
       },
-      "Trigger Workflow 3 \u2014 Script Writing": {
+      "Trigger Workflow 3 — Script Writing": {
         "main": [
           [
             {
-              "node": "Slack \u2014 Scripts Starting",
+              "node": "Slack — Scripts Starting",
               "type": "main",
               "index": 0
             }
           ]
         ]
       },
-      "Slack \u2014 Scripts Starting": {
+      "Slack — Scripts Starting": {
         "main": [
           [
             {
-              "node": "Respond \u2014 Client Approve",
+              "node": "Respond — Client Approve",
               "type": "main",
               "index": 0
             }
@@ -2099,29 +2787,128 @@
         "main": [
           [
             {
-              "node": "Update Concepts \u2014 Client Revision",
+              "node": "Update Concepts — Client Revision",
               "type": "main",
               "index": 0
             }
           ]
         ]
       },
-      "Update Concepts \u2014 Client Revision": {
+      "Update Concepts — Client Revision": {
         "main": [
           [
             {
-              "node": "Slack \u2014 Client Feedback",
+              "node": "Slack — Client Feedback",
               "type": "main",
               "index": 0
             }
           ]
         ]
       },
-      "Slack \u2014 Client Feedback": {
+      "Slack — Client Feedback": {
         "main": [
           [
             {
-              "node": "Respond \u2014 Client Reject",
+              "node": "Respond — Client Reject",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Copy Template Deck": {
+        "main": [
+          [
+            {
+              "node": "Read Presentation",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Read Presentation": {
+        "main": [
+          [
+            {
+              "node": "Build Duplicate Requests",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build Duplicate Requests": {
+        "main": [
+          [
+            {
+              "node": "Duplicate Slides",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Duplicate Slides": {
+        "main": [
+          [
+            {
+              "node": "Read Updated Deck",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Read Updated Deck": {
+        "main": [
+          [
+            {
+              "node": "Build Replace Requests",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build Replace Requests": {
+        "main": [
+          [
+            {
+              "node": "Replace Slide Text",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Replace Slide Text": {
+        "main": [
+          [
+            {
+              "node": "Share Deck",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Share Deck": {
+        "main": [
+          [
+            {
+              "node": "Prepare Client Review Notification",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Search Client Folder": {
+        "main": [
+          [
+            {
+              "node": "Copy Template Deck",
               "type": "main",
               "index": 0
             }
@@ -2135,10 +2922,18 @@
     "autosaved": false,
     "workflowPublishHistory": [
       {
-        "createdAt": "2026-02-17T09:37:14.340Z",
-        "id": 79,
+        "createdAt": "2026-02-18T08:07:18.502Z",
+        "id": 129,
         "workflowId": "U2bxLckriORGZIyU",
-        "versionId": "e67789bf-0aa5-48a2-af94-90fcaa712618",
+        "versionId": "c1de3209-bd80-488e-a422-ffa9206fa40b",
+        "event": "activated",
+        "userId": "ed50a507-d93d-45c3-9412-d80babb81dd0"
+      },
+      {
+        "createdAt": "2026-02-18T08:07:19.900Z",
+        "id": 130,
+        "workflowId": "U2bxLckriORGZIyU",
+        "versionId": "c1de3209-bd80-488e-a422-ffa9206fa40b",
         "event": "activated",
         "userId": "ed50a507-d93d-45c3-9412-d80babb81dd0"
       }

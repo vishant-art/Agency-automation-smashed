@@ -1,0 +1,382 @@
+{
+  "name": "Agent 3 — Creator Scout",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "find-creators",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "cs-webhook-find",
+      "name": "Webhook — Find Creators",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [
+        400,
+        300
+      ],
+      "webhookId": "find-creators-webhook"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "add-creator",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "cs-webhook-add",
+      "name": "Webhook — Add Creator",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [
+        400,
+        700
+      ],
+      "webhookId": "add-creator-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse the find-creators request\nconst body = $input.first().json.body || $input.first().json;\nconst requirements = {\n  project_id: body.project_id || '',\n  niches: Array.isArray(body.niches) ? body.niches : (body.niches || '').split(',').map(s => s.trim()).filter(Boolean),\n  languages: Array.isArray(body.languages) ? body.languages : (body.languages || 'English').split(',').map(s => s.trim()).filter(Boolean),\n  gender: body.gender || '',\n  budget_max: Number(body.budget_max) || 50000,\n  style: body.style || '',\n  brand_name: body.brand_name || '',\n  industry: body.industry || '',\n  count: Number(body.count) || 5\n};\nreturn [{ json: requirements }];"
+      },
+      "id": "cs-parse-find",
+      "name": "Parse Requirements",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Creators?filterByFormula=AND(%7Bstatus%7D%3D'Active'%2C%7Bavailability%7D%3D'Available')&pageSize=100",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "options": {}
+      },
+      "id": "cs-fetch-creators",
+      "name": "Fetch Available Creators",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        300
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Score and rank creators based on requirements\nconst requirements = $('Parse Requirements').first().json;\nconst creatorsResponse = $input.first().json;\nconst creators = (creatorsResponse.records || []).map(r => ({ id: r.id, ...r.fields }));\n\nif (creators.length === 0) {\n  return [{ json: { matches: [], message: 'No available creators in database', requirements } }];\n}\n\n// Score each creator\nconst scored = creators.map(creator => {\n  let score = 0;\n  const reasons = [];\n\n  // Niche match (highest weight)\n  const creatorNiches = Array.isArray(creator.niches) ? creator.niches : [];\n  const nicheMatches = requirements.niches.filter(n => creatorNiches.includes(n));\n  if (nicheMatches.length > 0) {\n    score += 30 * nicheMatches.length;\n    reasons.push(`Niche: ${nicheMatches.join(', ')}`);\n  }\n\n  // Language match\n  const creatorLangs = Array.isArray(creator.languages) ? creator.languages : [];\n  const langMatches = requirements.languages.filter(l => creatorLangs.includes(l));\n  if (langMatches.length > 0) {\n    score += 20 * langMatches.length;\n    reasons.push(`Language: ${langMatches.join(', ')}`);\n  }\n\n  // Gender match\n  if (requirements.gender && creator.gender === requirements.gender) {\n    score += 15;\n    reasons.push(`Gender: ${creator.gender}`);\n  }\n\n  // Budget match\n  const rate = creator.rate_per_video || 0;\n  if (rate > 0 && rate <= requirements.budget_max) {\n    score += 10;\n    reasons.push(`Rate: ₹${rate} (within budget)`);\n  } else if (rate > requirements.budget_max) {\n    score -= 10;\n    reasons.push(`Rate: ₹${rate} (over budget)`);\n  }\n\n  // Rating bonus\n  const rating = creator.rating || 0;\n  if (rating >= 4) {\n    score += rating * 3;\n    reasons.push(`Rating: ${rating}/5`);\n  }\n\n  // Experience bonus\n  const totalShot = creator.total_scripts_shot || 0;\n  if (totalShot > 10) {\n    score += 5;\n    reasons.push(`${totalShot} scripts shot`);\n  }\n\n  return {\n    ...creator,\n    score,\n    match_reasons: reasons\n  };\n});\n\n// Sort by score descending, take top N\nscored.sort((a, b) => b.score - a.score);\nconst topMatches = scored.slice(0, requirements.count);\n\nreturn [{ json: { \n  matches: topMatches.map(c => ({\n    id: c.id,\n    name: c.name,\n    instagram: c.instagram_handle,\n    portfolio: c.portfolio_url,\n    niches: c.niches,\n    languages: c.languages,\n    gender: c.gender,\n    rate_per_video: c.rate_per_video,\n    rating: c.rating,\n    total_scripts: c.total_scripts_shot,\n    score: c.score,\n    match_reasons: c.match_reasons\n  })),\n  total_available: creators.length,\n  requirements\n} }];"
+      },
+      "id": "cs-rank",
+      "name": "Score & Rank Creators",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ systemInstruction: { parts: [{ text: 'You are a Creator Scout for Smashed Agency. Format creator recommendations for Slack. Use *bold* for names, include key details (rate, niches, rating, match score). Add a brief recommendation note for each. If no good matches found, suggest what to look for externally. Keep it concise and actionable.' }] }, contents: [{ role: 'user', parts: [{ text: 'Format these creator matches for ' + ($json.requirements?.brand_name || 'the project') + ':\\n\\nRequirements: ' + JSON.stringify($json.requirements) + '\\n\\nTop Matches:\\n' + JSON.stringify($json.matches, null, 2) + '\\n\\nTotal available in DB: ' + $json.total_available }] }], generationConfig: { temperature: 0.3, maxOutputTokens: 1500 } }) }}",
+        "options": {}
+      },
+      "id": "cs-gemini",
+      "name": "Gemini — Format Recommendations",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1360,
+        300
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "rIL63TG4xfMQL8uJ",
+          "name": "Cosmisk AI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst recommendations = response.candidates?.[0]?.content?.parts?.[0]?.text || 'Failed to format recommendations';\nconst matchData = $('Score & Rank Creators').first().json;\nreturn [{ json: { recommendations, matches: matchData.matches, total: matchData.total_available, requirements: matchData.requirements } }];"
+      },
+      "id": "cs-parse-gemini",
+      "name": "Parse Gemini Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1600,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0AFBQ5UF0E",
+          "mode": "id"
+        },
+        "text": "={{ '🎯 *Creator Scout Report*\\n\\n' + $json.recommendations }}",
+        "otherOptions": {}
+      },
+      "id": "cs-slack-results",
+      "name": "Post Recommendations to Slack",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        1840,
+        200
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "5Q37UpOjGx4YsbyC",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ JSON.stringify({ success: true, matches: $json.matches.length, total_available: $json.total, recommendations: $json.recommendations }) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "cs-respond-find",
+      "name": "Respond — Find Results",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1840,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse add-creator request — only include non-empty fields to avoid Airtable select errors\nconst body = $input.first().json.body || $input.first().json;\nconst f = {};\nif (body.name) f.name = body.name;\nif (body.email) f.email = body.email;\nif (body.phone) f.phone = String(body.phone);\nif (body.instagram_handle || body.instagram) f.instagram_handle = body.instagram_handle || body.instagram;\nif (body.portfolio_url || body.portfolio) f.portfolio_url = body.portfolio_url || body.portfolio;\nconst niches = Array.isArray(body.niches) ? body.niches : (body.niches || '').split(',').map(s => s.trim()).filter(Boolean);\nif (niches.length > 0) f.niches = niches;\nconst langs = Array.isArray(body.languages) ? body.languages : (body.languages || '').split(',').map(s => s.trim()).filter(Boolean);\nif (langs.length > 0) f.languages = langs;\nif (body.gender) f.gender = body.gender;\nif (body.age_range) f.age_range = body.age_range;\nif (body.location) f.location = body.location;\nif (Number(body.rate_per_video)) f.rate_per_video = Number(body.rate_per_video);\nif (Number(body.rate_per_reel)) f.rate_per_reel = Number(body.rate_per_reel);\nf.availability = body.availability || 'Available';\nif (Number(body.rating)) f.rating = Number(body.rating);\nif (body.notes) f.notes = body.notes;\nf.status = 'Active';\nreturn [{ json: { airtable_body: { fields: f } } }];"
+      },
+      "id": "cs-parse-add",
+      "name": "Parse Creator Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Creators",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.airtable_body) }}",
+        "options": {}
+      },
+      "id": "cs-create-creator",
+      "name": "Create Creator in Airtable",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        700
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ JSON.stringify({ success: !!$json.id, creator_id: $json.id, name: ($json.fields || {}).name, message: $json.id ? 'Creator added' : 'Failed' }) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "cs-respond-add",
+      "name": "Respond — Add Creator",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1120,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblGhzSJ5RXWDS8h8",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ records: [{ fields: { agent: \"creator_scout\", event_type: \"creator_matched\", project_id: ($json.requirements && $json.requirements.project_id) || \"\", brand_name: ($json.requirements && $json.requirements.brand_name) || \"\", client_code: \"\", severity: \"info\", message: \"Found \" + $json.total + \" creators matching requirements\", payload: JSON.stringify({ total_available: $json.total, requirements: $json.requirements }), created_at: new Date().toISOString() } }] }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1800,
+        100
+      ],
+      "id": "d10877c1-3cdc-4ebe-935c-a3e2a83eaf22",
+      "name": "Write Event — Creators Matched",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Webhook — Find Creators": {
+      "main": [
+        [
+          {
+            "node": "Parse Requirements",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Requirements": {
+      "main": [
+        [
+          {
+            "node": "Fetch Available Creators",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Available Creators": {
+      "main": [
+        [
+          {
+            "node": "Score & Rank Creators",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Score & Rank Creators": {
+      "main": [
+        [
+          {
+            "node": "Gemini — Format Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini — Format Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Parse Gemini Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Gemini Response": {
+      "main": [
+        [
+          {
+            "node": "Post Recommendations to Slack",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Respond — Find Results",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Write Event — Creators Matched",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook — Add Creator": {
+      "main": [
+        [
+          {
+            "node": "Parse Creator Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Creator Data": {
+      "main": [
+        [
+          {
+            "node": "Create Creator in Airtable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Creator in Airtable": {
+      "main": [
+        [
+          {
+            "node": "Respond — Add Creator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

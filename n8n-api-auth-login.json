@@ -1,0 +1,205 @@
+{
+  "name": "Cosmisk API — Auth Login",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "auth/login",
+        "httpMethod": "POST",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [380, 300],
+      "id": "api-login-webhook",
+      "name": "Webhook",
+      "webhookId": "cosmisk-auth-login"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || $input.first().json;\nconst email = (body.email || '').trim().toLowerCase();\nconst password = (body.password || '').trim();\n\nif (!email || !password) {\n  return [{ json: { _error: true, message: 'Email and password are required' } }];\n}\n\nreturn [{ json: { email, password } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [600, 300],
+      "id": "api-login-extract",
+      "name": "Extract Credentials"
+    },
+    {
+      "parameters": {
+        "dataType": "string",
+        "value1": "={{ $json._error ? 'error' : 'ok' }}",
+        "rules": {
+          "rules": [
+            { "value2": "error", "output": 0 },
+            { "value2": "ok", "output": 1 }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 2,
+      "position": [820, 300],
+      "id": "api-login-check-input",
+      "name": "Check Input"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ JSON.stringify({ success: false, error: $json.message || 'Invalid input' }) }}",
+        "options": {
+          "responseCode": 400,
+          "responseHeaders": {
+            "entries": [
+              { "name": "Content-Type", "value": "application/json" },
+              { "name": "Access-Control-Allow-Origin", "value": "*" }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1060, 180],
+      "id": "api-login-respond-input-err",
+      "name": "Respond Input Error"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Users?filterByFormula=%7Bemail%7D%3D'{{ $json.email }}'",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1060, 400],
+      "id": "api-login-fetch-user",
+      "name": "Fetch User from Airtable",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst records = response.records || [];\n\nif (records.length === 0) {\n  return [{ json: { _auth_error: true, message: 'Invalid email or password' } }];\n}\n\nconst user = records[0];\nconst fields = user.fields || {};\n\n// MVP: plaintext password comparison\nconst storedPassword = fields.password || fields.password_hash || '';\nconst inputPassword = $('Extract Credentials').first().json.password;\n\nif (storedPassword !== inputPassword) {\n  return [{ json: { _auth_error: true, message: 'Invalid email or password' } }];\n}\n\n// Generate base64 JWT token (MVP)\nconst tokenPayload = {\n  userId: user.id,\n  email: fields.email,\n  role: fields.role || 'client',\n  exp: Date.now() + (24 * 60 * 60 * 1000) // 24 hours\n};\nconst token = Buffer.from(JSON.stringify(tokenPayload)).toString('base64');\n\nreturn [{\n  json: {\n    _auth_error: false,\n    token,\n    user: {\n      id: user.id,\n      name: fields.name || fields.full_name || '',\n      email: fields.email,\n      role: fields.role || 'client',\n      onboardingComplete: true,\n      plan: fields.plan || 'starter',\n      createdAt: fields.created_at || user.createdTime\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1280, 400],
+      "id": "api-login-validate",
+      "name": "Validate & Generate Token"
+    },
+    {
+      "parameters": {
+        "dataType": "string",
+        "value1": "={{ $json._auth_error ? 'error' : 'ok' }}",
+        "rules": {
+          "rules": [
+            { "value2": "error", "output": 0 },
+            { "value2": "ok", "output": 1 }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 2,
+      "position": [1500, 400],
+      "id": "api-login-auth-gate",
+      "name": "Auth Gate"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ JSON.stringify({ success: false, error: $json.message || 'Invalid email or password' }) }}",
+        "options": {
+          "responseCode": 401,
+          "responseHeaders": {
+            "entries": [
+              { "name": "Content-Type", "value": "application/json" },
+              { "name": "Access-Control-Allow-Origin", "value": "*" }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1720, 280],
+      "id": "api-login-respond-401",
+      "name": "Respond Auth Error"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ JSON.stringify({ success: true, token: $json.token, user: $json.user }) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              { "name": "Content-Type", "value": "application/json" },
+              { "name": "Access-Control-Allow-Origin", "value": "*" }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1720, 500],
+      "id": "api-login-respond-ok",
+      "name": "Respond Success"
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          { "node": "Extract Credentials", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Extract Credentials": {
+      "main": [
+        [
+          { "node": "Check Input", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Check Input": {
+      "main": [
+        [
+          { "node": "Respond Input Error", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "Fetch User from Airtable", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Fetch User from Airtable": {
+      "main": [
+        [
+          { "node": "Validate & Generate Token", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Validate & Generate Token": {
+      "main": [
+        [
+          { "node": "Auth Gate", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Auth Gate": {
+      "main": [
+        [
+          { "node": "Respond Auth Error", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "Respond Success", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

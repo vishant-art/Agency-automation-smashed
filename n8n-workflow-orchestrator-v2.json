@@ -1,0 +1,768 @@
+{
+  "name": "Agent 2 — Intelligent Orchestrator v2",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        400
+      ],
+      "id": "orch2-trigger",
+      "name": "Every 5 Minutes"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Agent_Events",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "filterByFormula",
+              "value": "AND(NOT(FIND('orchestrator', {consumed_by})), DATETIME_DIFF(NOW(), CREATED_TIME(), 'hours') < 2)"
+            },
+            {
+              "name": "sort[0][field]",
+              "value": "created_at"
+            },
+            {
+              "name": "sort[0][direction]",
+              "value": "desc"
+            },
+            {
+              "name": "maxRecords",
+              "value": "50"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        300,
+        400
+      ],
+      "id": "orch2-fetch-events",
+      "name": "Fetch Unprocessed Events",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Projects",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "filterByFormula",
+              "value": "AND(NOT({status}='Delivered'),NOT({status}='Churned'))"
+            },
+            {
+              "name": "pageSize",
+              "value": "100"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        600,
+        400
+      ],
+      "id": "orch2-fetch-projects",
+      "name": "Fetch Active Projects",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblEkb2WGoh407zEn",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "pageSize",
+              "value": "100"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        400
+      ],
+      "id": "orch2-fetch-brands",
+      "name": "Fetch Brands",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Guard against fetch failures\nconst fetchResults = [\n  { name: 'Events', data: $('Fetch Unprocessed Events').first().json },\n  { name: 'Projects', data: $('Fetch Active Projects').first().json },\n  { name: 'Brands', data: $('Fetch Brands').first().json }\n];\nconst fetchErrors = [];\nfor (const fr of fetchResults) {\n  if (fr.data.error || fr.data.statusCode >= 400 || (fr.data.statusMessage && fr.data.statusCode)) {\n    fetchErrors.push(`${fr.name}: ${fr.data.error || fr.data.statusMessage || 'HTTP ' + fr.data.statusCode}`);\n  }\n}\nif (fetchErrors.length > 0) {\n  return [{ json: { decisions: [], eventIds: [], decisionCount: 0, eventCount: 0, _error: true, fetchErrors } }];\n}\n\nconst events = $('Fetch Unprocessed Events').first().json.records || [];\nconst projects = $('Fetch Active Projects').first().json.records || [];\nconst brands = $('Fetch Brands').first().json.records || [];\nconst now = new Date();\nconst decisions = [];\nconst eventIds = [];\n\nfor (const event of events) {\n  const f = event.fields;\n  eventIds.push(event.id);\n\n  const project = projects.find(p => p.id === f.project_id);\n  const brand = brands.find(b => b.fields.brand_name === f.brand_name);\n  let payload = {};\n  try { payload = JSON.parse(f.payload || '{}'); } catch(e) {}\n\n  switch (f.event_type) {\n    case 'phase_complete':\n      if (f.agent === 'phase_1') {\n        decisions.push({\n          type: 'notify_client',\n          event: f,\n          eventId: event.id,\n          message: 'Research complete for ' + f.brand_name + ' \\u2014 concepts ready for PM review',\n          project_id: f.project_id,\n          brand_name: f.brand_name,\n          client_code: f.client_code\n        });\n      }\n      if (f.agent === 'phase_2') {\n        decisions.push({\n          type: 'trigger_phase',\n          phase: 3,\n          event: f,\n          eventId: event.id,\n          webhook: '/webhook/ugc-scripts',\n          message: 'Concepts approved for ' + f.brand_name + ' \\u2014 triggering script writing',\n          project_id: f.project_id,\n          brand_name: f.brand_name,\n          client_code: f.client_code\n        });\n        decisions.push({\n          type: 'notify_client',\n          event: f,\n          eventId: event.id,\n          message: 'Concepts approved for ' + f.brand_name + ', scripts being generated',\n          project_id: f.project_id,\n          brand_name: f.brand_name,\n          client_code: f.client_code\n        });\n      }\n      if (f.agent === 'phase_3') {\n        decisions.push({\n          type: 'trigger_phase',\n          phase: 4,\n          event: f,\n          eventId: event.id,\n          webhook: '/webhook/ugc-delivery',\n          message: 'Scripts ready for ' + f.brand_name + ' \\u2014 triggering delivery',\n          project_id: f.project_id,\n          brand_name: f.brand_name,\n          client_code: f.client_code\n        });\n        decisions.push({\n          type: 'notify_client',\n          event: f,\n          eventId: event.id,\n          message: 'Scripts ready for review for ' + f.brand_name,\n          project_id: f.project_id,\n          brand_name: f.brand_name,\n          client_code: f.client_code\n        });\n      }\n      if (f.agent === 'phase_4') {\n        decisions.push({\n          type: 'notify_client',\n          event: f,\n          eventId: event.id,\n          message: 'Delivery complete for ' + f.brand_name + '!',\n          project_id: f.project_id,\n          brand_name: f.brand_name,\n          client_code: f.client_code\n        });\n      }\n      break;\n\n    case 'campaign_alert':\n      if (payload.fatigued_count > 0) {\n        const deliveredProject = projects.find(p =>\n          p.fields.brand_name === f.brand_name &&\n          (p.fields.status === 'Delivered' || p.fields.status === 'Complete')\n        );\n        if (deliveredProject) {\n          decisions.push({\n            type: 'suggest_new_cycle',\n            event: f,\n            eventId: event.id,\n            message: 'Ad fatigue detected for ' + f.brand_name + ' \\u2014 ' + payload.fatigued_count + ' campaigns fatigued. Consider new creative cycle.',\n            project_id: deliveredProject.id,\n            brand_name: f.brand_name,\n            client_code: f.client_code\n          });\n        }\n      }\n      if (f.severity === 'critical') {\n        decisions.push({\n          type: 'escalate',\n          event: f,\n          eventId: event.id,\n          severity: 'critical',\n          message: 'CRITICAL: ROAS crash for ' + f.brand_name + ' \\u2014 immediate action needed. ' + (payload.recommendation || ''),\n          brand_name: f.brand_name\n        });\n      }\n      break;\n\n    case 'lead_action':\n      if (payload.stage === 'Won') {\n        decisions.push({\n          type: 'auto_onboard',\n          event: f,\n          eventId: event.id,\n          message: 'Lead won: ' + (f.brand_name || payload.company) + ' \\u2014 ready for onboarding',\n          brand_name: f.brand_name || payload.company,\n          client_code: f.client_code\n        });\n      }\n      break;\n\n    case 'sla_breach': {\n      const recentBreaches = events.filter(e =>\n        e.fields.event_type === 'sla_breach' && e.fields.project_id === f.project_id\n      );\n      if (recentBreaches.length >= 3) {\n        decisions.push({\n          type: 'escalate',\n          event: f,\n          eventId: event.id,\n          severity: 'critical',\n          message: 'REPEATED SLA BREACH: ' + f.brand_name + ' has ' + recentBreaches.length + ' breaches \\u2014 needs immediate attention',\n          project_id: f.project_id,\n          brand_name: f.brand_name,\n          client_code: f.client_code\n        });\n      }\n      break;\n    }\n\n    case 'status_change':\n      if (f.agent === 'onboarding') {\n        decisions.push({\n          type: 'notify_client',\n          event: f,\n          eventId: event.id,\n          message: 'New project onboarded for ' + f.brand_name + ' \\u2014 research phase starting soon',\n          project_id: f.project_id,\n          brand_name: f.brand_name,\n          client_code: f.client_code\n        });\n      }\n      break;\n  }\n}\n\n// SLA detection from project status\nfor (const project of projects) {\n  const pf = project.fields;\n  const updatedAt = new Date(pf.updated_at || pf.created_at || now);\n  const hoursInStatus = (now - updatedAt) / 3600000;\n\n  if (pf.status === 'PM Review' && hoursInStatus > 24) {\n    decisions.push({\n      type: 'sla_alert',\n      severity: 'warning',\n      project_id: project.id,\n      brand_name: pf.brand_name,\n      client_code: pf.client_code,\n      message: pf.brand_name + ' stuck in PM Review for ' + Math.round(hoursInStatus) + 'h'\n    });\n  }\n  if (pf.status === 'Script Review' && hoursInStatus > 48) {\n    decisions.push({\n      type: 'sla_alert',\n      severity: 'warning',\n      project_id: project.id,\n      brand_name: pf.brand_name,\n      client_code: pf.client_code,\n      message: pf.brand_name + ' stuck in Script Review for ' + Math.round(hoursInStatus) + 'h'\n    });\n  }\n  if (pf.status === 'In Progress' && hoursInStatus > 72) {\n    decisions.push({\n      type: 'sla_alert',\n      severity: 'urgent',\n      project_id: project.id,\n      brand_name: pf.brand_name,\n      client_code: pf.client_code,\n      message: pf.brand_name + ' In Progress for ' + Math.round(hoursInStatus) + 'h \\u2014 may be stuck'\n    });\n  }\n}\n\nreturn [{ json: { decisions, eventIds, decisionCount: decisions.length, eventCount: events.length } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        400
+      ],
+      "id": "orch2-decision-engine",
+      "name": "Decision Engine"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "orch2-if-cond",
+              "leftValue": "={{ $json.decisionCount }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1500,
+        400
+      ],
+      "id": "orch2-check-decisions",
+      "name": "Check Has Decisions"
+    },
+    {
+      "parameters": {
+        "jsCode": "const { decisions, eventIds } = $json;\nreturn decisions.map(d => ({ json: { ...d, eventIds } }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1800,
+        300
+      ],
+      "id": "orch2-split-decisions",
+      "name": "Split Decisions"
+    },
+    {
+      "parameters": {
+        "dataType": "string",
+        "value1": "={{ $json.type }}",
+        "rules": {
+          "rules": [
+            { "value2": "trigger_phase", "output": 0 },
+            { "value2": "notify_client", "output": 1 },
+            { "value2": "escalate", "output": 2 },
+            { "value2": "sla_alert", "output": 3 },
+            { "value2": "suggest_new_cycle", "output": 4 },
+            { "value2": "auto_onboard", "output": 5 }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 2,
+      "position": [
+        2100,
+        300
+      ],
+      "id": "orch2-switch-type",
+      "name": "Switch by Decision Type"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://n8n-jeet.duckdns.org:5678{{ $json.webhook }}",
+        "authentication": "none",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ project_id: $json.project_id, client_code: $json.client_code, action: 'deliver' }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2500,
+        0
+      ],
+      "id": "orch2-trigger-phase",
+      "name": "Trigger Phase Webhook",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://n8n-jeet.duckdns.org:5678/webhook/client-update",
+        "authentication": "none",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ client_code: $json.client_code, brand_name: $json.brand_name, project_id: $json.project_id, message: $json.message, source: 'orchestrator' }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2500,
+        200
+      ],
+      "id": "orch2-notify-client",
+      "name": "Notify Client Comms",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0AG86W1XT2",
+          "mode": "id"
+        },
+        "text": "=:rotating_light: *{{ $json.severity === 'critical' ? 'CRITICAL' : 'ESCALATION' }}*\n{{ $json.message }}\n\n_Brand:_ {{ $json.brand_name || 'N/A' }}\n_Detected by:_ Orchestrator v2",
+        "otherOptions": {}
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        2500,
+        400
+      ],
+      "id": "orch2-escalate",
+      "name": "Slack — Escalation",
+      "credentials": {
+        "slackApi": {
+          "id": "5Q37UpOjGx4YsbyC",
+          "name": "Slack account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0AFBQ5UF0E",
+          "mode": "id"
+        },
+        "text": "=:warning: *SLA Alert*\n{{ $json.message }}\n_Severity:_ {{ $json.severity }}",
+        "otherOptions": {}
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        2500,
+        600
+      ],
+      "id": "orch2-sla-alert",
+      "name": "Slack — SLA Alert",
+      "credentials": {
+        "slackApi": {
+          "id": "5Q37UpOjGx4YsbyC",
+          "name": "Slack account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0AG86W1XT2",
+          "mode": "id"
+        },
+        "text": "=:bulb: *Creative Refresh Suggested*\n{{ $json.message }}\n\n_This recommendation is based on Media Monitor ad fatigue data._",
+        "otherOptions": {}
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        2500,
+        800
+      ],
+      "id": "orch2-suggest-cycle",
+      "name": "Slack — Suggest New Cycle",
+      "credentials": {
+        "slackApi": {
+          "id": "5Q37UpOjGx4YsbyC",
+          "name": "Slack account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://n8n-jeet.duckdns.org:5678/webhook/ugc-onboard",
+        "authentication": "none",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ brand_name: $json.brand_name, client_code: $json.client_code, source: 'auto_onboard_from_lead' }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2500,
+        1000
+      ],
+      "id": "orch2-auto-onboard",
+      "name": "Trigger Auto Onboard",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Selective event consumption — only mark events consumed when actions succeeded\nconst allItems = $input.all();\nconst failedEventIds = new Set();\nconst succeededEventIds = new Set();\n\nfor (const item of allItems) {\n  const d = item.json;\n  const eventId = d.eventId;\n  if (!eventId) continue;\n  \n  // Check if this action had an error\n  if (d.error || d.statusCode >= 400 || d.statusMessage) {\n    failedEventIds.add(eventId);\n  } else {\n    succeededEventIds.add(eventId);\n  }\n}\n\n// Only consume events where no actions failed\nconst safeIds = [...succeededEventIds].filter(id => !failedEventIds.has(id));\nif (safeIds.length === 0) {\n  return [{ json: { records: [], _skip: true, failedCount: failedEventIds.size } }];\n}\n\nconst records = safeIds.map(id => ({\n  id,\n  fields: { consumed_by: 'orchestrator' }\n}));\nconst batches = [];\nfor (let i = 0; i < records.length; i += 10) {\n  batches.push(records.slice(i, i + 10));\n}\nreturn batches.map(batch => ({ json: { records: batch, failedCount: failedEventIds.size } }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2900,
+        400
+      ],
+      "id": "orch2-mark-consumed",
+      "name": "Mark Events Consumed"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Agent_Events",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ records: $json.records }) }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 300
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3200,
+        400
+      ],
+      "id": "orch2-batch-update",
+      "name": "Batch Update Events",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Agent_Events",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ records: [{ fields: { agent: 'orchestrator', event_type: 'decision_made', severity: ($json.failedCount > 0 ? 'warning' : 'info'), message: 'Orchestrator processed ' + $('Decision Engine').first().json.eventCount + ' events, made ' + $('Decision Engine').first().json.decisionCount + ' decisions' + ($json.failedCount > 0 ? ' (' + $json.failedCount + ' action failures)' : ''), payload: JSON.stringify({ decisions_summary: $('Decision Engine').first().json.decisions.map(function(d) { return d.type + ': ' + (d.message || '').substring(0, 100); }), failed_actions: $json.failedCount || 0 }), consumed_by: 'orchestrator', created_at: new Date().toISOString() } }] }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3500,
+        400
+      ],
+      "id": "orch2-log-decision",
+      "name": "Log Orchestrator Decision",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Mark events consumed even when no decisions were generated\nconst eventIds = $('Decision Engine').first().json.eventIds || [];\nif (eventIds.length === 0) {\n  return [];\n}\nconst records = eventIds.map(id => ({\n  id,\n  fields: { consumed_by: 'orchestrator' }\n}));\nconst batches = [];\nfor (let i = 0; i < records.length; i += 10) {\n  batches.push(records.slice(i, i + 10));\n}\nreturn batches.map(batch => ({ json: { records: batch } }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1800,
+        600
+      ],
+      "id": "orch2-no-events",
+      "name": "Mark Events — No Decisions"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Agent_Events",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ records: $json.records }) }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 300
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2100,
+        600
+      ],
+      "id": "orch2-batch-update-silent",
+      "name": "Batch Update Events — Silent",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log fetch errors to Agent_Events\nconst data = $input.first().json;\nif (!data._error) return [];\nconst payload = {\n  fetchErrors: data.fetchErrors,\n  timestamp: new Date().toISOString()\n};\nreturn [{ json: {\n  records: [{\n    fields: {\n      agent: 'orchestrator',\n      event_type: 'system_error',\n      severity: 'high',\n      message: 'Orchestrator fetch failed: ' + data.fetchErrors.join('; '),\n      payload: JSON.stringify(payload),\n      created_at: new Date().toISOString()\n    }\n  }]\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1500, 700],
+      "id": "orch2-log-fetch-errors",
+      "name": "Log Fetch Errors"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblGhzSJ5RXWDS8h8",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1800, 700],
+      "id": "orch2-write-error-event",
+      "name": "Write Error Event",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Every 5 Minutes": {
+      "main": [
+        [
+          {
+            "node": "Fetch Unprocessed Events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Unprocessed Events": {
+      "main": [
+        [
+          {
+            "node": "Fetch Active Projects",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Active Projects": {
+      "main": [
+        [
+          {
+            "node": "Fetch Brands",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Brands": {
+      "main": [
+        [
+          {
+            "node": "Decision Engine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decision Engine": {
+      "main": [
+        [
+          {
+            "node": "Check Has Decisions",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log Fetch Errors",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Has Decisions": {
+      "main": [
+        [
+          {
+            "node": "Split Decisions",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Events — No Decisions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Decisions": {
+      "main": [
+        [
+          {
+            "node": "Switch by Decision Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch by Decision Type": {
+      "main": [
+        [
+          {
+            "node": "Trigger Phase Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notify Client Comms",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Slack — Escalation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Slack — SLA Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Slack — Suggest New Cycle",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Trigger Auto Onboard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger Phase Webhook": {
+      "main": [
+        [
+          {
+            "node": "Mark Events Consumed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Client Comms": {
+      "main": [
+        [
+          {
+            "node": "Mark Events Consumed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack — Escalation": {
+      "main": [
+        [
+          {
+            "node": "Mark Events Consumed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack — SLA Alert": {
+      "main": [
+        [
+          {
+            "node": "Mark Events Consumed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack — Suggest New Cycle": {
+      "main": [
+        [
+          {
+            "node": "Mark Events Consumed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger Auto Onboard": {
+      "main": [
+        [
+          {
+            "node": "Mark Events Consumed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Events Consumed": {
+      "main": [
+        [
+          {
+            "node": "Batch Update Events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Events — No Decisions": {
+      "main": [
+        [
+          {
+            "node": "Batch Update Events — Silent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Batch Update Events": {
+      "main": [
+        [
+          {
+            "node": "Log Orchestrator Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Fetch Errors": {
+      "main": [
+        [
+          {
+            "node": "Write Error Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

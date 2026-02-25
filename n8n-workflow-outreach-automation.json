@@ -1,0 +1,2036 @@
+{
+  "updatedAt": "2026-02-24T19:55:43.071Z",
+  "createdAt": "2026-02-24T19:06:46.499Z",
+  "id": "jOhzPZTA86SexCXp",
+  "name": "Outreach Automation",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "path": "add-prospect",
+        "httpMethod": "POST",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        250,
+        200
+      ],
+      "id": "662f3101-37b1-41e1-bb5d-a459e4a71232",
+      "name": "out-webhook-add",
+      "webhookId": "add-prospect"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body || $json;\nconst company = body.company_name || body.company || '';\nconst contact = body.contact_name || body.name || '';\nconst email = body.contact_email || body.email || '';\nconst platform = body.platform || 'email';\nconst profileUrl = body.profile_url || '';\nconst industry = body.industry || '';\nconst notes = body.notes || '';\n\nif (!company && !contact) {\n  return [{ json: { _error: true, message: 'company_name or contact_name required' } }];\n}\n\nconst fields = {\n  company_name: company || '(Unknown)',\n  contact_name: contact || '(Unknown)',\n  stage: 'New',\n  notes: `Source: outreach\\nPlatform: ${platform}\\nProfile: ${profileUrl}\\nIndustry: ${industry}\\n${notes}`\n};\nif (email) fields.email = email;\n\nreturn [{ json: { fields, company, contact, platform, profileUrl, industry, notes: fields.notes, _error: false } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        470,
+        200
+      ],
+      "id": "205ba88b-cbfe-48ca-abb2-18b98f3bd54b",
+      "name": "out-validate-prospect"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": ""
+          },
+          "conditions": [
+            {
+              "id": "e613acd3-0ffe-49ec-bd7f-f4b0feb1018d",
+              "leftValue": "={{ $json._error }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        690,
+        200
+      ],
+      "id": "848682f4-9d48-44e8-b8d1-b5f03d0da202",
+      "name": "out-if-valid"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tbl6qih4ODd7qKFZ1",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ fields: $('out-validate-prospect').first().json.fields }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        910,
+        100
+      ],
+      "id": "dc9be714-2da9-429a-bdd2-a42de1f66837",
+      "name": "out-create-prospect",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const prospect = $('out-validate-prospect').first().json;\nconst recordId = $json.id || 'unknown';\n\nconst systemPrompt = `You are a sales research assistant for Cosmisk, a UGC (User Generated Content) agency in India. Your job is to research a prospect brand and draft a compelling, personalized outreach message.\n\nThe message should:\n- Be concise (3-4 sentences max for DM, 5-6 for email)\n- Reference something specific about their brand/content\n- Highlight how UGC can help their specific business\n- Include a soft CTA (offer a free strategy call or sample script)\n- Sound human, not salesy\n- Match the platform tone (Instagram DM = casual, Email = slightly more formal, LinkedIn = professional)`;\n\nconst userPrompt = `Research and draft an outreach message for:\n\nCompany: ${prospect.company}\nContact: ${prospect.contact}\nPlatform: ${prospect.platform}\nProfile/Website: ${prospect.profileUrl || 'not provided'}\nIndustry: ${prospect.industry || 'not specified'}\n\nDraft the outreach message for ${prospect.platform}. Also provide:\n1. A brief research summary (2-3 bullet points about the brand)\n2. The outreach message\n3. A suggested follow-up message (for 3 days later)\n\nFormat as JSON:\n{\n  \"research\": \"bullet points about the brand\",\n  \"message\": \"the outreach message\",\n  \"follow_up\": \"the follow-up message\",\n  \"subject_line\": \"email subject if platform is email, otherwise null\"\n}`;\n\nreturn [{ json: { systemPrompt, userPrompt, recordId, prospect } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1130,
+        100
+      ],
+      "id": "df2a176f-cb4a-4946-8a9e-96f516b14a5d",
+      "name": "out-build-research-prompt"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ systemInstruction: { parts: [{ text: $json.systemPrompt }] }, contents: [{ role: 'user', parts: [{ text: $json.userPrompt }] }], generationConfig: { temperature: 0.7, maxOutputTokens: 2048 } }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1350,
+        100
+      ],
+      "id": "c2ed4455-0d24-48dd-8449-92b998697994",
+      "name": "out-gemini-research",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "rIL63TG4xfMQL8uJ",
+          "name": "Cosmisk AI"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const geminiResult = $json;\nconst prev = $('out-build-research-prompt').first().json;\nconst recordId = prev.recordId;\nconst prospect = prev.prospect;\n\nlet research = '';\nlet message = '';\nlet followUp = '';\nlet subjectLine = '';\n\ntry {\n  const text = geminiResult?.candidates?.[0]?.content?.parts?.[0]?.text || '';\n  const jsonMatch = text.match(/\\{[\\s\\S]*\\}/);\n  if (jsonMatch) {\n    const parsed = JSON.parse(jsonMatch[0]);\n    research = parsed.research || '';\n    message = parsed.message || '';\n    followUp = parsed.follow_up || '';\n    subjectLine = parsed.subject_line || '';\n  } else {\n    message = text;\n  }\n} catch (e) {\n  message = `Hi ${prospect.contact || 'there'}, I came across ${prospect.company || 'your brand'} and love what you're doing. We help brands like yours create authentic UGC content that drives real results. Would you be open to a quick 15-min call to explore how we could help?`;\n  followUp = `Hey ${prospect.contact || 'there'}, just following up on my earlier message. We recently helped a ${prospect.industry || 'similar'} brand increase their ad performance by 40% with UGC. Happy to share the case study if you're interested!`;\n}\n\nconst notesUpdate = `\\n\\n--- AI Research ---\\n${research}\\n\\n--- Draft Message (${prospect.platform}) ---\\n${message}\\n\\n--- Follow-up Draft ---\\n${followUp}`;\n\nconst originalNotes = prospect.notes || `Platform: ${prospect.platform}\\nProfile: ${prospect.profileUrl || ''}\\nIndustry: ${prospect.industry || ''}`;\nconst fullNotes = originalNotes + notesUpdate;\nconst followUpDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];\n\nconst slackMsg = `:mag: *New Prospect Researched*\\n\\n` +\n  `*Company:* ${prospect.company}\\n` +\n  `*Contact:* ${prospect.contact}\\n` +\n  `*Platform:* ${prospect.platform}\\n` +\n  `*Profile:* ${prospect.profileUrl || 'N/A'}\\n\\n` +\n  `*Research:*\\n${research}\\n\\n` +\n  `*Draft Message:*\\n\\`\\`\\`${message}\\`\\`\\`\\n\\n` +\n  (subjectLine ? `*Subject:* ${subjectLine}\\n\\n` : '') +\n  `*Follow-up Draft:*\\n\\`\\`\\`${followUp}\\`\\`\\`\\n\\n` +\n  `_Copy the message above and send it on ${prospect.platform}. Then use /mark-outreach to update status._`;\n\nreturn [{ json: { recordId, slackMsg, prospect, patchBody: { fields: { notes: fullNotes, stage: 'contacted', next_follow_up: followUpDate } } } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1570,
+        100
+      ],
+      "id": "3b68a3a9-6095-4bb6-916f-ecf6a6ade920",
+      "name": "out-parse-research"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tbl6qih4ODd7qKFZ1/{{ $json.recordId }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.patchBody) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1790,
+        0
+      ],
+      "id": "2c91084a-f306-4d1c-a04c-53ff0f22fe0d",
+      "name": "out-update-prospect",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0AHQUBGR32",
+          "mode": "id"
+        },
+        "text": "={{ $('out-parse-research').first().json.slackMsg }}",
+        "otherOptions": {}
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        1790,
+        100
+      ],
+      "id": "ab797bff-30fe-47c9-80cb-4195e6d571fd",
+      "name": "out-slack-prospect",
+      "credentials": {
+        "slackApi": {
+          "id": "5Q37UpOjGx4YsbyC",
+          "name": "Slack account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ JSON.stringify({ success: true, message: 'Prospect added and researched', record_id: $('out-parse-research').first().json.recordId }) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1790,
+        200
+      ],
+      "id": "38c4033b-3537-4a4a-b51e-46c31eb90e7e",
+      "name": "out-respond-success"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ JSON.stringify({ success: false, error: $('out-validate-prospect').first().json.message }) }}",
+        "options": {
+          "responseCode": 400,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        910,
+        300
+      ],
+      "id": "bb5b808b-2a0c-4b04-b334-25c0a0819fca",
+      "name": "out-respond-error"
+    },
+    {
+      "parameters": {
+        "path": "mark-outreach",
+        "httpMethod": "POST",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        250,
+        500
+      ],
+      "id": "a7bc8e6c-de21-4c56-a712-c9d85bb7abab",
+      "name": "out-webhook-mark",
+      "webhookId": "mark-outreach"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body || $json;\nconst leadId = body.lead_id || body.record_id || '';\nconst status = body.status || '';\nconst notes = body.notes || '';\n\nif (!leadId || !status) {\n  return [{ json: { _error: true, message: 'lead_id and status required' } }];\n}\n\nconst stageMap = {\n  'contacted': 'contacted',\n  'responded': 'follow_up',\n  'interested': 'follow_up',\n  'not_interested': 'lost'\n};\nconst stage = stageMap[status] || 'follow_up';\n\nconst patchBody = { fields: { stage } };\nif (notes) patchBody.fields.notes = notes;\nif (status === 'interested') {\n  patchBody.fields.next_follow_up = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];\n}\n\nreturn [{ json: { leadId, patchBody, status, _error: false } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        470,
+        500
+      ],
+      "id": "dd35f30b-268d-42e7-8f2f-7deaa85b16b3",
+      "name": "out-process-mark"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": ""
+          },
+          "conditions": [
+            {
+              "id": "aa590826-2903-4483-a969-142b470adcb5",
+              "leftValue": "={{ $json._error }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        690,
+        500
+      ],
+      "id": "c88c2e8b-2c94-4343-aba8-5a1b38971f4b",
+      "name": "out-if-mark-valid"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tbl6qih4ODd7qKFZ1/{{ $('out-process-mark').first().json.leadId }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('out-process-mark').first().json.patchBody) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        910,
+        450
+      ],
+      "id": "b0a458af-a5aa-48b2-8103-b2570b76b3be",
+      "name": "out-update-mark",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ JSON.stringify({ success: true, message: 'Status updated to ' + $('out-process-mark').first().json.status }) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1130,
+        450
+      ],
+      "id": "02086908-5bcc-4777-8c43-d7050b8499ad",
+      "name": "out-respond-mark-ok"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ JSON.stringify({ success: false, error: $('out-process-mark').first().json.message }) }}",
+        "options": {
+          "responseCode": 400,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        910,
+        600
+      ],
+      "id": "5f627b4d-84a6-4d12-9b5e-f0012fac281a",
+      "name": "out-respond-mark-error"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 4,
+              "triggerAtMinute": 30
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        250,
+        800
+      ],
+      "id": "cd782d41-890b-4988-ac14-a13362413ef7",
+      "name": "out-schedule"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tbl6qih4ODd7qKFZ1?filterByFormula={{ encodeURIComponent(\"AND(FIND('Source: outreach',{notes})>0,{stage}='contacted',{next_follow_up}<=TODAY())\") }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        470,
+        800
+      ],
+      "id": "2018e116-87a7-48ca-9742-3ab93a09349d",
+      "name": "out-fetch-followups",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $json;\nconst records = response.records || [];\n\nif (records.length === 0) {\n  return [{ json: { hasFollowups: false, count: 0, prospects: [] } }];\n}\n\nconst prospects = records.map(r => ({\n  id: r.id,\n  company: r.fields.company_name || '',\n  contact: r.fields.contact_name || '',\n  email: r.fields.email || '',\n  channel: r.fields.channel || 'email',\n  notes: r.fields.notes || '',\n  lastContact: r.fields.next_follow_up || ''\n}));\n\nreturn [{ json: { hasFollowups: true, count: prospects.length, prospects } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        690,
+        800
+      ],
+      "id": "6c657b6c-4ecd-42a0-b416-bb61f3991618",
+      "name": "out-check-followups"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": ""
+          },
+          "conditions": [
+            {
+              "id": "12b49aca-1dc8-4aba-aa52-bed9447d7551",
+              "leftValue": "={{ $json.hasFollowups }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        910,
+        800
+      ],
+      "id": "54194e54-296b-43f6-88f6-954e08f19b97",
+      "name": "out-if-has-followups"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $json;\nconst prospects = data.prospects;\n\nconst systemPrompt = `You are a sales follow-up assistant for Cosmisk, a UGC agency. Generate personalized follow-up messages for prospects who haven't responded to initial outreach. Messages should be brief, add new value (case study mention, industry insight, or limited offer), and have a clear CTA.`;\n\nlet prospectsList = prospects.map((p, i) => \n  `${i + 1}. ${p.company} (${p.contact}) - ${p.channel} - Last contacted: ${p.lastContact}\\nPrevious notes: ${(p.notes || '').substring(0, 200)}`\n).join('\\n\\n');\n\nconst userPrompt = `Generate follow-up messages for these ${prospects.length} prospects:\\n\\n${prospectsList}\\n\\nFor each, provide a JSON array:\\n[\\n  { \"record_id\": \"recXXX\", \"message\": \"follow-up text\", \"subject\": \"email subject or null\" }\\n]\\n\\nUse the actual record IDs from the prospect data. The record IDs are:\\n${prospects.map(p => `- ${p.company}: ${p.id}`).join('\\n')}`;\n\nreturn [{ json: { systemPrompt, userPrompt, prospects } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1130,
+        750
+      ],
+      "id": "364a8d5a-660d-43d5-898e-c5d9006d1c21",
+      "name": "out-build-followup-prompt"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ systemInstruction: { parts: [{ text: $json.systemPrompt }] }, contents: [{ role: 'user', parts: [{ text: $json.userPrompt }] }], generationConfig: { temperature: 0.7, maxOutputTokens: 2048 } }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1350,
+        750
+      ],
+      "id": "fec5ca84-2c35-4e05-a49e-d6a8adfb5eb4",
+      "name": "out-gemini-followups",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "rIL63TG4xfMQL8uJ",
+          "name": "Cosmisk AI"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const geminiResult = $json;\nconst prospects = $('out-build-followup-prompt').first().json.prospects;\n\nlet followups = [];\ntry {\n  const text = geminiResult?.candidates?.[0]?.content?.parts?.[0]?.text || '';\n  const jsonMatch = text.match(/\\[[\\s\\S]*\\]/);\n  if (jsonMatch) {\n    followups = JSON.parse(jsonMatch[0]);\n  }\n} catch (e) {\n  followups = prospects.map(p => ({\n    record_id: p.id,\n    message: `Hi ${p.contact || 'there'}, just following up on my earlier message about how UGC content could help ${p.company || 'your brand'}. We recently helped a brand in your space see 3x better ad performance with authentic creator content. Would love to share the case study - are you free for a quick 10-min call this week?`,\n    subject: null\n  }));\n}\n\nif (followups.length > 0 && !followups[0].record_id && prospects.length === followups.length) {\n  followups = followups.map((f, i) => ({ ...f, record_id: prospects[i].id }));\n}\n\nlet slackMsg = `:repeat: *Daily Outreach Follow-ups (${followups.length} prospects)*\\n\\n`;\nfollowups.forEach((f, i) => {\n  const p = prospects.find(pr => pr.id === f.record_id) || prospects[i] || {};\n  slackMsg += `*${i + 1}. ${p.company || 'Unknown'}* (${p.contact || ''}) - ${p.channel || 'email'}\\n`;\n  if (f.subject) slackMsg += `Subject: ${f.subject}\\n`;\n  slackMsg += `\\`\\`\\`${f.message}\\`\\`\\`\\n\\n`;\n});\nslackMsg += `_Copy and send these follow-ups, then use /mark-outreach to update status._`;\n\nconst nextDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];\nconst updates = followups.map(f => ({\n  id: f.record_id,\n  fields: { next_follow_up: nextDate }\n}));\n\nreturn [{ json: { slackMsg, updates, count: followups.length } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1570,
+        750
+      ],
+      "id": "b1230c3a-441e-4cf3-a1a2-ff2ab12d07d6",
+      "name": "out-parse-followups"
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0AHQUBGR32",
+          "mode": "id"
+        },
+        "text": "={{ $json.slackMsg }}",
+        "otherOptions": {}
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        1790,
+        700
+      ],
+      "id": "fc23a2e7-814f-4093-b717-5b9a0ea15c40",
+      "name": "out-slack-followups",
+      "credentials": {
+        "slackApi": {
+          "id": "5Q37UpOjGx4YsbyC",
+          "name": "Slack account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblGhzSJ5RXWDS8h8",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ records: [{ fields: { event_type: 'outreach_followups_generated', details: JSON.stringify({ source: 'outreach_automation', count: $json.count }), status: 'unprocessed' } }] }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1790,
+        800
+      ],
+      "id": "4297546b-3e1c-4338-b5d3-5de206e83e28",
+      "name": "out-write-event",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "path": "enrich-leads",
+        "httpMethod": "POST",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        250,
+        1100
+      ],
+      "id": "out-webhook-enrich",
+      "name": "Webhook -- Enrich Leads",
+      "webhookId": "enrich-leads"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Prepare batch research prompt for Gemini\n// Input: { leads: [{ record_id, company_name, website, industry, email, notes, source }] }\n// ============================================================\nconst body = $json.body || $json;\nconst leads = body.leads || [];\n\nif (leads.length === 0) {\n  return [{ json: { _skip: true, count: 0, slackMsg: '' } }];\n}\n\nconst systemPrompt = `You are a sales research assistant for Cosmisk, a UGC (User Generated Content) agency in India. For each prospect brand, provide:\n1. Brief research summary (2-3 bullet points about the brand)\n2. A personalized outreach message (3-4 sentences, reference something specific about their brand, highlight UGC value, soft CTA for a free strategy call)\n3. A follow-up message (for 3 days later, reference the first message)\n4. Best outreach platform (instagram_dm, email, linkedin, or whatsapp)\n\nSound human, not salesy. Be specific to each brand.\n\nReturn a JSON array where each element has:\n{\n  \"company_name\": \"exact company name from input\",\n  \"research\": \"bullet point research\",\n  \"message\": \"outreach message\",\n  \"follow_up\": \"follow-up message\",\n  \"platform\": \"best platform\",\n  \"subject_line\": \"email subject if platform is email, else null\"\n}`;\n\nconst leadsList = leads.map((l, i) =>\n  `${i + 1}. Company: ${l.company_name}\\n   Website: ${l.website || 'unknown'}\\n   Industry: ${l.industry || 'unknown'}\\n   Notes: ${(l.notes || '').substring(0, 300)}`\n).join('\\n\\n');\n\nconst userPrompt = `Research and draft outreach messages for these ${leads.length} prospects:\\n\\n${leadsList}\\n\\nReturn a JSON array with one object per prospect.`;\n\nreturn [{ json: {\n  systemPrompt,\n  userPrompt,\n  leads,\n  count: leads.length,\n  _skip: false\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        470,
+        1100
+      ],
+      "id": "out-prep-enrich",
+      "name": "Prep Batch Research"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "enrich-check",
+              "leftValue": "={{ $json.count }}",
+              "rightValue": "0",
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        690,
+        1100
+      ],
+      "id": "out-if-enrich",
+      "name": "Has Leads to Enrich?"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ systemInstruction: { parts: [{ text: $json.systemPrompt }] }, contents: [{ role: 'user', parts: [{ text: $json.userPrompt }] }], generationConfig: { temperature: 0.7, maxOutputTokens: 4096 } }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        910,
+        1050
+      ],
+      "id": "out-gemini-enrich",
+      "name": "Gemini -- Batch Research",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "rIL63TG4xfMQL8uJ",
+          "name": "Cosmisk AI"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Parse Gemini batch research results\n// Build: Airtable PATCH body, Slack summary, webhook response\n// ============================================================\nconst geminiResult = $json;\nconst prevData = $('Prep Batch Research').first().json;\nconst leads = prevData.leads || [];\n\nlet results = [];\nlet geminiOk = false;\n\ntry {\n  const text = (geminiResult.candidates || [])[0]?.content?.parts?.[0]?.text || '';\n  if (!text) throw new Error('No Gemini response');\n\n  let cleaned = text.replace(/```json\\s*/gi, '').replace(/```\\s*/gi, '').trim();\n  const arrMatch = cleaned.match(/\\[[\\s\\S]*\\]/);\n  if (arrMatch) {\n    results = JSON.parse(arrMatch[0]);\n    geminiOk = true;\n  }\n} catch (err) {\n  // Gemini failed \u2014 generate basic fallback messages\n}\n\n// Build Airtable batch PATCH and Slack message\nconst patchRecords = [];\nconst slackLines = [`:mag: *Outreach \u2014 ${leads.length} New Prospects Enriched*\\n`];\nconst followUpDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];\n\nfor (const lead of leads) {\n  const match = results.find(r =>\n    (r.company_name || '').toLowerCase().trim() === (lead.company_name || '').toLowerCase().trim()\n  );\n\n  let research = '';\n  let message = '';\n  let followUp = '';\n  let platform = 'email';\n  let subjectLine = '';\n\n  if (match) {\n    research = match.research || '';\n    message = match.message || '';\n    followUp = match.follow_up || '';\n    platform = match.platform || 'email';\n    subjectLine = match.subject_line || '';\n  } else {\n    // Fallback\n    message = `Hi there, I came across ${lead.company_name} and love what you're doing. We help brands like yours create authentic UGC content that drives real results. Would you be open to a quick 15-min call to explore how we could help?`;\n    followUp = `Hey, just following up on my earlier message about UGC for ${lead.company_name}. We recently helped a similar brand increase their ad performance by 40% with UGC. Happy to share the case study if you're interested!`;\n    research = 'Auto-generated fallback (Gemini did not return result for this lead)';\n  }\n\n  const notesAppend = `\\n\\n--- AI Research ---\\n${research}\\n\\n--- Draft Message (${platform}) ---\\n${message}\\n\\n--- Follow-up Draft ---\\n${followUp}`;\n  const fullNotes = (lead.notes || '') + notesAppend;\n\n  patchRecords.push({\n    id: lead.record_id,\n    fields: {\n      notes: fullNotes,\n      stage: 'contacted',\n      next_follow_up: followUpDate\n    }\n  });\n\n  slackLines.push(\n    `*${lead.company_name}*` +\n    (lead.industry ? ` (${lead.industry})` : '') +\n    `\\n  Platform: ${platform}` +\n    (subjectLine ? ` | Subject: ${subjectLine}` : '') +\n    `\\n  Message: \\\"${message.substring(0, 120)}...\\\"` +\n    `\\n  Follow-up scheduled: ${followUpDate}\\n`\n  );\n}\n\nslackLines.push(geminiOk\n  ? `_${results.length} prospects researched via Gemini. Copy messages from Airtable notes and send on respective platforms._`\n  : `_Gemini failed \u2014 fallback messages generated. Review and customize before sending._`\n);\n\nreturn [{ json: {\n  patchBody: JSON.stringify({ records: patchRecords }),\n  slackMsg: slackLines.join('\\n'),\n  count: patchRecords.length,\n  geminiOk\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1130,
+        1050
+      ],
+      "id": "out-parse-enrich",
+      "name": "Parse Batch Research"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tbl6qih4ODd7qKFZ1",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.patchBody }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1350,
+        1050
+      ],
+      "id": "out-update-enriched",
+      "name": "Update Enriched Leads",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0AHQU1BUU8",
+          "mode": "id"
+        },
+        "text": "={{ $('Parse Batch Research').first().json.slackMsg }}",
+        "otherOptions": {}
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        1570,
+        1000
+      ],
+      "id": "out-slack-enriched",
+      "name": "Slack -- Enriched Leads",
+      "credentials": {
+        "slackApi": {
+          "id": "5Q37UpOjGx4YsbyC",
+          "name": "Slack account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblGhzSJ5RXWDS8h8",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ records: [{ fields: { event_type: 'leads_enriched', source_workflow: 'outreach_automation', payload: JSON.stringify({ count: $('Parse Batch Research').first().json.count, geminiOk: $('Parse Batch Research').first().json.geminiOk }), processed: false } }] }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1570,
+        1100
+      ],
+      "id": "out-write-enrich-event",
+      "name": "Write Event -- Leads Enriched",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ JSON.stringify({ enriched: true, count: $('Parse Batch Research').first().json.count, geminiOk: $('Parse Batch Research').first().json.geminiOk }) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1570,
+        1200
+      ],
+      "id": "out-respond-enrich-ok",
+      "name": "Respond -- Enriched OK"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ JSON.stringify({ enriched: false, count: 0, message: 'No leads to enrich' }) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        910,
+        1200
+      ],
+      "id": "out-respond-enrich-skip",
+      "name": "Respond -- No Leads"
+    }
+  ],
+  "connections": {
+    "out-webhook-add": {
+      "main": [
+        [
+          {
+            "node": "out-validate-prospect",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "out-validate-prospect": {
+      "main": [
+        [
+          {
+            "node": "out-if-valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "out-if-valid": {
+      "main": [
+        [
+          {
+            "node": "out-create-prospect",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "out-respond-error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "out-create-prospect": {
+      "main": [
+        [
+          {
+            "node": "out-build-research-prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "out-build-research-prompt": {
+      "main": [
+        [
+          {
+            "node": "out-gemini-research",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "out-gemini-research": {
+      "main": [
+        [
+          {
+            "node": "out-parse-research",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "out-parse-research": {
+      "main": [
+        [
+          {
+            "node": "out-update-prospect",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "out-slack-prospect",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "out-respond-success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "out-webhook-mark": {
+      "main": [
+        [
+          {
+            "node": "out-process-mark",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "out-process-mark": {
+      "main": [
+        [
+          {
+            "node": "out-if-mark-valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "out-if-mark-valid": {
+      "main": [
+        [
+          {
+            "node": "out-update-mark",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "out-respond-mark-error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "out-update-mark": {
+      "main": [
+        [
+          {
+            "node": "out-respond-mark-ok",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "out-schedule": {
+      "main": [
+        [
+          {
+            "node": "out-fetch-followups",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "out-fetch-followups": {
+      "main": [
+        [
+          {
+            "node": "out-check-followups",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "out-check-followups": {
+      "main": [
+        [
+          {
+            "node": "out-if-has-followups",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "out-if-has-followups": {
+      "main": [
+        [
+          {
+            "node": "out-build-followup-prompt",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "out-build-followup-prompt": {
+      "main": [
+        [
+          {
+            "node": "out-gemini-followups",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "out-gemini-followups": {
+      "main": [
+        [
+          {
+            "node": "out-parse-followups",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "out-parse-followups": {
+      "main": [
+        [
+          {
+            "node": "out-slack-followups",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "out-write-event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook -- Enrich Leads": {
+      "main": [
+        [
+          {
+            "node": "Prep Batch Research",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep Batch Research": {
+      "main": [
+        [
+          {
+            "node": "Has Leads to Enrich?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Leads to Enrich?": {
+      "main": [
+        [
+          {
+            "node": "Gemini -- Batch Research",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond -- No Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini -- Batch Research": {
+      "main": [
+        [
+          {
+            "node": "Parse Batch Research",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Batch Research": {
+      "main": [
+        [
+          {
+            "node": "Update Enriched Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Enriched Leads": {
+      "main": [
+        [
+          {
+            "node": "Slack -- Enriched Leads",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Write Event -- Leads Enriched",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Respond -- Enriched OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": {
+    "node:out-schedule": {
+      "recurrenceRules": []
+    }
+  },
+  "meta": null,
+  "pinData": null,
+  "versionId": "c9112e22-e5ef-4093-a707-9aa907b61af0",
+  "activeVersionId": "c9112e22-e5ef-4093-a707-9aa907b61af0",
+  "versionCounter": 15,
+  "triggerCount": 3,
+  "shared": [
+    {
+      "updatedAt": "2026-02-24T19:06:46.501Z",
+      "createdAt": "2026-02-24T19:06:46.501Z",
+      "role": "workflow:owner",
+      "workflowId": "jOhzPZTA86SexCXp",
+      "projectId": "AD8mXtbIf5cdYNIV",
+      "project": {
+        "updatedAt": "2026-01-26T04:34:53.263Z",
+        "createdAt": "2026-01-26T04:34:35.063Z",
+        "id": "AD8mXtbIf5cdYNIV",
+        "name": "SenseInfo Tech <senseinfotechno@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "ed50a507-d93d-45c3-9412-d80babb81dd0",
+        "projectRelations": [
+          {
+            "updatedAt": "2026-01-26T04:34:35.063Z",
+            "createdAt": "2026-01-26T04:34:35.063Z",
+            "userId": "ed50a507-d93d-45c3-9412-d80babb81dd0",
+            "projectId": "AD8mXtbIf5cdYNIV",
+            "user": {
+              "updatedAt": "2026-02-24T18:32:01.000Z",
+              "createdAt": "2026-01-26T04:34:34.578Z",
+              "id": "ed50a507-d93d-45c3-9412-d80babb81dd0",
+              "email": "senseinfotechno@gmail.com",
+              "firstName": "SenseInfo",
+              "lastName": "Tech",
+              "personalizationAnswers": {
+                "version": "v4",
+                "personalization_survey_submitted_at": "2026-01-26T04:35:01.423Z",
+                "personalization_survey_n8n_version": "2.4.6",
+                "companySize": "<20",
+                "companyType": "saas",
+                "role": "business-owner",
+                "reportedSource": "google"
+              },
+              "settings": {
+                "userActivated": true,
+                "firstSuccessfulWorkflowId": "T2U_raVAJPmEIai1EY6TF",
+                "userActivatedAt": 1769404953077,
+                "easyAIWorkflowOnboarded": true,
+                "npsSurvey": {
+                  "responded": true,
+                  "lastShownAt": 1771407918931
+                }
+              },
+              "disabled": false,
+              "mfaEnabled": false,
+              "lastActiveAt": "2026-02-24",
+              "isPending": false
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-02-24T19:55:43.073Z",
+    "createdAt": "2026-02-24T19:55:43.073Z",
+    "versionId": "c9112e22-e5ef-4093-a707-9aa907b61af0",
+    "workflowId": "jOhzPZTA86SexCXp",
+    "nodes": [
+      {
+        "parameters": {
+          "path": "add-prospect",
+          "httpMethod": "POST",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          250,
+          200
+        ],
+        "id": "662f3101-37b1-41e1-bb5d-a459e4a71232",
+        "name": "out-webhook-add",
+        "webhookId": "add-prospect"
+      },
+      {
+        "parameters": {
+          "jsCode": "const body = $json.body || $json;\nconst company = body.company_name || body.company || '';\nconst contact = body.contact_name || body.name || '';\nconst email = body.contact_email || body.email || '';\nconst platform = body.platform || 'email';\nconst profileUrl = body.profile_url || '';\nconst industry = body.industry || '';\nconst notes = body.notes || '';\n\nif (!company && !contact) {\n  return [{ json: { _error: true, message: 'company_name or contact_name required' } }];\n}\n\nconst fields = {\n  company_name: company || '(Unknown)',\n  contact_name: contact || '(Unknown)',\n  stage: 'New',\n  notes: `Source: outreach\\nPlatform: ${platform}\\nProfile: ${profileUrl}\\nIndustry: ${industry}\\n${notes}`\n};\nif (email) fields.email = email;\n\nreturn [{ json: { fields, company, contact, platform, profileUrl, industry, notes: fields.notes, _error: false } }];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          470,
+          200
+        ],
+        "id": "205ba88b-cbfe-48ca-abb2-18b98f3bd54b",
+        "name": "out-validate-prospect"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": ""
+            },
+            "conditions": [
+              {
+                "id": "e613acd3-0ffe-49ec-bd7f-f4b0feb1018d",
+                "leftValue": "={{ $json._error }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "notEquals"
+                }
+              }
+            ],
+            "combinator": "and"
+          }
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          690,
+          200
+        ],
+        "id": "848682f4-9d48-44e8-b8d1-b5f03d0da202",
+        "name": "out-if-valid"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tbl6qih4ODd7qKFZ1",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "airtableTokenApi",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ fields: $('out-validate-prospect').first().json.fields }) }}",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          910,
+          100
+        ],
+        "id": "dc9be714-2da9-429a-bdd2-a42de1f66837",
+        "name": "out-create-prospect",
+        "credentials": {
+          "airtableTokenApi": {
+            "id": "WelvlJEjoHaI3l9G",
+            "name": "Airtable Personal Access Token account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "const prospect = $('out-validate-prospect').first().json;\nconst recordId = $json.id || 'unknown';\n\nconst systemPrompt = `You are a sales research assistant for Cosmisk, a UGC (User Generated Content) agency in India. Your job is to research a prospect brand and draft a compelling, personalized outreach message.\n\nThe message should:\n- Be concise (3-4 sentences max for DM, 5-6 for email)\n- Reference something specific about their brand/content\n- Highlight how UGC can help their specific business\n- Include a soft CTA (offer a free strategy call or sample script)\n- Sound human, not salesy\n- Match the platform tone (Instagram DM = casual, Email = slightly more formal, LinkedIn = professional)`;\n\nconst userPrompt = `Research and draft an outreach message for:\n\nCompany: ${prospect.company}\nContact: ${prospect.contact}\nPlatform: ${prospect.platform}\nProfile/Website: ${prospect.profileUrl || 'not provided'}\nIndustry: ${prospect.industry || 'not specified'}\n\nDraft the outreach message for ${prospect.platform}. Also provide:\n1. A brief research summary (2-3 bullet points about the brand)\n2. The outreach message\n3. A suggested follow-up message (for 3 days later)\n\nFormat as JSON:\n{\n  \"research\": \"bullet points about the brand\",\n  \"message\": \"the outreach message\",\n  \"follow_up\": \"the follow-up message\",\n  \"subject_line\": \"email subject if platform is email, otherwise null\"\n}`;\n\nreturn [{ json: { systemPrompt, userPrompt, recordId, prospect } }];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1130,
+          100
+        ],
+        "id": "df2a176f-cb4a-4946-8a9e-96f516b14a5d",
+        "name": "out-build-research-prompt"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "googlePalmApi",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ systemInstruction: { parts: [{ text: $json.systemPrompt }] }, contents: [{ role: 'user', parts: [{ text: $json.userPrompt }] }], generationConfig: { temperature: 0.7, maxOutputTokens: 2048 } }) }}",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1350,
+          100
+        ],
+        "id": "c2ed4455-0d24-48dd-8449-92b998697994",
+        "name": "out-gemini-research",
+        "credentials": {
+          "googlePalmApi": {
+            "id": "rIL63TG4xfMQL8uJ",
+            "name": "Cosmisk AI"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "const geminiResult = $json;\nconst prev = $('out-build-research-prompt').first().json;\nconst recordId = prev.recordId;\nconst prospect = prev.prospect;\n\nlet research = '';\nlet message = '';\nlet followUp = '';\nlet subjectLine = '';\n\ntry {\n  const text = geminiResult?.candidates?.[0]?.content?.parts?.[0]?.text || '';\n  const jsonMatch = text.match(/\\{[\\s\\S]*\\}/);\n  if (jsonMatch) {\n    const parsed = JSON.parse(jsonMatch[0]);\n    research = parsed.research || '';\n    message = parsed.message || '';\n    followUp = parsed.follow_up || '';\n    subjectLine = parsed.subject_line || '';\n  } else {\n    message = text;\n  }\n} catch (e) {\n  message = `Hi ${prospect.contact || 'there'}, I came across ${prospect.company || 'your brand'} and love what you're doing. We help brands like yours create authentic UGC content that drives real results. Would you be open to a quick 15-min call to explore how we could help?`;\n  followUp = `Hey ${prospect.contact || 'there'}, just following up on my earlier message. We recently helped a ${prospect.industry || 'similar'} brand increase their ad performance by 40% with UGC. Happy to share the case study if you're interested!`;\n}\n\nconst notesUpdate = `\\n\\n--- AI Research ---\\n${research}\\n\\n--- Draft Message (${prospect.platform}) ---\\n${message}\\n\\n--- Follow-up Draft ---\\n${followUp}`;\n\nconst originalNotes = prospect.notes || `Platform: ${prospect.platform}\\nProfile: ${prospect.profileUrl || ''}\\nIndustry: ${prospect.industry || ''}`;\nconst fullNotes = originalNotes + notesUpdate;\nconst followUpDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];\n\nconst slackMsg = `:mag: *New Prospect Researched*\\n\\n` +\n  `*Company:* ${prospect.company}\\n` +\n  `*Contact:* ${prospect.contact}\\n` +\n  `*Platform:* ${prospect.platform}\\n` +\n  `*Profile:* ${prospect.profileUrl || 'N/A'}\\n\\n` +\n  `*Research:*\\n${research}\\n\\n` +\n  `*Draft Message:*\\n\\`\\`\\`${message}\\`\\`\\`\\n\\n` +\n  (subjectLine ? `*Subject:* ${subjectLine}\\n\\n` : '') +\n  `*Follow-up Draft:*\\n\\`\\`\\`${followUp}\\`\\`\\`\\n\\n` +\n  `_Copy the message above and send it on ${prospect.platform}. Then use /mark-outreach to update status._`;\n\nreturn [{ json: { recordId, slackMsg, prospect, patchBody: { fields: { notes: fullNotes, stage: 'contacted', next_follow_up: followUpDate } } } }];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1570,
+          100
+        ],
+        "id": "3b68a3a9-6095-4bb6-916f-ecf6a6ade920",
+        "name": "out-parse-research"
+      },
+      {
+        "parameters": {
+          "method": "PATCH",
+          "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tbl6qih4ODd7qKFZ1/{{ $json.recordId }}",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "airtableTokenApi",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify($json.patchBody) }}",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1790,
+          0
+        ],
+        "id": "2c91084a-f306-4d1c-a04c-53ff0f22fe0d",
+        "name": "out-update-prospect",
+        "credentials": {
+          "airtableTokenApi": {
+            "id": "WelvlJEjoHaI3l9G",
+            "name": "Airtable Personal Access Token account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "select": "channel",
+          "channelId": {
+            "__rl": true,
+            "value": "C0AHQUBGR32",
+            "mode": "id"
+          },
+          "text": "={{ $('out-parse-research').first().json.slackMsg }}",
+          "otherOptions": {}
+        },
+        "type": "n8n-nodes-base.slack",
+        "typeVersion": 2.2,
+        "position": [
+          1790,
+          100
+        ],
+        "id": "ab797bff-30fe-47c9-80cb-4195e6d571fd",
+        "name": "out-slack-prospect",
+        "credentials": {
+          "slackApi": {
+            "id": "5Q37UpOjGx4YsbyC",
+            "name": "Slack account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "respondWith": "text",
+          "responseBody": "={{ JSON.stringify({ success: true, message: 'Prospect added and researched', record_id: $('out-parse-research').first().json.recordId }) }}",
+          "options": {
+            "responseHeaders": {
+              "entries": [
+                {
+                  "name": "Content-Type",
+                  "value": "application/json"
+                }
+              ]
+            }
+          }
+        },
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.1,
+        "position": [
+          1790,
+          200
+        ],
+        "id": "38c4033b-3537-4a4a-b51e-46c31eb90e7e",
+        "name": "out-respond-success"
+      },
+      {
+        "parameters": {
+          "respondWith": "text",
+          "responseBody": "={{ JSON.stringify({ success: false, error: $('out-validate-prospect').first().json.message }) }}",
+          "options": {
+            "responseCode": 400,
+            "responseHeaders": {
+              "entries": [
+                {
+                  "name": "Content-Type",
+                  "value": "application/json"
+                }
+              ]
+            }
+          }
+        },
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.1,
+        "position": [
+          910,
+          300
+        ],
+        "id": "bb5b808b-2a0c-4b04-b334-25c0a0819fca",
+        "name": "out-respond-error"
+      },
+      {
+        "parameters": {
+          "path": "mark-outreach",
+          "httpMethod": "POST",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          250,
+          500
+        ],
+        "id": "a7bc8e6c-de21-4c56-a712-c9d85bb7abab",
+        "name": "out-webhook-mark",
+        "webhookId": "mark-outreach"
+      },
+      {
+        "parameters": {
+          "jsCode": "const body = $json.body || $json;\nconst leadId = body.lead_id || body.record_id || '';\nconst status = body.status || '';\nconst notes = body.notes || '';\n\nif (!leadId || !status) {\n  return [{ json: { _error: true, message: 'lead_id and status required' } }];\n}\n\nconst stageMap = {\n  'contacted': 'contacted',\n  'responded': 'follow_up',\n  'interested': 'follow_up',\n  'not_interested': 'lost'\n};\nconst stage = stageMap[status] || 'follow_up';\n\nconst patchBody = { fields: { stage } };\nif (notes) patchBody.fields.notes = notes;\nif (status === 'interested') {\n  patchBody.fields.next_follow_up = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];\n}\n\nreturn [{ json: { leadId, patchBody, status, _error: false } }];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          470,
+          500
+        ],
+        "id": "dd35f30b-268d-42e7-8f2f-7deaa85b16b3",
+        "name": "out-process-mark"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": ""
+            },
+            "conditions": [
+              {
+                "id": "aa590826-2903-4483-a969-142b470adcb5",
+                "leftValue": "={{ $json._error }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "notEquals"
+                }
+              }
+            ],
+            "combinator": "and"
+          }
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          690,
+          500
+        ],
+        "id": "c88c2e8b-2c94-4343-aba8-5a1b38971f4b",
+        "name": "out-if-mark-valid"
+      },
+      {
+        "parameters": {
+          "method": "PATCH",
+          "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tbl6qih4ODd7qKFZ1/{{ $('out-process-mark').first().json.leadId }}",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "airtableTokenApi",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify($('out-process-mark').first().json.patchBody) }}",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          910,
+          450
+        ],
+        "id": "b0a458af-a5aa-48b2-8103-b2570b76b3be",
+        "name": "out-update-mark",
+        "credentials": {
+          "airtableTokenApi": {
+            "id": "WelvlJEjoHaI3l9G",
+            "name": "Airtable Personal Access Token account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "respondWith": "text",
+          "responseBody": "={{ JSON.stringify({ success: true, message: 'Status updated to ' + $('out-process-mark').first().json.status }) }}",
+          "options": {
+            "responseHeaders": {
+              "entries": [
+                {
+                  "name": "Content-Type",
+                  "value": "application/json"
+                }
+              ]
+            }
+          }
+        },
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.1,
+        "position": [
+          1130,
+          450
+        ],
+        "id": "02086908-5bcc-4777-8c43-d7050b8499ad",
+        "name": "out-respond-mark-ok"
+      },
+      {
+        "parameters": {
+          "respondWith": "text",
+          "responseBody": "={{ JSON.stringify({ success: false, error: $('out-process-mark').first().json.message }) }}",
+          "options": {
+            "responseCode": 400,
+            "responseHeaders": {
+              "entries": [
+                {
+                  "name": "Content-Type",
+                  "value": "application/json"
+                }
+              ]
+            }
+          }
+        },
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.1,
+        "position": [
+          910,
+          600
+        ],
+        "id": "5f627b4d-84a6-4d12-9b5e-f0012fac281a",
+        "name": "out-respond-mark-error"
+      },
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "triggerAtHour": 4,
+                "triggerAtMinute": 30
+              }
+            ]
+          }
+        },
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          250,
+          800
+        ],
+        "id": "cd782d41-890b-4988-ac14-a13362413ef7",
+        "name": "out-schedule"
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tbl6qih4ODd7qKFZ1?filterByFormula={{ encodeURIComponent(\"AND(FIND('Source: outreach',{notes})>0,{stage}='contacted',{next_follow_up}<=TODAY())\") }}",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "airtableTokenApi",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          470,
+          800
+        ],
+        "id": "2018e116-87a7-48ca-9742-3ab93a09349d",
+        "name": "out-fetch-followups",
+        "credentials": {
+          "airtableTokenApi": {
+            "id": "WelvlJEjoHaI3l9G",
+            "name": "Airtable Personal Access Token account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "const response = $json;\nconst records = response.records || [];\n\nif (records.length === 0) {\n  return [{ json: { hasFollowups: false, count: 0, prospects: [] } }];\n}\n\nconst prospects = records.map(r => ({\n  id: r.id,\n  company: r.fields.company_name || '',\n  contact: r.fields.contact_name || '',\n  email: r.fields.email || '',\n  channel: r.fields.channel || 'email',\n  notes: r.fields.notes || '',\n  lastContact: r.fields.next_follow_up || ''\n}));\n\nreturn [{ json: { hasFollowups: true, count: prospects.length, prospects } }];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          690,
+          800
+        ],
+        "id": "6c657b6c-4ecd-42a0-b416-bb61f3991618",
+        "name": "out-check-followups"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": ""
+            },
+            "conditions": [
+              {
+                "id": "12b49aca-1dc8-4aba-aa52-bed9447d7551",
+                "leftValue": "={{ $json.hasFollowups }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "equals"
+                }
+              }
+            ],
+            "combinator": "and"
+          }
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          910,
+          800
+        ],
+        "id": "54194e54-296b-43f6-88f6-954e08f19b97",
+        "name": "out-if-has-followups"
+      },
+      {
+        "parameters": {
+          "jsCode": "const data = $json;\nconst prospects = data.prospects;\n\nconst systemPrompt = `You are a sales follow-up assistant for Cosmisk, a UGC agency. Generate personalized follow-up messages for prospects who haven't responded to initial outreach. Messages should be brief, add new value (case study mention, industry insight, or limited offer), and have a clear CTA.`;\n\nlet prospectsList = prospects.map((p, i) => \n  `${i + 1}. ${p.company} (${p.contact}) - ${p.channel} - Last contacted: ${p.lastContact}\\nPrevious notes: ${(p.notes || '').substring(0, 200)}`\n).join('\\n\\n');\n\nconst userPrompt = `Generate follow-up messages for these ${prospects.length} prospects:\\n\\n${prospectsList}\\n\\nFor each, provide a JSON array:\\n[\\n  { \"record_id\": \"recXXX\", \"message\": \"follow-up text\", \"subject\": \"email subject or null\" }\\n]\\n\\nUse the actual record IDs from the prospect data. The record IDs are:\\n${prospects.map(p => `- ${p.company}: ${p.id}`).join('\\n')}`;\n\nreturn [{ json: { systemPrompt, userPrompt, prospects } }];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1130,
+          750
+        ],
+        "id": "364a8d5a-660d-43d5-898e-c5d9006d1c21",
+        "name": "out-build-followup-prompt"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "googlePalmApi",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ systemInstruction: { parts: [{ text: $json.systemPrompt }] }, contents: [{ role: 'user', parts: [{ text: $json.userPrompt }] }], generationConfig: { temperature: 0.7, maxOutputTokens: 2048 } }) }}",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1350,
+          750
+        ],
+        "id": "fec5ca84-2c35-4e05-a49e-d6a8adfb5eb4",
+        "name": "out-gemini-followups",
+        "credentials": {
+          "googlePalmApi": {
+            "id": "rIL63TG4xfMQL8uJ",
+            "name": "Cosmisk AI"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "const geminiResult = $json;\nconst prospects = $('out-build-followup-prompt').first().json.prospects;\n\nlet followups = [];\ntry {\n  const text = geminiResult?.candidates?.[0]?.content?.parts?.[0]?.text || '';\n  const jsonMatch = text.match(/\\[[\\s\\S]*\\]/);\n  if (jsonMatch) {\n    followups = JSON.parse(jsonMatch[0]);\n  }\n} catch (e) {\n  followups = prospects.map(p => ({\n    record_id: p.id,\n    message: `Hi ${p.contact || 'there'}, just following up on my earlier message about how UGC content could help ${p.company || 'your brand'}. We recently helped a brand in your space see 3x better ad performance with authentic creator content. Would love to share the case study - are you free for a quick 10-min call this week?`,\n    subject: null\n  }));\n}\n\nif (followups.length > 0 && !followups[0].record_id && prospects.length === followups.length) {\n  followups = followups.map((f, i) => ({ ...f, record_id: prospects[i].id }));\n}\n\nlet slackMsg = `:repeat: *Daily Outreach Follow-ups (${followups.length} prospects)*\\n\\n`;\nfollowups.forEach((f, i) => {\n  const p = prospects.find(pr => pr.id === f.record_id) || prospects[i] || {};\n  slackMsg += `*${i + 1}. ${p.company || 'Unknown'}* (${p.contact || ''}) - ${p.channel || 'email'}\\n`;\n  if (f.subject) slackMsg += `Subject: ${f.subject}\\n`;\n  slackMsg += `\\`\\`\\`${f.message}\\`\\`\\`\\n\\n`;\n});\nslackMsg += `_Copy and send these follow-ups, then use /mark-outreach to update status._`;\n\nconst nextDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];\nconst updates = followups.map(f => ({\n  id: f.record_id,\n  fields: { next_follow_up: nextDate }\n}));\n\nreturn [{ json: { slackMsg, updates, count: followups.length } }];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1570,
+          750
+        ],
+        "id": "b1230c3a-441e-4cf3-a1a2-ff2ab12d07d6",
+        "name": "out-parse-followups"
+      },
+      {
+        "parameters": {
+          "select": "channel",
+          "channelId": {
+            "__rl": true,
+            "value": "C0AHQUBGR32",
+            "mode": "id"
+          },
+          "text": "={{ $json.slackMsg }}",
+          "otherOptions": {}
+        },
+        "type": "n8n-nodes-base.slack",
+        "typeVersion": 2.2,
+        "position": [
+          1790,
+          700
+        ],
+        "id": "fc23a2e7-814f-4093-b717-5b9a0ea15c40",
+        "name": "out-slack-followups",
+        "credentials": {
+          "slackApi": {
+            "id": "5Q37UpOjGx4YsbyC",
+            "name": "Slack account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblGhzSJ5RXWDS8h8",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "airtableTokenApi",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ records: [{ fields: { event_type: 'outreach_followups_generated', details: JSON.stringify({ source: 'outreach_automation', count: $json.count }), status: 'unprocessed' } }] }) }}",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1790,
+          800
+        ],
+        "id": "4297546b-3e1c-4338-b5d3-5de206e83e28",
+        "name": "out-write-event",
+        "credentials": {
+          "airtableTokenApi": {
+            "id": "WelvlJEjoHaI3l9G",
+            "name": "Airtable Personal Access Token account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      }
+    ],
+    "connections": {
+      "out-webhook-add": {
+        "main": [
+          [
+            {
+              "node": "out-validate-prospect",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "out-validate-prospect": {
+        "main": [
+          [
+            {
+              "node": "out-if-valid",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "out-if-valid": {
+        "main": [
+          [
+            {
+              "node": "out-create-prospect",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "out-respond-error",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "out-create-prospect": {
+        "main": [
+          [
+            {
+              "node": "out-build-research-prompt",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "out-build-research-prompt": {
+        "main": [
+          [
+            {
+              "node": "out-gemini-research",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "out-gemini-research": {
+        "main": [
+          [
+            {
+              "node": "out-parse-research",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "out-parse-research": {
+        "main": [
+          [
+            {
+              "node": "out-update-prospect",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "out-slack-prospect",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "out-respond-success",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "out-webhook-mark": {
+        "main": [
+          [
+            {
+              "node": "out-process-mark",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "out-process-mark": {
+        "main": [
+          [
+            {
+              "node": "out-if-mark-valid",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "out-if-mark-valid": {
+        "main": [
+          [
+            {
+              "node": "out-update-mark",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "out-respond-mark-error",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "out-update-mark": {
+        "main": [
+          [
+            {
+              "node": "out-respond-mark-ok",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "out-schedule": {
+        "main": [
+          [
+            {
+              "node": "out-fetch-followups",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "out-fetch-followups": {
+        "main": [
+          [
+            {
+              "node": "out-check-followups",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "out-check-followups": {
+        "main": [
+          [
+            {
+              "node": "out-if-has-followups",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "out-if-has-followups": {
+        "main": [
+          [
+            {
+              "node": "out-build-followup-prompt",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          []
+        ]
+      },
+      "out-build-followup-prompt": {
+        "main": [
+          [
+            {
+              "node": "out-gemini-followups",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "out-gemini-followups": {
+        "main": [
+          [
+            {
+              "node": "out-parse-followups",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "out-parse-followups": {
+        "main": [
+          [
+            {
+              "node": "out-slack-followups",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "out-write-event",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "SenseInfo Tech",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-02-24T19:55:43.166Z",
+        "id": 418,
+        "workflowId": "jOhzPZTA86SexCXp",
+        "versionId": "c9112e22-e5ef-4093-a707-9aa907b61af0",
+        "event": "activated",
+        "userId": "ed50a507-d93d-45c3-9412-d80babb81dd0"
+      },
+      {
+        "createdAt": "2026-02-24T19:55:44.177Z",
+        "id": 419,
+        "workflowId": "jOhzPZTA86SexCXp",
+        "versionId": "c9112e22-e5ef-4093-a707-9aa907b61af0",
+        "event": "activated",
+        "userId": "ed50a507-d93d-45c3-9412-d80babb81dd0"
+      }
+    ]
+  }
+}

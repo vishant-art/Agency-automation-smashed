@@ -1,0 +1,568 @@
+{
+  "name": "Agent 7 — Weekly Reporting (Smashed Agency)",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## AGENT 7: WEEKLY REPORTING\n\n**Two entry points:**\n1. Schedule Trigger — Monday 9 AM IST (3:30 UTC)\n2. Webhook POST /generate-report — on-demand\n\n**Flow:**\n1. Fetch active brands from Airtable\n2. Sequentially fetch Projects, Scripts, Invoices\n3. Aggregate per-brand metrics in Code node\n4. Gemini generates a no-fluff weekly report\n5. Post to Slack #ugc-agent-notifications\n6. Respond to webhook (on-demand path only)",
+        "height": 360,
+        "width": 460,
+        "color": 7
+      },
+      "id": "rpt-sticky-overview",
+      "name": "Sticky Note — Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -280,
+        -60
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "30 3 * * 1"
+            }
+          ]
+        }
+      },
+      "id": "rpt-schedule",
+      "name": "Schedule — Monday 9AM IST",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        280,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "generate-report",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "rpt-webhook",
+      "name": "Webhook — Generate Report",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [
+        280,
+        480
+      ],
+      "webhookId": "generate-report-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Schedule trigger — fetch all active brands for the last 7 days\nconst now = new Date();\nconst sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);\nreturn [{ json: {\n  mode: 'weekly',\n  brand_name: null,\n  brand_id: null,\n  period_start: sevenDaysAgo.toISOString().split('T')[0],\n  period_end: now.toISOString().split('T')[0],\n  period_label: 'This Week'\n}}];"
+      },
+      "id": "rpt-schedule-params",
+      "name": "Set Weekly Params",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        580,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Webhook trigger — optional brand_name or brand_id, optional period_days\nconst body = $input.first().json.body || $input.first().json;\nconst brand_name = (body.brand_name || '').trim() || null;\nconst brand_id = (body.brand_id || '').trim() || null;\nconst period_days = Math.min(Math.max(parseInt(body.period_days) || 7, 1), 90);\n\nconst now = new Date();\nconst start = new Date(now.getTime() - period_days * 24 * 60 * 60 * 1000);\n\nreturn [{ json: {\n  mode: 'on_demand',\n  brand_name,\n  brand_id,\n  period_start: start.toISOString().split('T')[0],\n  period_end: now.toISOString().split('T')[0],\n  period_label: period_days === 7 ? 'This Week' : `Last ${period_days} days`\n}}];"
+      },
+      "id": "rpt-webhook-params",
+      "name": "Extract Webhook Params",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        580,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pass through from either entry point\nconst item = $input.first().json;\nreturn [{ json: item }];"
+      },
+      "id": "rpt-merge-entry",
+      "name": "Merge Entry Points",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Brands?filterByFormula={{ $json.brand_id ? encodeURIComponent('RECORD_ID() = \\'' + $json.brand_id + '\\'') : ($json.brand_name ? encodeURIComponent('{brand_name} = \\'' + $json.brand_name + '\\'') : encodeURIComponent('OR({status} = \\'Active\\', {status} = \\'active\\')')) }}&pageSize=100",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "options": {}
+      },
+      "id": "rpt-fetch-brands",
+      "name": "Fetch Brands",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1180,
+        340
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Projects?pageSize=100",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "options": {}
+      },
+      "id": "rpt-fetch-projects",
+      "name": "Fetch All Projects",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1520,
+        340
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Scripts?pageSize=100",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "options": {}
+      },
+      "id": "rpt-fetch-scripts",
+      "name": "Fetch All Scripts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1860,
+        340
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Invoices?pageSize=100",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "options": {}
+      },
+      "id": "rpt-fetch-invoices",
+      "name": "Fetch All Invoices",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2200,
+        340
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// AGGREGATE: Per-brand metrics from Projects, Scripts, Invoices\n// Uses $() named references to pull data from sequential chain.\n// ============================================================\nconst params = $('Merge Entry Points').first().json;\nconst brandRecords = $('Fetch Brands').first().json.records || [];\n\nif (brandRecords.length === 0) {\n  return [{ json: {\n    report_data: null,\n    error: 'No active brands found',\n    params\n  }}];\n}\n\nconst brands = brandRecords.map(r => ({\n  id: r.id,\n  brand_name: r.fields.brand_name || r.fields.Name || 'Unknown',\n  client_code: r.fields.client_code || '',\n  client_name: r.fields.client_name || '',\n  status: r.fields.status || 'Active'\n}));\n\nconst allProjects = ($('Fetch All Projects').first().json.records || []).map(r => ({ id: r.id, ...r.fields }));\nconst allScripts = ($('Fetch All Scripts').first().json.records || []).map(r => ({ id: r.id, ...r.fields }));\nconst allInvoices = ($('Fetch All Invoices').first().json.records || []).map(r => ({ id: r.id, ...r.fields }));\n\nconst periodStart = params.period_start;\nconst periodEnd = params.period_end;\nconst periodLabel = params.period_label;\n\nconst startDate = new Date(periodStart + 'T00:00:00Z');\nconst endDate = new Date(periodEnd + 'T23:59:59Z');\nconst now = new Date();\nconst monthStart = new Date(now.getFullYear(), now.getMonth(), 1);\n\nconst brandReports = [];\nlet totalScriptsDelivered = 0;\nlet totalScriptsInPipeline = 0;\nlet totalRevenue = 0;\nlet totalOutstanding = 0;\nlet totalOverdueInvoices = 0;\n\nfor (const brand of brands) {\n  // Match projects to brand via brand_name or client_code\n  const brandProjects = allProjects.filter(p => {\n    const matchName = (p.brand_name || '').toLowerCase() === brand.brand_name.toLowerCase();\n    const matchCode = brand.client_code && (p.client_code || '').toLowerCase() === brand.client_code.toLowerCase();\n    return matchName || matchCode;\n  });\n\n  // Match scripts to brand via project link or brand_name\n  const brandProjectIds = brandProjects.map(p => p.id);\n  const brandScripts = allScripts.filter(s => {\n    const projIds = Array.isArray(s.project_id) ? s.project_id : [s.project_id];\n    const matchProject = projIds.some(pid => brandProjectIds.includes(pid));\n    const matchBrand = (s.brand_name || '').toLowerCase() === brand.brand_name.toLowerCase();\n    return matchProject || matchBrand;\n  });\n\n  // Match invoices to brand\n  const brandInvoices = allInvoices.filter(inv => {\n    const matchName = (inv.brand_name || '').toLowerCase() === brand.brand_name.toLowerCase();\n    const matchBrandLink = Array.isArray(inv.brand) ? inv.brand.some(bid => bid === brand.id) : inv.brand === brand.id;\n    return matchName || matchBrandLink;\n  });\n\n  // --- Scripts delivered in this period ---\n  const scriptsDeliveredThisPeriod = brandScripts.filter(s => {\n    const status = (s.overall_status || '').toLowerCase();\n    if (status !== 'delivered') return false;\n    const deliveredAt = s.delivered_at || s.updated_at || s.created_at || '';\n    if (!deliveredAt) return true;\n    const d = new Date(deliveredAt);\n    return d >= startDate && d <= endDate;\n  });\n\n  // --- Scripts by status ---\n  const statusCounts = {};\n  brandScripts.forEach(s => {\n    const st = s.overall_status || 'Unknown';\n    statusCounts[st] = (statusCounts[st] || 0) + 1;\n  });\n\n  const inPipeline = brandScripts.filter(s => {\n    const st = (s.overall_status || '').toLowerCase();\n    return !['delivered', 'cancelled', 'archived'].includes(st);\n  });\n\n  // --- Project status ---\n  const activeProjects = brandProjects.filter(p => {\n    const st = (p.status || '').toLowerCase();\n    return !['completed', 'cancelled', 'archived'].includes(st);\n  });\n  const completedProjects = brandProjects.filter(p => (p.status || '').toLowerCase() === 'completed');\n\n  // Behind schedule: deadline passed but project not done\n  const behindSchedule = brandProjects.filter(p => {\n    if (!p.deadline && !p.due_date && !p.end_date) return false;\n    const deadline = new Date(p.deadline || p.due_date || p.end_date);\n    const st = (p.status || '').toLowerCase();\n    return deadline < now && !['completed', 'delivered', 'cancelled', 'archived'].includes(st);\n  });\n\n  // --- Revenue: invoices paid this month ---\n  const paidThisMonth = brandInvoices.filter(inv => {\n    const st = (inv.status || '').toLowerCase();\n    if (st !== 'paid') return false;\n    const paidDate = inv.paid_date || inv.payment_date || inv.updated_at || '';\n    if (!paidDate) return true;\n    return new Date(paidDate) >= monthStart;\n  });\n  const revenue = paidThisMonth.reduce((sum, inv) => sum + (parseFloat(inv.amount) || 0), 0);\n\n  // --- Outstanding: unpaid invoices ---\n  const unpaid = brandInvoices.filter(inv => {\n    const st = (inv.status || '').toLowerCase();\n    return ['pending', 'sent', 'overdue', 'unpaid', 'draft'].includes(st);\n  });\n  const outstanding = unpaid.reduce((sum, inv) => sum + (parseFloat(inv.amount) || 0), 0);\n\n  // Overdue invoices\n  const overdue = unpaid.filter(inv => {\n    const dueDate = inv.due_date || inv.deadline || '';\n    if (!dueDate) return false;\n    return new Date(dueDate) < now;\n  });\n\n  totalScriptsDelivered += scriptsDeliveredThisPeriod.length;\n  totalScriptsInPipeline += inPipeline.length;\n  totalRevenue += revenue;\n  totalOutstanding += outstanding;\n  totalOverdueInvoices += overdue.length;\n\n  brandReports.push({\n    brand_name: brand.brand_name,\n    client_code: brand.client_code,\n    client_name: brand.client_name,\n    scripts_delivered: scriptsDeliveredThisPeriod.length,\n    scripts_in_pipeline: inPipeline.length,\n    total_scripts: brandScripts.length,\n    script_status_breakdown: statusCounts,\n    active_projects: activeProjects.length,\n    completed_projects: completedProjects.length,\n    total_projects: brandProjects.length,\n    behind_schedule: behindSchedule.map(p => ({\n      name: p.project_name || p.client_code || 'Project',\n      status: p.status,\n      deadline: p.deadline || p.due_date || p.end_date || 'N/A'\n    })),\n    revenue_this_month: revenue,\n    outstanding_amount: outstanding,\n    overdue_invoices: overdue.length,\n    overdue_total: overdue.reduce((s, inv) => s + (parseFloat(inv.amount) || 0), 0)\n  });\n}\n\nfunction formatINR(amount) {\n  if (amount >= 100000) return `Rs ${(amount / 100000).toFixed(1)}L`;\n  if (amount >= 1000) return `Rs ${(amount / 1000).toFixed(1)}K`;\n  return `Rs ${amount.toFixed(0)}`;\n}\n\nconst report_data = {\n  period_label: periodLabel,\n  period_start: periodStart,\n  period_end: periodEnd,\n  generated_at: now.toISOString(),\n  mode: params.mode,\n  brand_count: brands.length,\n  totals: {\n    scripts_delivered: totalScriptsDelivered,\n    scripts_in_pipeline: totalScriptsInPipeline,\n    revenue_this_month: totalRevenue,\n    revenue_formatted: formatINR(totalRevenue),\n    outstanding: totalOutstanding,\n    outstanding_formatted: formatINR(totalOutstanding),\n    overdue_invoices: totalOverdueInvoices\n  },\n  brands: brandReports\n};\n\nreturn [{ json: { report_data, params } }];"
+      },
+      "id": "rpt-aggregate",
+      "name": "Aggregate Brand Metrics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2540,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Build Gemini prompt for weekly report generation\n// ============================================================\nconst d = $input.first().json;\nconst rd = d.report_data;\n\nif (!rd) {\n  return [{ json: { ...d, gemini_body: null, _skip_gemini: true, report_text: d.error || 'No active brands found. Nothing to report.' } }];\n}\n\nconst dataBlock = JSON.stringify(rd, null, 2);\n\nconst systemPrompt = `You are the reporting assistant for Smashed Agency, a one-person UGC agency run by Vishat. Your job is to write concise, brutally honest weekly reports. No corporate speak. No fluff. Just numbers and actionable insights.\n\nRules:\n- Use Indian Rupee amounts (use lakhs notation like 1.2L for amounts >= 1 lakh, K for thousands)\n- Be specific: name brands, give exact counts, mention deadlines\n- If something is behind schedule, say so directly with how many days\n- If revenue is low or zero, flag it\n- Keep the executive summary to 2-3 sentences max — think WhatsApp message to yourself\n- Use plain text formatting suitable for Slack (use *bold* for emphasis, bullet points with -)\n- Do NOT use markdown headers (no # or ##) — use *SECTION NAME* in bold instead\n- The report should fit in one Slack message (under 3000 chars)\n- End with 2-3 concrete action items for next week\n- If a brand has zero activity, say so in one line — don't pad it\n- Mention specific project phases (Research, Scripting, Review, Delivery) not vague \"in progress\"`;\n\nconst userPrompt = `Generate the weekly report for ${rd.period_label} (${rd.period_start} to ${rd.period_end}).\n\nHere is the raw data:\n\n${dataBlock}\n\nWrite the report in this structure:\n\n*WEEKLY REPORT — ${rd.period_label.toUpperCase()}*\n(${rd.period_start} to ${rd.period_end})\n\n*Executive Summary*\n2-3 sentences. Example tone: \"Delivered 8 scripts across 3 brands this week. Wheelwash is 2 days behind on Phase 3. Revenue: Rs 1.2L collected, Rs 45K outstanding from 2 overdue invoices.\"\n\n*Per-Brand Breakdown*\nFor each brand:\n- Scripts delivered this period / in pipeline (with status breakdown)\n- Active projects and their current phase\n- Behind schedule warnings with days overdue\n- If no activity, just say \"No activity this period\"\n\n*Revenue*\n- Collected this month (Rs amount)\n- Outstanding (Rs amount)\n- Overdue invoices count + total\n\n*Next Week*\n- 2-3 specific action items based on the data (e.g., \"Clear Wheelwash backlog\", \"Follow up on Dhan invoice\")\n\nBe like a sharp operations manager. Numbers first, opinions second.`;\n\nconst body = {\n  systemInstruction: { parts: [{ text: systemPrompt }] },\n  contents: [{ role: 'user', parts: [{ text: userPrompt }] }],\n  generationConfig: { temperature: 0.3, maxOutputTokens: 3000 }\n};\n\nreturn [{ json: { ...d, gemini_body: JSON.stringify(body), _skip_gemini: false } }];"
+      },
+      "id": "rpt-build-prompt",
+      "name": "Build Report Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2880,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.gemini_body }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "rpt-gemini",
+      "name": "Gemini — Generate Report",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3220,
+        340
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "rIL63TG4xfMQL8uJ",
+          "name": "Cosmisk AI"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Parse Gemini response — with fallback report generation\n// ============================================================\nconst promptData = $('Build Report Prompt').first().json;\nconst rd = promptData.report_data;\n\n// If we skipped Gemini (no brands)\nif (promptData._skip_gemini) {\n  return [{ json: {\n    report_text: promptData.report_text || 'No data to report.',\n    report_data: rd,\n    mode: promptData.params.mode\n  }}];\n}\n\nconst raw = $input.first().json.candidates?.[0]?.content?.parts?.[0]?.text || '';\n\n// Clean thinking tags if Gemini includes them\nlet reportText = raw\n  .replace(/<thinking>[\\s\\S]*?<\\/thinking>/gi, '')\n  .trim();\n\n// Fallback: if Gemini returned garbage or empty, build from raw data\nif (!reportText || reportText.length < 50) {\n  const t = rd.totals;\n  const brandLines = rd.brands.map(b => {\n    let line = `- *${b.brand_name}*: ${b.scripts_delivered} delivered, ${b.scripts_in_pipeline} in pipeline`;\n    if (Object.keys(b.script_status_breakdown).length > 0) {\n      const breakdown = Object.entries(b.script_status_breakdown)\n        .map(([k, v]) => `${k}: ${v}`).join(', ');\n      line += ` (${breakdown})`;\n    }\n    if (b.behind_schedule.length > 0) {\n      const names = b.behind_schedule.map(p => p.name).join(', ');\n      line += `\\n  BEHIND SCHEDULE: ${names}`;\n    }\n    if (b.overdue_invoices > 0) {\n      line += `\\n  OVERDUE: ${b.overdue_invoices} invoice(s), Rs ${b.overdue_total}`;\n    }\n    return line;\n  }).join('\\n');\n\n  reportText = `*WEEKLY REPORT — ${rd.period_label.toUpperCase()}*\\n`\n    + `(${rd.period_start} to ${rd.period_end})\\n\\n`\n    + `*Executive Summary*\\n`\n    + `Delivered ${t.scripts_delivered} scripts across ${rd.brand_count} brand(s). `\n    + `${t.scripts_in_pipeline} scripts still in pipeline. `\n    + `Revenue: ${t.revenue_formatted} collected, ${t.outstanding_formatted} outstanding`\n    + (t.overdue_invoices > 0 ? ` (${t.overdue_invoices} overdue).` : '.')\n    + `\\n\\n*Per-Brand Breakdown*\\n${brandLines}`\n    + `\\n\\n*Revenue*\\n- Collected this month: ${t.revenue_formatted}\\n- Outstanding: ${t.outstanding_formatted}`\n    + (t.overdue_invoices > 0 ? `\\n- Overdue invoices: ${t.overdue_invoices}` : '')\n    + `\\n\\n*Next Week*\\n- Review pipeline and clear bottlenecks\\n- Follow up on outstanding invoices`;\n}\n\nreturn [{ json: {\n  report_text: reportText,\n  report_data: rd,\n  mode: promptData.params.mode\n}}];"
+      },
+      "id": "rpt-parse-report",
+      "name": "Parse Report Text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3560,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0AFBQ5UF0E",
+          "mode": "id"
+        },
+        "text": "={{ $json.report_text }}",
+        "otherOptions": {}
+      },
+      "id": "rpt-slack",
+      "name": "Slack — Post Report",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        3900,
+        340
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "5Q37UpOjGx4YsbyC",
+          "name": "Slack account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "mode-check",
+              "leftValue": "={{ $json.mode }}",
+              "rightValue": "on_demand",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "rpt-check-mode",
+      "name": "Is On-Demand?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        4240,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ JSON.stringify({ status: 'success', report_length: $('Parse Report Text').first().json.report_text.length, brand_count: ($('Parse Report Text').first().json.report_data || {}).brand_count || 0, report: $('Parse Report Text').first().json.report_text }) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "rpt-respond-webhook",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        4580,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Weekly path — no webhook to respond to, just log\nreturn [{ json: { done: true, message: 'Weekly report posted to Slack' } }];"
+      },
+      "id": "rpt-weekly-done",
+      "name": "Weekly Done",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4580,
+        460
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblGhzSJ5RXWDS8h8",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ records: [{ fields: { agent: \"reporting\", event_type: \"report_generated\", brand_name: \"\", client_code: \"\", severity: \"info\", message: \"Weekly report generated\", payload: JSON.stringify({ mode: $json.mode, brand_count: $json.report_data?.brand_count || 0, period: $json.report_data?.period_label || \"weekly\" }), created_at: new Date().toISOString() } }] }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3760,
+        140
+      ],
+      "id": "4db24420-2235-4ead-8ce7-f5d6824192b4",
+      "name": "Write Event — Report Generated",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Schedule — Monday 9AM IST": {
+      "main": [
+        [
+          {
+            "node": "Set Weekly Params",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook — Generate Report": {
+      "main": [
+        [
+          {
+            "node": "Extract Webhook Params",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Weekly Params": {
+      "main": [
+        [
+          {
+            "node": "Merge Entry Points",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Webhook Params": {
+      "main": [
+        [
+          {
+            "node": "Merge Entry Points",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Entry Points": {
+      "main": [
+        [
+          {
+            "node": "Fetch Brands",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Brands": {
+      "main": [
+        [
+          {
+            "node": "Fetch All Projects",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch All Projects": {
+      "main": [
+        [
+          {
+            "node": "Fetch All Scripts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch All Scripts": {
+      "main": [
+        [
+          {
+            "node": "Fetch All Invoices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch All Invoices": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Brand Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Brand Metrics": {
+      "main": [
+        [
+          {
+            "node": "Build Report Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Report Prompt": {
+      "main": [
+        [
+          {
+            "node": "Gemini — Generate Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini — Generate Report": {
+      "main": [
+        [
+          {
+            "node": "Parse Report Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Report Text": {
+      "main": [
+        [
+          {
+            "node": "Slack — Post Report",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Write Event — Report Generated",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack — Post Report": {
+      "main": [
+        [
+          {
+            "node": "Is On-Demand?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is On-Demand?": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Weekly Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner"
+  }
+}

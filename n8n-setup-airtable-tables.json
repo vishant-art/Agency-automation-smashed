@@ -1,0 +1,106 @@
+{
+  "name": "Setup — Create Airtable Tables",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "setup-tables",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "setup-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [400, 300],
+      "webhookId": "setup-tables-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate table creation payloads for all 4 tables\n// Airtable valid colors: blueLight, cyanLight, tealLight, greenLight, yellowLight, orangeLight, redLight, pinkLight, purpleLight, grayLight, blueBright, cyanBright, tealBright, greenBright, yellowBright, orangeBright, redBright, pinkBright, purpleBright, grayBright\n// Creators already created (tbl59nWGcoucE0gjf) - skip it\nconst tables = [\n  {\n    name: 'Brands',\n    fields: [\n      { name: 'brand_name', type: 'singleLineText' },\n      { name: 'industry', type: 'singleLineText' },\n      { name: 'website_url', type: 'url' },\n      { name: 'brand_voice', type: 'multilineText' },\n      { name: 'style_guide_url', type: 'url' },\n      { name: 'logo_url', type: 'url' },\n      { name: 'primary_contact', type: 'singleLineText' },\n      { name: 'contact_email', type: 'email' },\n      { name: 'whatsapp', type: 'phoneNumber' },\n      { name: 'slack_channel', type: 'singleLineText' },\n      { name: 'clickup_list_id', type: 'singleLineText' },\n      { name: 'drive_folder_id', type: 'singleLineText' },\n      { name: 'monthly_retainer', type: 'currency', options: { precision: 0, symbol: '₹' } },\n      { name: 'services', type: 'multipleSelects', options: { choices: [{ name: 'UGC' }, { name: 'AI Creatives' }, { name: 'Media Buying' }] } },\n      { name: 'status', type: 'singleSelect', options: { choices: [{ name: 'Active', color: 'greenBright' }, { name: 'Paused', color: 'yellowBright' }, { name: 'Churned', color: 'redBright' }] } },\n      { name: 'onboarded_date', type: 'date', options: { dateFormat: { name: 'iso' } } },\n      { name: 'ad_account_id', type: 'singleLineText' },\n      { name: 'roas_target', type: 'number', options: { precision: 2 } },\n      { name: 'notes', type: 'multilineText' }\n    ]\n  },\n  {\n    name: 'Leads',\n    fields: [\n      { name: 'company_name', type: 'singleLineText' },\n      { name: 'contact_name', type: 'singleLineText' },\n      { name: 'email', type: 'email' },\n      { name: 'phone', type: 'phoneNumber' },\n      { name: 'instagram', type: 'singleLineText' },\n      { name: 'linkedin', type: 'url' },\n      { name: 'website', type: 'url' },\n      { name: 'industry', type: 'singleLineText' },\n      { name: 'monthly_ad_spend', type: 'currency', options: { precision: 0, symbol: '₹' } },\n      { name: 'source', type: 'singleSelect', options: { choices: [{ name: 'Referral' }, { name: 'Instagram' }, { name: 'LinkedIn' }, { name: 'Website' }, { name: 'Cold Outreach' }] } },\n      { name: 'stage', type: 'singleSelect', options: { choices: [{ name: 'New', color: 'blueBright' }, { name: 'Contacted', color: 'cyanBright' }, { name: 'Meeting Scheduled', color: 'tealBright' }, { name: 'Proposal Sent', color: 'greenBright' }, { name: 'Negotiating', color: 'yellowBright' }, { name: 'Won', color: 'purpleBright' }, { name: 'Lost', color: 'redBright' }] } },\n      { name: 'notes', type: 'multilineText' },\n      { name: 'next_follow_up', type: 'date', options: { dateFormat: { name: 'iso' } } },\n      { name: 'proposal_url', type: 'url' },\n      { name: 'estimated_value', type: 'currency', options: { precision: 0, symbol: '₹' } },\n      { name: 'lost_reason', type: 'singleLineText' },\n      { name: 'created_at', type: 'date', options: { dateFormat: { name: 'iso' } } }\n    ]\n  },\n  {\n    name: 'Invoices',\n    fields: [\n      { name: 'invoice_number', type: 'singleLineText' },\n      { name: 'amount', type: 'currency', options: { precision: 0, symbol: '₹' } },\n      { name: 'currency', type: 'singleSelect', options: { choices: [{ name: 'INR' }, { name: 'USD' }] } },\n      { name: 'status', type: 'singleSelect', options: { choices: [{ name: 'Draft', color: 'grayBright' }, { name: 'Sent', color: 'blueBright' }, { name: 'Paid', color: 'greenBright' }, { name: 'Overdue', color: 'redBright' }] } },\n      { name: 'due_date', type: 'date', options: { dateFormat: { name: 'iso' } } },\n      { name: 'paid_date', type: 'date', options: { dateFormat: { name: 'iso' } } },\n      { name: 'description', type: 'multilineText' },\n      { name: 'month', type: 'singleLineText' },\n      { name: 'payment_link', type: 'url' },\n      { name: 'notes', type: 'multilineText' }\n    ]\n  }\n];\n\nreturn tables.map(t => ({ json: t }));"
+      },
+      "id": "setup-generate-schemas",
+      "name": "Generate Table Schemas",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [620, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.airtable.com/v0/meta/bases/appvFxwZc9yU8o8pK/tables",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ name: $json.name, fields: $json.fields }) }}",
+        "options": {}
+      },
+      "id": "setup-create-table",
+      "name": "Create Table in Airtable",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [860, 300],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Collect results from all table creations\nconst items = $input.all();\nconst results = items.map(item => {\n  const data = item.json;\n  if (data.id) {\n    return { table: data.name, id: data.id, status: 'created' };\n  } else {\n    return { table: data.name || 'unknown', error: data.error || data.message || 'Failed', status: 'error' };\n  }\n});\nreturn [{ json: { tables: results, summary: `Created ${results.filter(r => r.status === 'created').length} of ${results.length} tables` } }];"
+      },
+      "id": "setup-summarize",
+      "name": "Summarize Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1080, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ JSON.stringify($json, null, 2) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              { "name": "Content-Type", "value": "application/json" }
+            ]
+          }
+        }
+      },
+      "id": "setup-respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1300, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [{ "node": "Generate Table Schemas", "type": "main", "index": 0 }]
+      ]
+    },
+    "Generate Table Schemas": {
+      "main": [
+        [{ "node": "Create Table in Airtable", "type": "main", "index": 0 }]
+      ]
+    },
+    "Create Table in Airtable": {
+      "main": [
+        [{ "node": "Summarize Results", "type": "main", "index": 0 }]
+      ]
+    },
+    "Summarize Results": {
+      "main": [
+        [{ "node": "Respond", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

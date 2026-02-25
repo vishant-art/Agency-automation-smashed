@@ -70,7 +70,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// ============================================================\n// Extract and validate delivery payload\n// ============================================================\nconst body = $input.first().json.body || $input.first().json;\nconst project_id = (body.project_id || '').trim();\nconst action = (body.action || 'approve').trim().toLowerCase();\nconst script_ids = body.script_ids || [];\nconst notes = (body.notes || '').trim();\n\nif (!project_id) throw new Error('project_id is required');\nif (!['approve', 'reject'].includes(action)) {\n  throw new Error('action must be approve or reject');\n}\n\nreturn [{ json: { project_id, action, script_ids, notes } }];"
+        "jsCode": "// ============================================================\n// Extract and validate delivery payload\n// ============================================================\nconst body = $input.first().json.body || $input.first().json;\nconst project_id = (body.project_id || '').trim();\nconst action = (body.action || 'approve').trim().toLowerCase();\nconst script_ids = body.script_ids || [];\nconst notes = (body.notes || '').trim();\n\nif (!project_id) throw new Error('project_id is required');\nif (!['approve', 'reject', 'send_to_client'].includes(action)) {\n  throw new Error('action must be approve, reject, or send_to_client');\n}\n\nreturn [{ json: { project_id, action, script_ids, notes } }];"
       },
       "id": "w4-extract-payload",
       "name": "Extract Delivery Payload",
@@ -144,36 +144,33 @@
     },
     {
       "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict"
-          },
-          "conditions": [
+        "dataType": "string",
+        "value1": "={{ $json.action }}",
+        "rules": {
+          "rules": [
             {
-              "id": "approve-check",
-              "leftValue": "={{ $json.action }}",
-              "rightValue": "approve",
-              "operator": {
-                "type": "string",
-                "operation": "equals"
-              }
+              "value2": "approve",
+              "output": 0
+            },
+            {
+              "value2": "send_to_client",
+              "output": 1
+            },
+            {
+              "value2": "reject",
+              "output": 2
             }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
+          ]
+        }
       },
-      "id": "w4-if-approve",
-      "name": "Approve or Reject?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
+      "id": "w4-route-action",
+      "name": "Route by Action",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 2,
       "position": [
         2020,
         320
-      ],
-      "credentials": {}
+      ]
     },
     {
       "parameters": {
@@ -590,7 +587,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// ============================================================\n// Update script records in Airtable to 'Delivered'\n// ============================================================\nconst data = $('Format Approved Scripts').first().json;\nconst items = data.script_ids.map(id => ({ json: {\n  record_id: id,\n  pm_status: 'Approved',\n  overall_status: 'Delivered'\n}}));\nreturn items.length ? items : [{ json: { _skip: true } }];"
+        "jsCode": "// ============================================================\n// Update script records in Airtable to 'Delivered'\n// Also stores google_doc_id from Match Scripts to Docs\n// ============================================================\nconst data = $('Format Approved Scripts').first().json;\n\n// Get doc IDs from the Match node (same execution, already ran)\nlet docMap = {};\ntry {\n  const matchItems = $('Match Scripts to Docs').all();\n  matchItems.forEach(item => {\n    if (item.json.doc_id) {\n      docMap[item.json.script_number] = item.json.doc_id;\n    }\n  });\n} catch(e) {}\n\nconst items = data.scripts.map(s => ({ json: {\n  record_id: s.script_id,\n  pm_status: 'Approved',\n  overall_status: 'Delivered',\n  google_doc_id: docMap[s.script_number] || ''\n}}));\nreturn items.length ? items : [{ json: { _skip: true } }];"
       },
       "id": "w4-prep-script-update",
       "name": "Prepare Script Status Update",
@@ -610,7 +607,7 @@
         "nodeCredentialType": "airtableTokenApi",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ fields: { pm_status: $json.pm_status, overall_status: $json.overall_status } }) }}",
+        "jsonBody": "={{ JSON.stringify({ fields: { pm_status: $json.pm_status, overall_status: $json.overall_status, google_doc_id: $json.google_doc_id || '' } }) }}",
         "options": {}
       },
       "id": "w4-update-scripts-delivered",
@@ -876,7 +873,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const err = $input.first().json;\nlet project_id = 'N/A';\ntry { project_id = $('Extract Delivery Payload').first().json.project_id; } catch(e) {}\nreturn [{ json: { project_id, error_message: err.error?.message || err.message || 'Unknown', error_node: err.error?.node?.name || 'Unknown', timestamp: new Date().toISOString() } }];"
+        "jsCode": "const err = $input.first().json;\nlet project_id = 'N/A';\ntry { project_id = $('Extract Delivery Payload').first().json.project_id; } catch(e) {}\nreturn [{ json: { project_id, error_message: err.error?.message || err.message || 'Unknown', error_node: err.error?.node?.name || 'Unknown', created_at: new Date().toISOString() } }];"
       },
       "id": "w4-error-handler",
       "name": "Handle Error",
@@ -1026,6 +1023,170 @@
         480
       ],
       "credentials": {}
+    },
+    {
+      "parameters": {
+        "content": "## SEND TO CLIENT BRANCH\nShare Google Docs with client\nUpdate scripts to Client Review\nNotify PM via Slack",
+        "height": 120,
+        "width": 400,
+        "color": 5
+      },
+      "id": "w4-sticky-send-client",
+      "name": "Sticky Note - Send to Client",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2380,
+        260
+      ],
+      "credentials": {}
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Send to Client: Update script statuses and prepare doc sharing\n// ============================================================\nconst data = $input.first().json;\nconst project = data.project;\nconst scripts = data.scripts;\nconst scriptIds = data.script_ids || [];\nconst brandName = project.brand_name || 'Brand';\nconst clientName = project.client_name || 'Client';\nconst clientEmail = project.client_email || '';\n\nconst targetScripts = scriptIds.length > 0\n  ? scripts.filter(s => scriptIds.includes(s.id))\n  : scripts;\n\n// Build update items for each script\nconst items = targetScripts.map(s => ({ json: {\n  record_id: s.id,\n  overall_status: 'Client Review',\n  client_status: 'Pending'\n}}));\n\nreturn items.length ? items : [{ json: { _skip: true } }];"
+      },
+      "id": "w4-send-client-prep",
+      "name": "Prepare Send to Client",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2420,
+        380
+      ],
+      "credentials": {}
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Scripts/{{ $json.record_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ fields: { overall_status: $json.overall_status, client_status: $json.client_status } }) }}",
+        "options": {}
+      },
+      "id": "w4-update-scripts-client-review",
+      "name": "Update Scripts — Client Review",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2780,
+        380
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Projects/{{ $('Merge Delivery Context').first().json.project_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ fields: { status: 'Client Review' } }) }}",
+        "options": {}
+      },
+      "id": "w4-update-project-client-review",
+      "name": "Update Project — Client Review",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3140,
+        380
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0AG86W1XT2",
+          "mode": "id"
+        },
+        "text": "={{ `Scripts sent to client for review: ${$('Merge Delivery Context').first().json.project.brand_name || 'Brand'}\\n\\n${$('Merge Delivery Context').first().json.scripts.length} scripts are now in Client Review status.\\nClient: ${$('Merge Delivery Context').first().json.project.client_name || 'Client'} (${$('Merge Delivery Context').first().json.project.client_email || ''})\\n\\nWaiting for client feedback. Comments can be added directly on Google Docs.` }}",
+        "otherOptions": {}
+      },
+      "id": "w4-slack-send-client",
+      "name": "Slack — Sent to Client",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        3500,
+        380
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "5Q37UpOjGx4YsbyC",
+          "name": "Slack account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ JSON.stringify({ status: 'success', action: 'send_to_client', project_id: $('Merge Delivery Context').first().json.project_id, message: 'Scripts sent to client for review. Status updated to Client Review.' }) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "w4-respond-send-client",
+      "name": "Respond — Sent to Client",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        3860,
+        380
+      ],
+      "credentials": {}
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblGhzSJ5RXWDS8h8",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ records: [{ fields: { agent: \"phase_4\", event_type: \"phase_complete\", project_id: $json.project_id || \"\", brand_name: $json.brand_name || \"\", client_code: $json.client_code || \"\", severity: \"info\", message: \"Delivery complete for \" + $json.brand_name, payload: JSON.stringify({ project_id: $json.project_id, client_code: $json.client_code, total_scripts: $json.total_scripts }), created_at: new Date().toISOString() } }] }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5620,
+        280
+      ],
+      "id": "10451164-437a-4618-b5a3-4131a60bc4a3",
+      "name": "Write Event — Delivery Complete",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable account"
+        }
+      },
+      "onError": "continueRegularOutput"
     }
   ],
   "connections": {
@@ -1099,18 +1260,25 @@
       "main": [
         [
           {
-            "node": "Approve or Reject?",
+            "node": "Route by Action",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Approve or Reject?": {
+    "Route by Action": {
       "main": [
         [
           {
             "node": "Format Approved Scripts",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Send to Client",
             "type": "main",
             "index": 0
           }
@@ -1400,6 +1568,11 @@
             "node": "Notify Slack — Delivered",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "Write Event — Delivery Complete",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
@@ -1464,6 +1637,50 @@
         [
           {
             "node": "Respond — Reject",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Send to Client": {
+      "main": [
+        [
+          {
+            "node": "Update Scripts — Client Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Scripts — Client Review": {
+      "main": [
+        [
+          {
+            "node": "Update Project — Client Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Project — Client Review": {
+      "main": [
+        [
+          {
+            "node": "Slack — Sent to Client",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack — Sent to Client": {
+      "main": [
+        [
+          {
+            "node": "Respond — Sent to Client",
             "type": "main",
             "index": 0
           }
@@ -1678,7 +1895,7 @@
       },
       {
         "parameters": {
-          "jsCode": "// ============================================================\n// Extract and validate delivery payload\n// ============================================================\nconst body = $input.first().json.body || $input.first().json;\nconst project_id = (body.project_id || '').trim();\nconst action = (body.action || 'approve').trim().toLowerCase();\nconst script_ids = body.script_ids || [];\nconst notes = (body.notes || '').trim();\n\nif (!project_id) throw new Error('project_id is required');\nif (!['approve', 'reject'].includes(action)) {\n  throw new Error('action must be approve or reject');\n}\n\nreturn [{ json: { project_id, action, script_ids, notes } }];"
+          "jsCode": "// ============================================================\n// Extract and validate delivery payload\n// ============================================================\nconst body = $input.first().json.body || $input.first().json;\nconst project_id = (body.project_id || '').trim();\nconst action = (body.action || 'approve').trim().toLowerCase();\nconst script_ids = body.script_ids || [];\nconst notes = (body.notes || '').trim();\n\nif (!project_id) throw new Error('project_id is required');\nif (!['approve', 'reject', 'send_to_client'].includes(action)) {\n  throw new Error('action must be approve, reject, or send_to_client');\n}\n\nreturn [{ json: { project_id, action, script_ids, notes } }];"
         },
         "id": "w4-extract-payload",
         "name": "Extract Delivery Payload",
@@ -2198,7 +2415,7 @@
       },
       {
         "parameters": {
-          "jsCode": "// ============================================================\n// Update script records in Airtable to 'Delivered'\n// ============================================================\nconst data = $('Format Approved Scripts').first().json;\nconst items = data.script_ids.map(id => ({ json: {\n  record_id: id,\n  pm_status: 'Approved',\n  overall_status: 'Delivered'\n}}));\nreturn items.length ? items : [{ json: { _skip: true } }];"
+          "jsCode": "// ============================================================\n// Update script records in Airtable to 'Delivered'\n// Also stores google_doc_id from Match Scripts to Docs\n// ============================================================\nconst data = $('Format Approved Scripts').first().json;\n\n// Get doc IDs from the Match node (same execution, already ran)\nlet docMap = {};\ntry {\n  const matchItems = $('Match Scripts to Docs').all();\n  matchItems.forEach(item => {\n    if (item.json.doc_id) {\n      docMap[item.json.script_number] = item.json.doc_id;\n    }\n  });\n} catch(e) {}\n\nconst items = data.scripts.map(s => ({ json: {\n  record_id: s.script_id,\n  pm_status: 'Approved',\n  overall_status: 'Delivered',\n  google_doc_id: docMap[s.script_number] || ''\n}}));\nreturn items.length ? items : [{ json: { _skip: true } }];"
         },
         "id": "w4-prep-script-update",
         "name": "Prepare Script Status Update",
@@ -2484,7 +2701,7 @@
       },
       {
         "parameters": {
-          "jsCode": "const err = $input.first().json;\nlet project_id = 'N/A';\ntry { project_id = $('Extract Delivery Payload').first().json.project_id; } catch(e) {}\nreturn [{ json: { project_id, error_message: err.error?.message || err.message || 'Unknown', error_node: err.error?.node?.name || 'Unknown', timestamp: new Date().toISOString() } }];"
+          "jsCode": "const err = $input.first().json;\nlet project_id = 'N/A';\ntry { project_id = $('Extract Delivery Payload').first().json.project_id; } catch(e) {}\nreturn [{ json: { project_id, error_message: err.error?.message || err.message || 'Unknown', error_node: err.error?.node?.name || 'Unknown', created_at: new Date().toISOString() } }];"
         },
         "id": "w4-error-handler",
         "name": "Handle Error",
@@ -2707,7 +2924,7 @@
         "main": [
           [
             {
-              "node": "Approve or Reject?",
+              "node": "Route by Action",
               "type": "main",
               "index": 0
             }

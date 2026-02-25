@@ -1,0 +1,778 @@
+{
+  "name": "Agent 4 — Client Communication (Smashed Agency)",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## AGENT 4: CLIENT COMMUNICATION\n\n**Two entry points:**\n1. Schedule Trigger — 10 AM IST & 5 PM IST\n   Fetches projects with status changes, groups by brand,\n   Gemini generates client-friendly digest, posts to Slack.\n\n2. Webhook POST /client-update\n   Event-driven from other workflows:\n   research_complete, deck_ready, scripts_ready, delivered.\n   Gemini generates contextual message, posts to Slack.",
+        "height": 340,
+        "width": 500,
+        "color": 7
+      },
+      "id": "cc-sticky-overview",
+      "name": "Sticky Note - Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -280,
+        -60
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "30 4,11 * * *"
+            }
+          ]
+        }
+      },
+      "id": "cc-schedule",
+      "name": "Schedule Trigger — 10AM & 5PM IST",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        280,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "client-update",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "cc-webhook",
+      "name": "Webhook — Client Update",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [
+        280,
+        720
+      ],
+      "webhookId": "client-update-webhook"
+    },
+    {
+      "parameters": {},
+      "id": "cc-manual-trigger",
+      "name": "Manual Trigger — Test Scheduled",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        280,
+        -140
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## SCHEDULED PATH\nFetch all active projects, compare status vs\nlast_notified_status, filter changed ones,\ngroup by brand, Gemini summary, Slack post.",
+        "height": 140,
+        "width": 400,
+        "color": 4
+      },
+      "id": "cc-sticky-scheduled",
+      "name": "Sticky Note - Scheduled Path",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        580,
+        140
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Projects?filterByFormula={{ encodeURIComponent(\"AND(NOT({status}='Delivered'),NOT({status}='Churned'))\") }}&pageSize=100",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "options": {}
+      },
+      "id": "cc-fetch-active-projects",
+      "name": "Fetch Active Projects",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        580,
+        320
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Filter projects whose status has changed since last notification\n// Compare status vs last_notified_status field\n// Also check if updated_at is within the last 12 hours as fallback\n// ============================================================\nconst records = $input.first().json.records || [];\nif (records.length === 0) return [];\n\nconst now = new Date();\nconst twelveHoursAgo = new Date(now.getTime() - 12 * 60 * 60 * 1000);\n\nconst changed = [];\nfor (const r of records) {\n  const f = r.fields || {};\n  const currentStatus = (f.status || '').trim();\n  const lastNotified = (f.last_notified_status || '').trim();\n  const updatedAt = f.updated_at ? new Date(f.updated_at) : null;\n\n  // Include if status differs from last notified status\n  const statusChanged = currentStatus && currentStatus !== lastNotified;\n  // Fallback: include if updated recently and no last_notified_status tracked yet\n  const recentlyUpdated = !lastNotified && updatedAt && updatedAt > twelveHoursAgo;\n\n  if (statusChanged || recentlyUpdated) {\n    changed.push({\n      id: r.id,\n      brand_name: f.brand_name || 'Unknown Brand',\n      client_code: f.client_code || '',\n      client_name: f.client_name || '',\n      status: currentStatus,\n      last_notified_status: lastNotified,\n      num_scripts: f.num_scripts || 0,\n      deck_link: f.deck_link || '',\n      delivery_folder: f.delivery_folder || ''\n    });\n  }\n}\n\nif (changed.length === 0) return [];\n\n// Group by brand\nconst byBrand = {};\nfor (const p of changed) {\n  if (!byBrand[p.brand_name]) byBrand[p.brand_name] = [];\n  byBrand[p.brand_name].push(p);\n}\n\n// Build a summary object for Gemini\nconst brandSummaries = Object.entries(byBrand).map(([brand, projects]) => ({\n  brand,\n  projects: projects.map(p => ({\n    client_code: p.client_code,\n    previous_status: p.last_notified_status || 'New',\n    current_status: p.status,\n    num_scripts: p.num_scripts,\n    deck_link: p.deck_link,\n    delivery_folder: p.delivery_folder\n  }))\n}));\n\nreturn [{ json: {\n  changed_projects: changed,\n  brand_summaries: brandSummaries,\n  total_changed: changed.length\n}}];"
+      },
+      "id": "cc-filter-changed",
+      "name": "Filter Changed Projects",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        940,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ systemInstruction: { parts: [{ text: \"You are the client communication assistant for Smashed Agency, a UGC (User-Generated Content) creative agency. Your job is to write concise, professional but warm Slack status digests that tell the team exactly what changed and what's next for each client. Be specific — mention numbers, brand names, and concrete next steps. Never be vague like 'your project is progressing'. Instead say things like '5 UGC concepts researched for Wheelwash. Concept deck is being prepared.' or 'Scripts approved for Dhan — delivery docs are being finalized.' Group updates by brand. Use emoji sparingly (one per brand header). Format for Slack markdown (bold with *, lists with •).\" }] }, contents: [{ role: \"user\", parts: [{ text: \"Generate a Slack status digest for the following project updates. Group by brand. For each project, explain what changed (previous status → current status) in client-friendly language. Include actionable next steps.\\n\\nProject Updates:\\n\" + JSON.stringify($json.brand_summaries, null, 2) }] }], generationConfig: { temperature: 0.4, maxOutputTokens: 2048 } }) }}",
+        "options": {}
+      },
+      "id": "cc-gemini-digest",
+      "name": "Gemini — Generate Status Digest",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1300,
+        320
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "rIL63TG4xfMQL8uJ",
+          "name": "Cosmisk AI"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Extract Gemini response text and prepare Slack message\n// ============================================================\nconst geminiResponse = $input.first().json;\nconst candidates = geminiResponse.candidates || [];\nlet digestText = '';\n\nif (candidates.length > 0 && candidates[0].content && candidates[0].content.parts) {\n  digestText = candidates[0].content.parts.map(p => p.text || '').join('');\n}\n\nif (!digestText) {\n  digestText = 'No status changes to report.';\n}\n\nconst changedProjects = $('Filter Changed Projects').first().json.changed_projects || [];\nconst totalChanged = changedProjects.length;\nconst now = new Date();\nconst timeStr = now.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true });\n\nconst header = `*Smashed Agency — Client Status Digest*\\n_${now.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} at ${timeStr} IST_\\n${totalChanged} project(s) with updates\\n\\n---\\n\\n`;\n\nreturn [{ json: {\n  slack_message: header + digestText,\n  changed_projects: changedProjects,\n  total_changed: totalChanged\n}}];"
+      },
+      "id": "cc-format-digest",
+      "name": "Format Digest Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1660,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0AFBQ5UF0E",
+          "mode": "id"
+        },
+        "text": "={{ $json.slack_message }}",
+        "otherOptions": {}
+      },
+      "id": "cc-slack-digest",
+      "name": "Slack — Post Status Digest",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        2020,
+        320
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "5Q37UpOjGx4YsbyC",
+          "name": "Slack account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Batch update last_notified_status for all changed projects\n// Build Airtable batch update payloads (max 10 per request)\n// ============================================================\nconst changedProjects = $json.changed_projects || [];\nif (changedProjects.length === 0) return [];\n\nconst updates = changedProjects.map(p => ({\n  id: p.id,\n  fields: {\n    last_notified_status: p.status\n  }\n}));\n\n// Split into batches of 10 for Airtable API\nconst batches = [];\nfor (let i = 0; i < updates.length; i += 10) {\n  batches.push(updates.slice(i, i + 10));\n}\n\nreturn batches.map(batch => ({ json: { records: batch } }));"
+      },
+      "id": "cc-batch-updates",
+      "name": "Batch Status Updates",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2380,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Projects",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ records: $json.records }) }}",
+        "options": {}
+      },
+      "id": "cc-update-notified-status",
+      "name": "Update last_notified_status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2740,
+        320
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "content": "## WEBHOOK PATH\nEvent-driven updates from other workflows + Orchestrator.\nOrchestrator sends: { client_code, brand_name, project_id, message, source: \"orchestrator\" }\nLegacy sends: { event/event_type, project_id, brand_name, client_code, details }\nOrchestrator path skips Airtable fetch — uses message directly.\nGemini generates contextual message, posts to Slack, writes event log.",
+        "height": 140,
+        "width": 520,
+        "color": 6
+      },
+      "id": "cc-sticky-webhook",
+      "name": "Sticky Note - Webhook Path",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        580,
+        540
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Extract and validate webhook payload\n// Accept both legacy (event/event_type) and orchestrator (source) formats\n// ============================================================\nconst body = $input.first().json.body || $input.first().json;\nconst source = (body.source || '').trim().toLowerCase();\nconst isOrchestrator = source === 'orchestrator';\n\n// Orchestrator sends: { client_code, brand_name, project_id, message, source }\n// Legacy sends: { event/event_type, project_id, brand_name, client_code, details }\nconst event = (body.event || body.event_type || '').trim().toLowerCase();\nconst project_id = (body.project_id || '').trim();\nconst brand_name = (body.brand_name || '').trim();\nconst client_code = (body.client_code || '').trim();\nconst message = (body.message || '').trim();\nconst details = body.details || {};\n\nif (isOrchestrator) {\n  // Orchestrator path — message is required, event is optional\n  if (!message) throw new Error('Orchestrator payload requires a message field');\n  return [{ json: {\n    source: 'orchestrator',\n    event: event || 'orchestrator_update',\n    project_id,\n    brand_name,\n    client_code,\n    message,\n    details\n  } }];\n}\n\n// Legacy path — strict event validation\nconst validEvents = ['research_complete', 'deck_ready', 'scripts_ready', 'delivered'];\nif (!event) throw new Error('event is required (send event or event_type)');\nif (!validEvents.includes(event)) {\n  throw new Error('event must be one of: ' + validEvents.join(', '));\n}\nif (!project_id) throw new Error('project_id is required');\n\nreturn [{ json: { source: 'legacy', event, project_id, brand_name, client_code, message: '', details } }];"
+      },
+      "id": "cc-extract-webhook",
+      "name": "Extract Webhook Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        580,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Projects/{{ $json.project_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "options": {}
+      },
+      "id": "cc-fetch-project-detail",
+      "name": "Fetch Project Detail",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        860
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Merge webhook payload with project details from Airtable\n// Build context for Gemini prompt (legacy path only)\n// ============================================================\nconst payload = $('Extract Webhook Payload').first().json;\nconst rawProject = $input.first().json;\nconst project = rawProject.fields\n  ? { id: rawProject.id, ...rawProject.fields }\n  : rawProject;\n\n// Use Airtable data if webhook didn't provide brand_name\nconst brand_name = payload.brand_name || project.brand_name || 'Client';\nconst client_code = payload.client_code || project.client_code || '';\nconst client_name = project.client_name || '';\nconst num_scripts = project.num_scripts || 0;\nconst status = project.status || '';\nconst deck_link = project.deck_link || (payload.details || {}).deck_link || '';\nconst delivery_folder = project.delivery_folder || (payload.details || {}).delivery_folder || '';\n\n// Build event context string for Gemini\nconst eventContextMap = {\n  research_complete: `Research phase completed for ${brand_name} (${client_code}). ${num_scripts} UGC concepts have been researched. The concept deck will be prepared next. ${(payload.details || {}).concept_count ? 'Total concepts found: ' + payload.details.concept_count + '.' : ''}`,\n  deck_ready: `Concept deck is ready for ${brand_name} (${client_code}). ${deck_link ? 'Deck link: ' + deck_link : 'Deck link will be shared shortly.'} The client/PM needs to review and approve concepts. ${(payload.details || {}).slide_count ? 'Deck contains ' + payload.details.slide_count + ' concept slides.' : ''}`,\n  scripts_ready: `Scripts have been written for ${brand_name} (${client_code}). ${num_scripts} scripts are ready for review. ${(payload.details || {}).script_count ? payload.details.script_count + ' scripts generated.' : ''} Next step: PM review and feedback.`,\n  delivered: `Final delivery completed for ${brand_name} (${client_code}). All approved scripts have been formatted into Google Docs and organized. ${delivery_folder ? 'Delivery folder: ' + delivery_folder : ''} The project is ready for creator production.`\n};\n\nreturn [{ json: {\n  event: payload.event,\n  project_id: payload.project_id,\n  brand_name,\n  client_code,\n  client_name,\n  num_scripts,\n  status,\n  deck_link,\n  delivery_folder,\n  event_context: eventContextMap[payload.event] || 'Project update for ' + brand_name,\n  details: payload.details,\n  source: 'legacy'\n}}];"
+      },
+      "id": "cc-merge-webhook-context",
+      "name": "Merge Webhook Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1460,
+        860
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ systemInstruction: { parts: [{ text: \"You are the client communication assistant for Smashed Agency, a UGC creative agency. Write a concise, action-oriented Slack notification about a specific project event. Be professional but warm — Smashed Agency's voice is confident, direct, and helpful. Always tell the reader: (1) exactly what just happened, (2) what the deliverable is, (3) what the next step is and who owns it. Use Slack markdown — *bold* for emphasis, no headers. Keep it to 2-4 lines max. Include relevant links if provided. Do NOT use generic phrases like 'great progress' — be specific with numbers and deliverable names.\" }] }, contents: [{ role: \"user\", parts: [{ text: \"Generate a Slack notification for this event:\\n\\nEvent: \" + $json.event + \"\\nBrand: \" + $json.brand_name + \"\\nClient Code: \" + $json.client_code + \"\\nContext: \" + $json.event_context + \"\\nAdditional Details: \" + JSON.stringify($json.details || {}) }] }], generationConfig: { temperature: 0.3, maxOutputTokens: 512 } }) }}",
+        "options": {}
+      },
+      "id": "cc-gemini-event",
+      "name": "Gemini — Generate Event Message",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1820,
+        720
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "rIL63TG4xfMQL8uJ",
+          "name": "Cosmisk AI"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Extract Gemini response and format event notification\n// Handles both orchestrator and legacy paths\n// ============================================================\nconst geminiResponse = $input.first().json;\nconst candidates = geminiResponse.candidates || [];\nlet messageText = '';\n\nif (candidates.length > 0 && candidates[0].content && candidates[0].content.parts) {\n  messageText = candidates[0].content.parts.map(p => p.text || '').join('');\n}\n\n// Try to get context from either orchestrator or legacy path\nlet context;\ntry {\n  context = $('Merge Webhook Context').first().json;\n} catch(e) {\n  try {\n    context = $('Build Orchestrator Context').first().json;\n  } catch(e2) {\n    context = $('Extract Webhook Payload').first().json;\n  }\n}\n\nconst event = context.event;\nconst brand = context.brand_name;\nconst source = context.source || 'legacy';\n\n// Fallback messages if Gemini fails\nconst fallbacks = {\n  research_complete: `*${brand}* — Research phase complete. UGC concepts have been researched and compiled. Concept deck preparation is next.`,\n  deck_ready: `*${brand}* — Concept deck is ready for review.${context.deck_link ? ' ' + context.deck_link : ''} Please review and approve concepts to proceed with script writing.`,\n  scripts_ready: `*${brand}* — Scripts are ready for review. ${context.num_scripts} scripts have been written and are awaiting PM feedback.`,\n  delivered: `*${brand}* — Final delivery complete. All approved scripts are formatted and ready for creator production.${context.delivery_folder ? ' ' + context.delivery_folder : ''}`,\n  orchestrator_update: `*${brand}* — ${context.event_context || 'Project status updated.'}`\n};\n\nif (!messageText) {\n  messageText = fallbacks[event] || `*${brand}* — Project update: ${event}`;\n}\n\nreturn [{ json: {\n  slack_message: messageText,\n  event,\n  project_id: context.project_id,\n  brand_name: brand,\n  client_code: context.client_code,\n  source\n}}];"
+      },
+      "id": "cc-format-event-message",
+      "name": "Format Event Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2180,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0AFBQ5UF0E",
+          "mode": "id"
+        },
+        "text": "={{ $json.slack_message }}",
+        "otherOptions": {}
+      },
+      "id": "cc-slack-event",
+      "name": "Slack — Post Event Update",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        2540,
+        720
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "5Q37UpOjGx4YsbyC",
+          "name": "Slack account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Projects/{{ $json.project_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ fields: { last_client_update: new Date().toISOString(), last_client_update_event: $json.event } }) }}",
+        "options": {}
+      },
+      "id": "cc-update-project-webhook",
+      "name": "Update Project — Last Notified",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2900,
+        720
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ JSON.stringify({ status: 'success', event: $('Format Event Message').first().json.event, project_id: $('Format Event Message').first().json.project_id, message: 'Client update posted to Slack' }) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "cc-respond-webhook",
+      "name": "Respond — Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2900,
+        920
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Error handler — captures errors from either path\n// ============================================================\nconst err = $input.first().json;\nlet project_id = 'N/A';\nlet event = 'N/A';\ntry { project_id = $('Extract Webhook Payload').first().json.project_id; } catch(e) {}\ntry { event = $('Extract Webhook Payload').first().json.event; } catch(e) {}\nreturn [{ json: {\n  project_id,\n  event,\n  error_message: err.error?.message || err.message || 'Unknown error',\n  error_node: err.error?.node?.name || 'Unknown',\n  created_at: new Date().toISOString()\n} }];"
+      },
+      "id": "cc-error-handler",
+      "name": "Handle Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        940,
+        1100
+      ]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0AFBQ5UF0E",
+          "mode": "id"
+        },
+        "text": "={{ `Client Communication workflow error:\\nProject: ${$json.project_id}\\nEvent: ${$json.event}\\nError: ${$json.error_message}\\nNode: ${$json.error_node}` }}",
+        "otherOptions": {}
+      },
+      "id": "cc-slack-error",
+      "name": "Slack — Error Alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        1300,
+        1100
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "5Q37UpOjGx4YsbyC",
+          "name": "Slack account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ JSON.stringify({ status: 'error', project_id: $json.project_id, message: $json.error_message }) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "cc-error-respond",
+      "name": "Respond — Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1660,
+        1100
+      ]
+    },
+    {
+      "parameters": {
+        "dataType": "string",
+        "value1": "={{ $json.source }}",
+        "rules": {
+          "rules": [
+            {
+              "value2": "orchestrator",
+              "output": 0
+            },
+            {
+              "value2": "legacy",
+              "output": 1
+            }
+          ]
+        },
+        "fallbackOutput": 1
+      },
+      "id": "cc-route-source",
+      "name": "Route — Orchestrator or Legacy",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 2,
+      "position": [
+        760,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Build context for Gemini from orchestrator payload directly\n// No Airtable fetch needed — orchestrator provides the message\n// ============================================================\nconst payload = $('Extract Webhook Payload').first().json;\n\nreturn [{ json: {\n  event: payload.event,\n  project_id: payload.project_id,\n  brand_name: payload.brand_name || 'Client',\n  client_code: payload.client_code || '',\n  client_name: '',\n  num_scripts: 0,\n  status: '',\n  deck_link: '',\n  delivery_folder: '',\n  event_context: '## Event Context (from Orchestrator)\\n' + payload.message + '\\n\\nGenerate a professional, friendly client update based on this event. Keep it concise and action-oriented.',\n  details: payload.details,\n  source: 'orchestrator'\n} }];"
+      },
+      "id": "cc-build-orchestrator-context",
+      "name": "Build Orchestrator Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblGhzSJ5RXWDS8h8",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ records: [{ fields: { agent: 'client_comms', event_type: 'client_notified', severity: 'info', project_id: $json.project_id || '', brand_name: $json.brand_name || '', client_code: $json.client_code || '', details: 'Posted ' + ($json.source === 'orchestrator' ? 'orchestrator-triggered' : 'event-driven') + ' client update to Slack for event: ' + $json.event, created_at: new Date().toISOString() } }] }) }}",
+        "options": {}
+      },
+      "id": "cc-write-event-notified",
+      "name": "Write Event — Client Notified",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2900,
+        1120
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Schedule Trigger — 10AM & 5PM IST": {
+      "main": [
+        [
+          {
+            "node": "Fetch Active Projects",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger — Test Scheduled": {
+      "main": [
+        [
+          {
+            "node": "Fetch Active Projects",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Active Projects": {
+      "main": [
+        [
+          {
+            "node": "Filter Changed Projects",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Changed Projects": {
+      "main": [
+        [
+          {
+            "node": "Gemini — Generate Status Digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini — Generate Status Digest": {
+      "main": [
+        [
+          {
+            "node": "Format Digest Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Digest Message": {
+      "main": [
+        [
+          {
+            "node": "Slack — Post Status Digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack — Post Status Digest": {
+      "main": [
+        [
+          {
+            "node": "Batch Status Updates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Batch Status Updates": {
+      "main": [
+        [
+          {
+            "node": "Update last_notified_status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook — Client Update": {
+      "main": [
+        [
+          {
+            "node": "Extract Webhook Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Webhook Payload": {
+      "main": [
+        [
+          {
+            "node": "Route — Orchestrator or Legacy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Project Detail": {
+      "main": [
+        [
+          {
+            "node": "Merge Webhook Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Webhook Context": {
+      "main": [
+        [
+          {
+            "node": "Gemini — Generate Event Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini — Generate Event Message": {
+      "main": [
+        [
+          {
+            "node": "Format Event Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Event Message": {
+      "main": [
+        [
+          {
+            "node": "Slack — Post Event Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack — Post Event Update": {
+      "main": [
+        [
+          {
+            "node": "Respond — Success",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Update Project — Last Notified",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Write Event — Client Notified",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Error": {
+      "main": [
+        [
+          {
+            "node": "Slack — Error Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack — Error Alert": {
+      "main": [
+        [
+          {
+            "node": "Respond — Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route — Orchestrator or Legacy": {
+      "main": [
+        [
+          {
+            "node": "Build Orchestrator Context",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fetch Project Detail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Orchestrator Context": {
+      "main": [
+        [
+          {
+            "node": "Gemini — Generate Event Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  }
+}

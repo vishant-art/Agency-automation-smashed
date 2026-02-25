@@ -1,0 +1,158 @@
+{
+  "name": "Cosmisk API — Brands List",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "brands/list",
+        "httpMethod": "GET",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [380, 300],
+      "id": "api-brand-webhook",
+      "name": "Webhook",
+      "webhookId": "cosmisk-brands-list"
+    },
+    {
+      "parameters": {
+        "jsCode": "const authHeader = $input.first().json.headers?.authorization || '';\nif (!authHeader.startsWith('Bearer ')) {\n  return [{ json: { _unauthorized: true } }];\n}\nconst token = authHeader.replace('Bearer ', '');\ntry {\n  const decoded = JSON.parse(Buffer.from(token, 'base64').toString());\n  if (decoded.exp && Date.now() > decoded.exp) {\n    return [{ json: { _unauthorized: true } }];\n  }\n  return [{ json: { ...$input.first().json, _user: decoded } }];\n} catch(e) {\n  return [{ json: { _unauthorized: true } }];\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [600, 300],
+      "id": "api-brand-auth",
+      "name": "Auth Check"
+    },
+    {
+      "parameters": {
+        "dataType": "string",
+        "value1": "={{ $json._unauthorized ? 'unauthorized' : 'ok' }}",
+        "rules": {
+          "rules": [
+            { "value2": "unauthorized", "output": 0 },
+            { "value2": "ok", "output": 1 }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 2,
+      "position": [820, 300],
+      "id": "api-brand-gate",
+      "name": "Auth Gate"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ JSON.stringify({ success: false, error: 'Unauthorized' }) }}",
+        "options": {
+          "responseCode": 401,
+          "responseHeaders": {
+            "entries": [
+              { "name": "Content-Type", "value": "application/json" },
+              { "name": "Access-Control-Allow-Origin", "value": "*" }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1060, 160],
+      "id": "api-brand-respond-401",
+      "name": "Respond 401"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Projects?pageSize=100",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1060, 400],
+      "id": "api-brand-fetch",
+      "name": "Fetch Projects",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst records = response.records || [];\n\n// Build brand map: brand_name -> { count, latest project status, client_codes }\nconst brandMap = {};\n\nfor (const r of records) {\n  const brandName = r.fields?.brand_name || r.fields?.Brand || '';\n  if (!brandName) continue;\n\n  if (!brandMap[brandName]) {\n    brandMap[brandName] = {\n      brand_name: brandName,\n      project_count: 0,\n      client_codes: [],\n      latest_status: '',\n      latest_created_at: ''\n    };\n  }\n\n  brandMap[brandName].project_count++;\n  \n  const clientCode = r.fields?.client_code || '';\n  if (clientCode) brandMap[brandName].client_codes.push(clientCode);\n\n  const createdAt = r.fields?.created_at || r.createdTime || '';\n  if (createdAt > brandMap[brandName].latest_created_at) {\n    brandMap[brandName].latest_created_at = createdAt;\n    brandMap[brandName].latest_status = r.fields?.status || r.fields?.Status || '';\n  }\n}\n\n// Sort by project count descending\nconst brands = Object.values(brandMap).sort((a, b) => b.project_count - a.project_count);\n\nreturn [{ json: { success: true, brands } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1280, 400],
+      "id": "api-brand-transform",
+      "name": "Transform"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              { "name": "Content-Type", "value": "application/json" },
+              { "name": "Access-Control-Allow-Origin", "value": "*" }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1500, 400],
+      "id": "api-brand-respond-ok",
+      "name": "Respond"
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          { "node": "Auth Check", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Auth Check": {
+      "main": [
+        [
+          { "node": "Auth Gate", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Auth Gate": {
+      "main": [
+        [
+          { "node": "Respond 401", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "Fetch Projects", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Fetch Projects": {
+      "main": [
+        [
+          { "node": "Transform", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Transform": {
+      "main": [
+        [
+          { "node": "Respond", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

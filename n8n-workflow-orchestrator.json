@@ -1,0 +1,320 @@
+{
+  "name": "Agent 2 — Project Orchestrator (Auto-Pilot)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "id": "orch-trigger",
+      "name": "Schedule — Every 5 Min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [400, 400]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Projects?filterByFormula=AND(NOT(%7Bstatus%7D%3D'Delivered')%2CNOT(%7Bstatus%7D%3D'Churned'))&pageSize=100",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "options": {}
+      },
+      "id": "orch-fetch-projects",
+      "name": "Fetch Active Projects",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [640, 400],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process each active project and determine what action to take\nconst response = $input.first().json;\nconst projects = (response.records || []).map(r => ({ id: r.id, ...r.fields }));\n\nif (projects.length === 0) {\n  return [{ json: { actions: [], message: 'No active projects' } }];\n}\n\nconst now = new Date();\nconst actions = [];\n\nfor (const project of projects) {\n  const status = project.status || '';\n  const lastProcessed = project.last_processed_status || '';\n  const updatedAt = project.updated_at ? new Date(project.updated_at) : null;\n  const hoursInStatus = updatedAt ? (now - updatedAt) / (1000 * 60 * 60) : 0;\n  const clientCode = project.client_code || '';\n  const brandName = project.brand_name || '';\n  const projectId = project.id;\n  const numScripts = project.num_scripts || 0;\n\n  // Only act if status changed since last processing\n  // OR if SLA is breached\n  \n  // 1. Onboarding -> trigger Phase 1 Research\n  if (status === 'Onboarding' && lastProcessed !== 'Onboarding') {\n    actions.push({\n      type: 'trigger_phase1',\n      project_id: projectId,\n      client_code: clientCode,\n      brand_name: brandName,\n      num_scripts: numScripts,\n      new_status: 'Research',\n      message: `Triggering Phase 1 Research for ${brandName} (${clientCode})`\n    });\n  }\n\n  // 2. PM Review + all concepts approved -> trigger Phase 3 Scripting\n  // (Phase 2 approval is manual via Slack buttons, but if all are approved we auto-proceed)\n  if (status === 'Approved' && lastProcessed !== 'Approved') {\n    actions.push({\n      type: 'trigger_phase3',\n      project_id: projectId,\n      client_code: clientCode,\n      brand_name: brandName,\n      new_status: 'Scripting',\n      message: `All concepts approved for ${brandName} — triggering Phase 3 Scripting`\n    });\n  }\n\n  // 3. Scripts Ready -> trigger Phase 4 Delivery\n  if (status === 'Scripts Ready' && lastProcessed !== 'Scripts Ready') {\n    actions.push({\n      type: 'trigger_phase4',\n      project_id: projectId,\n      client_code: clientCode,\n      brand_name: brandName,\n      new_status: 'Delivering',\n      message: `Scripts ready for ${brandName} — triggering Phase 4 Delivery`\n    });\n  }\n\n  // SLA ALERTS\n  // PM Review stuck > 24 hours\n  if (status === 'PM Review' && hoursInStatus > 24) {\n    actions.push({\n      type: 'sla_alert',\n      severity: 'warning',\n      project_id: projectId,\n      client_code: clientCode,\n      brand_name: brandName,\n      hours_stuck: Math.round(hoursInStatus),\n      message: `${brandName} stuck in PM Review for ${Math.round(hoursInStatus)}h — needs attention`\n    });\n  }\n\n  // Client Review stuck > 48 hours\n  if (status === 'Client Review' && hoursInStatus > 48) {\n    actions.push({\n      type: 'sla_alert',\n      severity: 'urgent',\n      project_id: projectId,\n      client_code: clientCode,\n      brand_name: brandName,\n      hours_stuck: Math.round(hoursInStatus),\n      message: `${brandName} stuck in Client Review for ${Math.round(hoursInStatus)}h — follow up with client`\n    });\n  }\n\n  // Scripting stuck > 1 hour (likely workflow error)\n  if (status === 'Scripting' && hoursInStatus > 1 && lastProcessed === 'Scripting') {\n    actions.push({\n      type: 'sla_alert',\n      severity: 'critical',\n      project_id: projectId,\n      client_code: clientCode,\n      brand_name: brandName,\n      hours_stuck: Math.round(hoursInStatus * 60),\n      message: `${brandName} stuck in Scripting for ${Math.round(hoursInStatus * 60)}min — possible workflow error`\n    });\n  }\n}\n\nif (actions.length === 0) {\n  return []; // No output = stop workflow here\n}\n\nreturn actions.map(a => ({ json: a }));"
+      },
+      "id": "orch-detect",
+      "name": "Detect State Changes & SLAs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 400]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+                "conditions": [
+                  { "leftValue": "={{ $json.type }}", "rightValue": "trigger_phase1", "operator": { "type": "string", "operation": "equals" } }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "Phase 1"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+                "conditions": [
+                  { "leftValue": "={{ $json.type }}", "rightValue": "trigger_phase3", "operator": { "type": "string", "operation": "equals" } }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "Phase 3"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+                "conditions": [
+                  { "leftValue": "={{ $json.type }}", "rightValue": "trigger_phase4", "operator": { "type": "string", "operation": "equals" } }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "Phase 4"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+                "conditions": [
+                  { "leftValue": "={{ $json.type }}", "rightValue": "sla_alert", "operator": { "type": "string", "operation": "equals" } }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "SLA Alert"
+            }
+          ]
+        },
+        "options": {
+          "allMatchingOutputs": true
+        }
+      },
+      "id": "orch-switch",
+      "name": "Route by Action Type",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [1120, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://n8n-jeet.duckdns.org:5678/webhook/ugc-research",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ client_code: $json.client_code, project_id: $json.project_id, brand_name: $json.brand_name, num_scripts: $json.num_scripts }) }}",
+        "options": {}
+      },
+      "id": "orch-trigger-p1",
+      "name": "Trigger Phase 1 — Research",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1400, 200],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://n8n-jeet.duckdns.org:5678/webhook/ugc-scripts",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ client_code: $json.client_code, project_id: $json.project_id, brand_name: $json.brand_name }) }}",
+        "options": {}
+      },
+      "id": "orch-trigger-p3",
+      "name": "Trigger Phase 3 — Scripts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1400, 400],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://n8n-jeet.duckdns.org:5678/webhook/ugc-delivery",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ client_code: $json.client_code, project_id: $json.project_id, brand_name: $json.brand_name, action: 'deliver' }) }}",
+        "options": {}
+      },
+      "id": "orch-trigger-p4",
+      "name": "Trigger Phase 4 — Delivery",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1400, 600],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0AFBQ5UF0E",
+          "mode": "id"
+        },
+        "text": "={{ '⚠️ *SLA Alert — ' + $json.severity.toUpperCase() + '*\\n' + $json.message }}",
+        "otherOptions": {}
+      },
+      "id": "orch-sla-slack",
+      "name": "Slack SLA Alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [1400, 800],
+      "credentials": {
+        "slackApi": {
+          "id": "5Q37UpOjGx4YsbyC",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Projects/{{ $json.project_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ fields: { last_processed_status: $json.type === 'sla_alert' ? undefined : ($json.new_status || $json.type) } }) }}",
+        "options": {}
+      },
+      "id": "orch-update-status-p1",
+      "name": "Update Processed Status (P1)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1660, 200],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Projects/{{ $json.project_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ fields: { last_processed_status: $json.new_status || $json.type } }) }}",
+        "options": {}
+      },
+      "id": "orch-update-status-p3",
+      "name": "Update Processed Status (P3)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1660, 400],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Projects/{{ $json.project_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ fields: { last_processed_status: $json.new_status || $json.type } }) }}",
+        "options": {}
+      },
+      "id": "orch-update-status-p4",
+      "name": "Update Processed Status (P4)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1660, 600],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0AFBQ5UF0E",
+          "mode": "id"
+        },
+        "text": "={{ '🤖 *Orchestrator*: ' + $json.message }}",
+        "otherOptions": {}
+      },
+      "id": "orch-log-p1",
+      "name": "Log Phase 1 Trigger",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [1660, 100],
+      "credentials": {
+        "slackApi": {
+          "id": "5Q37UpOjGx4YsbyC",
+          "name": "Slack account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule — Every 5 Min": {
+      "main": [
+        [{ "node": "Fetch Active Projects", "type": "main", "index": 0 }]
+      ]
+    },
+    "Fetch Active Projects": {
+      "main": [
+        [{ "node": "Detect State Changes & SLAs", "type": "main", "index": 0 }]
+      ]
+    },
+    "Detect State Changes & SLAs": {
+      "main": [
+        [{ "node": "Route by Action Type", "type": "main", "index": 0 }]
+      ]
+    },
+    "Route by Action Type": {
+      "main": [
+        [{ "node": "Trigger Phase 1 — Research", "type": "main", "index": 0 }],
+        [{ "node": "Trigger Phase 3 — Scripts", "type": "main", "index": 0 }],
+        [{ "node": "Trigger Phase 4 — Delivery", "type": "main", "index": 0 }],
+        [{ "node": "Slack SLA Alert", "type": "main", "index": 0 }]
+      ]
+    },
+    "Trigger Phase 1 — Research": {
+      "main": [
+        [
+          { "node": "Update Processed Status (P1)", "type": "main", "index": 0 },
+          { "node": "Log Phase 1 Trigger", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Trigger Phase 3 — Scripts": {
+      "main": [
+        [{ "node": "Update Processed Status (P3)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Trigger Phase 4 — Delivery": {
+      "main": [
+        [{ "node": "Update Processed Status (P4)", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

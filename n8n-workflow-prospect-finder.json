@@ -1,0 +1,1256 @@
+{
+  "updatedAt": "2026-02-24T21:08:54.212Z",
+  "createdAt": "2026-02-24T19:55:45.250Z",
+  "id": "9u2JEpZGK81jkCXP",
+  "name": "Prospect Finder \u2014 Automated D2C Discovery",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## PROSPECT FINDER \u2014 Multi-Signal D2C Discovery\n\n**7 Lead Signals (all run daily):**\n1. Recently Funded D2C Brands (highest intent)\n2. Brands Running Meta/Google Ads\n3. Hiring Marketing/Content Roles\n4. Shark Tank India / TV Appearances\n5. Marketplace \u2192 D2C Transitions\n6. Creator/Influencer Collaborations\n7. Industry-Specific Discovery (rotating)\n\n**2 entry points:**\n- **Schedule 5:30 UTC (11 AM IST)** \u2014 ~19 queries across all signals\n- **POST /find-prospects** \u2014 On-demand with custom signals/industries/queries\n\n**Flow:** Build signal queries \u2192 SerpAPI search \u2192 Fetch existing leads \u2192 Deduplicate \u2192 Gemini enrich+score+pitch \u2192 Create qualified leads \u2192 Slack report \u2192 Event bus\n\nEach prospect gets: UGC readiness score, personalized pitch hook, suggested outreach platform",
+        "height": 400,
+        "width": 520,
+        "color": 7
+      },
+      "id": "pf-info-note",
+      "name": "Sticky Note \u2014 Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -280,
+        -60
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "30 5 * * *"
+            }
+          ]
+        }
+      },
+      "id": "pf-schedule",
+      "name": "Schedule \u2014 11AM IST Daily",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        300,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Build SerpAPI queries across 7 lead signal types\n// Each day covers ALL signal types with rotating industries\n// ============================================================\n// Industries: D2C + SaaS + Fintech + Edtech + Healthtech + more\nconst allIndustries = [\n  'skincare', 'fashion', 'fitness', 'food and beverage',\n  'home decor', 'wellness', 'pet care', 'electronics', 'jewelry',\n  'supplements', 'baby care', 'organic food', 'athleisure',\n  'SaaS', 'fintech', 'edtech', 'healthtech', 'real estate',\n  'gaming', 'logistics', 'insurtech', 'agritech', 'legaltech'\n];\n\nconst now = new Date();\nconst startOfYear = new Date(now.getFullYear(), 0, 0);\nconst dayOfYear = Math.floor((now - startOfYear) / (1000 * 60 * 60 * 24));\nconst year = now.getFullYear();\n\n// Rotate 4 industries per day (covers all 23 in ~6 days)\nconst startIdx = (dayOfYear * 4) % allIndustries.length;\nconst todayIndustries = [];\nfor (let i = 0; i < 4; i++) {\n  todayIndustries.push(allIndustries[(startIdx + i) % allIndustries.length]);\n}\n\nconst queries = [];\n\n// === SIGNAL 1: Recently Funded Brands (D2C + tech) ===\nqueries.push({ query: `startup raised funding India ${year} D2C SaaS`, signal: 'funded', industry: 'general' });\nqueries.push({ query: `seed series A funding India ${year} startup`, signal: 'funded', industry: 'general' });\nqueries.push({ query: `Indian startup funding announcement ${year}`, signal: 'funded', industry: 'general' });\n\n// === SIGNAL 2: Brands Running Meta/Google Ads ===\nqueries.push({ query: `brand advertising Instagram Facebook India ${year}`, signal: 'meta_ads', industry: 'general' });\nqueries.push({ query: `Indian startup scaling performance marketing paid ads`, signal: 'meta_ads', industry: 'general' });\n\n// === SIGNAL 3: Hiring Marketing/Content Roles ===\nqueries.push({ query: `startup hiring content marketing manager India`, signal: 'hiring', industry: 'general' });\nqueries.push({ query: `\"hiring\" \"growth marketing\" startup India ${year}`, signal: 'hiring', industry: 'general' });\n\n// === SIGNAL 4: Shark Tank / Business Reality Shows ===\nqueries.push({ query: `Shark Tank India brand ${year}`, signal: 'shark_tank', industry: 'general' });\n\n// === SIGNAL 5: Marketplace to D2C Transition ===\nqueries.push({ query: `brand launching own website D2C India ${year}`, signal: 'marketplace_to_d2c', industry: 'general' });\n\n// === SIGNAL 6: Creator/Influencer Collaborations ===\nqueries.push({ query: `brand influencer collaboration India ${year} UGC`, signal: 'creator_collab', industry: 'general' });\n\n// === SIGNAL 7: Industry-Specific Discovery (rotating) ===\nfor (const industry of todayIndustries) {\n  queries.push({ query: `best ${industry} brands India ${year}`, signal: 'industry_discovery', industry });\n  queries.push({ query: `new ${industry} startup India growing`, signal: 'industry_discovery', industry });\n}\n\nconst signalCounts = {};\nfor (const q of queries) {\n  signalCounts[q.signal] = (signalCounts[q.signal] || 0) + 1;\n}\n\nreturn [{ json: { queries, industries: todayIndustries, signalCounts, totalQueries: queries.length, source: 'schedule' } }];"
+      },
+      "id": "pf-build-queries",
+      "name": "Build Search Queries",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        560,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Search SerpAPI \u2014 collects both brand sites AND news articles\n// News articles (funding, hiring, shark tank) contain brand names\n// that Gemini will extract in the enrichment step\n// ============================================================\nconst input = $input.first().json;\nconst queries = input.queries || [];\nconst SERP_API_KEY = 'b183c082b67f0971673dbab7ce0a14883f75e5012d09720d17c540efce67bc39';\n\n// Helper: extract domain from URL without URL constructor\nfunction getDomain(link) {\n  if (!link) return '';\n  const match = link.match(/^https?:\\/\\/(?:www\\.)?([^\\/?#]+)/i);\n  return match ? match[1].toLowerCase() : '';\n}\n\n// News/article domains \u2014 results from these contain brand MENTIONS\n// We keep them but flag as 'article' type for Gemini to extract brands\nconst articleDomains = new Set([\n  'inc42.com', 'yourstory.com', 'entrackr.com', 'economictimes.indiatimes.com',\n  'livemint.com', 'moneycontrol.com', 'businessinsider.in', 'techcrunch.com',\n  'vccircle.com', 'dealstreetasia.com', 'thehindu.com', 'ndtv.com',\n  'businesstoday.in', 'financialexpress.com', 'thehindubusinessline.com',\n  'forbesindia.com', 'cnbctv18.com'\n]);\n\n// Completely useless domains to skip\nconst skipDomains = new Set([\n  'wikipedia.org', 'google.com', 'facebook.com', 'twitter.com', 'x.com',\n  'reddit.com', 'quora.com', 'pinterest.com', 'tiktok.com',\n  'play.google.com', 'apps.apple.com', 'medium.com',\n  'instagram.com', 'linkedin.com', 'amazon.in', 'amazon.com',\n  'flipkart.com', 'myntra.com', 'nykaa.com', 'ajio.com',\n  'youtube.com', 'crunchbase.com', 'zoominfo.com', 'tracxn.com',\n  'wellfound.com', 'glassdoor.co.in', 'naukri.com', 'indeed.com'\n]);\n\nconst allResults = [];\nconst seenUrls = new Set();\nconst signalHits = {};\n\nfor (let i = 0; i < queries.length; i++) {\n  const q = queries[i];\n  try {\n    const url = `https://serpapi.com/search.json?engine=google&q=${encodeURIComponent(q.query)}&api_key=${SERP_API_KEY}&gl=in&hl=en&num=10`;\n    const response = await this.helpers.httpRequest({ method: 'GET', url, json: true });\n    const organicResults = response.organic_results || [];\n\n    signalHits[q.signal] = (signalHits[q.signal] || 0) + organicResults.length;\n\n    for (const result of organicResults) {\n      const link = result.link || '';\n      const domain = getDomain(link);\n      if (!domain) continue;\n      if (skipDomains.has(domain)) continue;\n      if (seenUrls.has(link)) continue;\n      seenUrls.add(link);\n\n      const isArticle = articleDomains.has(domain) || domain.endsWith('.com') && (\n        link.includes('/funding') || link.includes('/startup') ||\n        link.includes('/news') || link.includes('/article')\n      );\n\n      const title = (result.title || '').trim();\n      const snippet = (result.snippet || '').substring(0, 400);\n\n      allResults.push({\n        title,\n        website: link,\n        domain,\n        snippet,\n        industry: q.industry,\n        signal: q.signal || 'unknown',\n        search_query: q.query,\n        is_article: isArticle\n      });\n    }\n  } catch (err) {\n    // Continue on individual query failure\n  }\n\n  // 1.2-second delay between requests\n  if (i < queries.length - 1) {\n    await new Promise(resolve => setTimeout(resolve, 1200));\n  }\n}\n\n// Cap at 50 results\nconst capped = allResults.slice(0, 50);\nconst articleCount = capped.filter(r => r.is_article).length;\nconst directCount = capped.filter(r => !r.is_article).length;\n\nreturn [{ json: {\n  results: capped,\n  totalFound: capped.length,\n  articleResults: articleCount,\n  directResults: directCount,\n  queriesRun: queries.length,\n  industries: input.industries || [],\n  signalCounts: input.signalCounts || {},\n  signalHits\n} }];"
+      },
+      "id": "pf-search-serp",
+      "name": "SerpAPI Search",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        820,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tbl6qih4ODd7qKFZ1?fields%5B%5D=company_name&fields%5B%5D=website&fields%5B%5D=email&pageSize=100",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "options": {}
+      },
+      "id": "pf-fetch-existing",
+      "name": "Fetch Existing Leads",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1080,
+        400
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Filter search results: remove existing leads (by domain)\n// Keep BOTH article results AND direct brand results\n// Articles will be processed by Gemini to extract brand names\n// ============================================================\nconst searchData = $('SerpAPI Search').first().json;\nconst existingResponse = $input.first().json;\n\nconst results = searchData.results || [];\nconst existingRecords = (existingResponse.records || []).map(r => r.fields || {});\n\n// Build set of existing domains from Airtable\nconst existingDomains = new Set();\nconst existingNames = new Set();\nfor (const rec of existingRecords) {\n  if (rec.company_name) existingNames.add(rec.company_name.toLowerCase().trim());\n  if (rec.website) {\n    const match = rec.website.match(/^https?:\\/\\/(?:www\\.)?([^\\/?#]+)/i);\n    if (match) existingDomains.add(match[1].toLowerCase());\n  }\n}\n\nlet duplicatesRemoved = 0;\nconst filtered = [];\n\nfor (const r of results) {\n  // For articles (news sites), always keep them \u2014 they mention brand names\n  if (r.is_article) {\n    filtered.push(r);\n    continue;\n  }\n\n  // For direct brand websites, check if already in our Leads\n  const domain = (r.domain || '').toLowerCase();\n  if (domain && existingDomains.has(domain)) { duplicatesRemoved++; continue; }\n\n  // Also check company name fuzzy match\n  const titleLower = r.title.toLowerCase();\n  let nameMatch = false;\n  for (const name of existingNames) {\n    if (name.length > 3 && titleLower.includes(name)) { nameMatch = true; break; }\n  }\n  if (nameMatch) { duplicatesRemoved++; continue; }\n\n  filtered.push(r);\n}\n\nreturn [{ json: {\n  searchResults: filtered,\n  totalFound: results.length,\n  keptResults: filtered.length,\n  duplicatesRemoved,\n  articleCount: filtered.filter(r => r.is_article).length,\n  directCount: filtered.filter(r => !r.is_article).length,\n  existingLeadCount: existingRecords.length,\n  industries: searchData.industries || [],\n  signalCounts: searchData.signalCounts || {},\n  signalHits: searchData.signalHits || {}\n} }];"
+      },
+      "id": "pf-deduplicate",
+      "name": "Deduplicate Prospects",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1340,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "pf-cond-has-prospects",
+              "leftValue": "={{ $json.searchResults.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "pf-if-has-prospects",
+      "name": "Has New Prospects?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1600,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Build Gemini prompt \u2014 extract brands + score for all services\n// Cosmisk: UGC ads, AI ads, mashup ads, media buying\n// Targets: D2C, SaaS, Fintech, Edtech, Healthtech, etc.\n// ============================================================\nconst data = $input.first().json;\nconst results = (data.searchResults || []).slice(0, 15);\n\nconst signalLabels = {\n  funded: 'Recently Funded',\n  meta_ads: 'Running Meta/Google Ads',\n  hiring: 'Hiring Marketing Roles',\n  shark_tank: 'Shark Tank / TV Appearance',\n  marketplace_to_d2c: 'Marketplace to D2C Transition',\n  creator_collab: 'Creator Collaborations',\n  industry_discovery: 'Industry Search',\n  custom: 'Custom Search'\n};\n\nconst systemPrompt = `You are a business development analyst for Cosmisk, a creative agency in India. Cosmisk offers:\n- UGC ads (creator-driven video content for paid ads)\n- AI-generated ads and mashup ads\n- Performance media buying (Meta + Google)\n- Ad account audits and creative strategy\n\nWe work with ALL growth-stage companies: D2C, SaaS, Fintech, Edtech, Healthtech, Real Estate, Gaming, and more.\n\nYou have TWO jobs:\n\n**JOB 1 \u2014 Extract company names from news articles:**\nSome results are NEWS ARTICLES (from inc42, yourstory, entrackr, techcrunch, etc.). Extract ACTUAL COMPANY NAMES mentioned. Each article may mention 1-5 companies.\n\n**JOB 2 \u2014 Score all companies for creative services readiness:**\nFor every company, evaluate:\n1. Company name (clean name only)\n2. Website URL (from snippet or your knowledge, or empty)\n3. Industry (be specific: skincare, SaaS, fintech, edtech, fashion, etc.)\n4. Discovery signal (funded/meta_ads/hiring/shark_tank/marketplace_to_d2c/creator_collab/industry_discovery)\n5. Opportunity score 1-10:\n   - Recently funded: +2 (budget to spend)\n   - Running digital ads: +2 (understand paid content)\n   - Shark Tank/high visibility: +2 (need content fast)\n   - B2C or prosumer model: +1\n   - Active social presence: +1\n   - SaaS/Fintech scaling: +1 (need explainer + testimonial content)\n   - Base: 3 for any real company\n6. Contact title (Founder, CMO, VP Marketing, Growth Head)\n7. Best Cosmisk service for them (ugc_ads / ai_ads / mashup_ads / media_buying / full_stack)\n8. Brief outreach notes (why they need our services)\n9. Suggested outreach platform (instagram_dm / email / linkedin)\n10. One-line personalized pitch hook\n\n**RULES:**\n- Do NOT include news sites, media companies, or marketplaces\n- Include D2C brands, SaaS companies, fintech startups, edtech, healthtech \u2014 any growth company\n- Deduplicate \u2014 if same company appears in multiple articles, include once\n- Return 5-15 qualified companies (score >= 6)\n\nReturn ONLY a valid JSON array. Keys:\n{ company_name, website, industry, signal, score, contact_title, best_service, notes, suggested_platform, pitch_hook }`;\n\nconst resultList = results.map((r, i) => {\n  const sig = signalLabels[r.signal] || r.signal;\n  const type = r.is_article ? 'NEWS ARTICLE' : 'COMPANY WEBSITE';\n  return `${i + 1}. [${type}] [Signal: ${sig}]\\n   Title: ${r.title}\\n   URL: ${r.website}\\n   Snippet: ${r.snippet}`;\n}).join('\\n\\n');\n\nconst userPrompt = `Here are ${results.length} search results from Google India. Extract companies and score them for Cosmisk's creative services (UGC ads, AI ads, mashup ads, media buying):\\n\\n${resultList}\\n\\nExtract all companies mentioned, deduplicate, score them, and return the JSON array.`;\n\nreturn [{ json: {\n  systemPrompt,\n  userPrompt,\n  rawResults: results,\n  allData: data\n} }];"
+      },
+      "id": "pf-build-enrich-prompt",
+      "name": "Build Enrich Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1880,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ systemInstruction: { parts: [{ text: $json.systemPrompt }] }, contents: [{ role: 'user', parts: [{ text: $json.userPrompt }] }], generationConfig: { temperature: 0.3, maxOutputTokens: 16384, thinkingConfig: { thinkingBudget: 0 } } }) }}",
+        "options": {}
+      },
+      "id": "pf-gemini-enrich",
+      "name": "Gemini \u2014 Enrich Prospects",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2140,
+        300
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "rIL63TG4xfMQL8uJ",
+          "name": "Cosmisk AI"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Parse Gemini brand extraction + scoring results\n// Builds Airtable batch create + signal-rich Slack report\n// HARDENED junk filter v2 \u2014 rejects article titles, TV shows,\n// news aggregators, Instagram handles, and overly long names\n// ============================================================\nconst geminiResponse = $input.first().json;\nconst prevData = $('Build Enrich Prompt').first().json;\nconst rawResults = prevData.rawResults || [];\nconst allData = prevData.allData || {};\n\nconst signalEmojis = {\n  funded: ':moneybag:',\n  meta_ads: ':bar_chart:',\n  hiring: ':briefcase:',\n  shark_tank: ':shark:',\n  marketplace_to_d2c: ':shopping_trolley:',\n  creator_collab: ':handshake:',\n  industry_discovery: ':mag:',\n  custom: ':dart:'\n};\n\nconst signalLabels = {\n  funded: 'Funded',\n  meta_ads: 'Running Ads',\n  hiring: 'Hiring',\n  shark_tank: 'Shark Tank',\n  marketplace_to_d2c: 'Marketplace\u2192D2C',\n  creator_collab: 'Creator Collabs',\n  industry_discovery: 'Industry Match',\n  custom: 'Custom'\n};\n\nlet brands = [];\nlet geminiWorked = false;\n\ntry {\n  const text = (geminiResponse.candidates || [])[0]?.content?.parts?.[0]?.text || '';\n  if (!text) throw new Error('No text in Gemini response');\n\n  // Strip markdown code fences\n  let cleaned = text.replace(/```json\\s*/gi, '').replace(/```\\s*/gi, '').trim();\n\n  // Try parsing the full response first\n  try {\n    const arrMatch = cleaned.match(/\\[[\\s\\S]*\\]/);\n    if (arrMatch) {\n      brands = JSON.parse(arrMatch[0]);\n    } else {\n      brands = JSON.parse(cleaned);\n    }\n  } catch (parseErr) {\n    // JSON may be truncated (MAX_TOKENS) \u2014 salvage complete objects\n    const objectPattern = /\\{[^{}]*\"company_name\"\\s*:\\s*\"[^\"]+\\\"[^{}]*\\}/g;\n    const matches = cleaned.match(objectPattern) || [];\n    for (const m of matches) {\n      try {\n        const obj = JSON.parse(m);\n        if (obj.company_name) brands.push(obj);\n      } catch (e) { /* skip malformed */ }\n    }\n  }\n\n  if (brands.length > 0) geminiWorked = true;\n} catch (err) {\n  // Total Gemini failure\n}\n\n// If Gemini didn't extract any brands, DON'T create junk leads \u2014 just report\nif (brands.length === 0) {\n  const sigSummary = Object.entries(allData.signalHits || {}).map(([k, v]) => `${signalLabels[k] || k}: ${v}`).join(', ');\n  return [{ json: {\n    batchBody: { records: [] },\n    slackMsg: `:telescope: *Prospect Finder \u2014 Gemini Could Not Extract Brands*\\n\\nSignals searched: ${sigSummary || 'N/A'}\\nSearch results found: ${allData.totalFound || 0} (${allData.articleCount || 0} articles, ${allData.directCount || 0} direct)\\n\\n_Gemini enrichment failed or returned no qualifying brands. Check execution logs._`,\n    count: 0,\n    highScoreProspects: [],\n    industries: allData.industries || []\n  } }];\n}\n\n// Map signal labels back to signal keys for consistent data\nconst labelToKey = {};\nfor (const [k, v] of Object.entries(signalLabels)) labelToKey[v.toLowerCase()] = k;\nfor (const b of brands) {\n  if (b.signal && !signalEmojis[b.signal]) {\n    const mapped = labelToKey[(b.signal || '').toLowerCase()];\n    if (mapped) b.signal = mapped;\n  }\n}\n\n// ============================================================\n// HARDENED JUNK FILTER \u2014 reject non-brand names\n// ============================================================\nfunction isJunkCompanyName(name) {\n  if (!name || typeof name !== 'string') return true;\n  const trimmed = name.trim();\n  const lower = trimmed.toLowerCase();\n\n  // Length checks: must be 2-40 chars (real brand names)\n  if (trimmed.length < 2 || trimmed.length > 40) return true;\n\n  // Reject overly long names (> 50 chars before trim \u2014 catches long article titles)\n  if (name.length > 50) return true;\n\n  // Reject names starting with a number followed by article keywords\n  // e.g. \"10 Top D2C Brands\", \"5 Best Indian Startups\"\n  if (/^\\d+\\s*(top|best|leading|most)\\b/i.test(trimmed)) return true;\n\n  // Reject news aggregation / tracker patterns\n  if (/\\b(latest|updates|tracker|status)\\b/i.test(trimmed)) return true;\n\n  // Reject Instagram handles (contains @)\n  if (trimmed.includes('@')) return true;\n\n  // Reject TV show references\n  if (/\\b(season|S4|S5|S6|S7|S8|S9|S10|S11|S12)\\b/i.test(trimmed)) return true;\n\n  // Reject article-like titles: starts with \"Top\", \"Best\", \"Leading\", \"Most\"\n  if (/^(top|best|leading|most)\\s/i.test(trimmed)) return true;\n\n  // Reject names that look like list articles: \"X Brands to Watch\"\n  if (/\\b(brands?\\s+to\\s+watch|companies?\\s+to\\s+watch|startups?\\s+to\\s+watch)\\b/i.test(trimmed)) return true;\n\n  // Reject pure numeric names\n  if (/^\\d+$/.test(trimmed)) return true;\n\n  // Reject names with too many words (likely a sentence, not a brand)\n  if (trimmed.split(/\\s+/).length > 6) return true;\n\n  return false;\n}\n\n// Filter to score >= 6, deduplicate by name, AND apply hardened junk filter\nconst seen = new Set();\nconst qualified = [];\nlet junkFiltered = 0;\nfor (const b of brands) {\n  if ((b.score || 0) < 6) continue;\n  const rawName = (b.company_name || '').trim();\n\n  // Apply hardened junk filter\n  if (isJunkCompanyName(rawName)) {\n    junkFiltered++;\n    continue;\n  }\n\n  const key = rawName.toLowerCase();\n  if (seen.has(key)) continue;\n  seen.add(key);\n  qualified.push(b);\n}\n\nif (qualified.length === 0) {\n  const sigSummary = Object.entries(allData.signalHits || {}).map(([k, v]) => `${signalLabels[k] || k}: ${v} hits`).join(', ');\n  return [{ json: {\n    batchBody: { records: [] },\n    slackMsg: `:telescope: *Prospect Finder \u2014 No Qualified Brands Today*\\n\\nSignals: ${sigSummary || 'N/A'}\\nSearch results: ${allData.totalFound || 0} (${allData.articleCount || 0} articles, ${allData.directCount || 0} direct)\\nJunk names filtered: ${junkFiltered}\\n\\n_Gemini didn't find any qualifying D2C brands. Will try different queries tomorrow._`,\n    count: 0,\n    highScoreProspects: [],\n    industries: allData.industries || []\n  } }];\n}\n\n// Build Airtable batch create \u2014 max 10 per API call\nconst records = qualified.slice(0, 10).map(b => ({\n  fields: {\n    company_name: b.company_name,\n      source: 'prospect_finder',\n      email: (b.email && typeof b.email === 'string' && b.email.includes('@')) ? b.email.trim() : undefined || 'Unknown',\n    contact_name: b.contact_title || '(To find)',\n    stage: 'New',\n    website: b.website || '',\n    notes: `Source: Prospect Finder (auto-discovered)\\nBest Service: ${b.best_service || 'ugc_ads'}\\nDiscovery Signal: ${signalLabels[b.signal] || b.signal || 'N/A'}\\nIndustry: ${b.industry || 'N/A'}\\nUGC Score: ${b.score}/10\\nOutreach: ${b.suggested_platform || 'instagram_dm'}\\nPitch: ${b.pitch_hook || 'N/A'}\\nAI Notes: ${b.notes || 'N/A'}`\n  }\n}));\n\nconst batchBody = { records };\n\n// Slack report \u2014 top 8 prospects with signal tags and pitch hooks\nconst topProspects = qualified.sort((a, b) => (b.score || 0) - (a.score || 0)).slice(0, 8);\n\nlet slackLines = topProspects.map((p, i) => {\n  const emoji = signalEmojis[p.signal] || ':mag:';\n  const sigLabel = signalLabels[p.signal] || p.signal || '';\n  const hook = p.pitch_hook ? `\\n   _${p.pitch_hook}_` : '';\n  return `${i + 1}. ${emoji} *${p.company_name}* (${p.industry || '?'}) \u2014 Score: ${p.score}/10\\n   ${p.website || 'website unknown'}\\n   Signal: ${sigLabel} | Outreach via: ${p.suggested_platform || 'instagram'}${hook}`;\n}).join('\\n\\n');\n\n// Signal breakdown\nconst sigBreakdown = {};\nfor (const p of qualified) {\n  const s = p.signal || 'unknown';\n  sigBreakdown[s] = (sigBreakdown[s] || 0) + 1;\n}\nconst sigLine = Object.entries(sigBreakdown).map(([k, v]) => `${signalEmojis[k] || ''} ${signalLabels[k] || k}: ${v}`).join(' | ');\n\nconst slackMsg = `:telescope: *Prospect Finder \u2014 ${qualified.length} D2C Brands Discovered*\\n\\n*Signal Breakdown:* ${sigLine}\\nIndustries: ${(allData.industries || []).join(', ')}\\nSearch results analyzed: ${allData.totalFound || 0} (${allData.articleCount || 0} articles, ${allData.directCount || 0} direct sites)\\nDuplicates filtered: ${allData.duplicatesRemoved || 0} | Junk filtered: ${junkFiltered} | Brands extracted & qualified: ${qualified.length}\\n${geminiWorked ? '' : ':warning: Gemini failed \u2014 using fallback scoring\\n'}\\n*Top Prospects:*\\n\\n${slackLines}${qualified.length > 8 ? '\\n\\n_...and ' + (qualified.length - 8) + ' more in Airtable_' : ''}\\n\\n_All prospects auto-added to Leads pipeline with pitch hooks. Review in #ugc-outreach._`;\n\nreturn [{ json: {\n  batchBody,\n  slackMsg,\n  count: qualified.length,\n  highScoreProspects: topProspects,\n  industries: allData.industries || [],\n  signalBreakdown: sigBreakdown,\n  junkFiltered\n} }];"
+      },
+      "id": "pf-parse-enriched",
+      "name": "Parse Enriched Prospects",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2400,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tbl6qih4ODd7qKFZ1",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.batchBody) }}",
+        "options": {}
+      },
+      "id": "pf-create-leads",
+      "name": "Create Leads in Airtable",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2920,
+        300
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0AHQUBGR32",
+          "mode": "id"
+        },
+        "text": "={{ $('Parse Enriched Prospects').first().json.slackMsg }}",
+        "otherOptions": {}
+      },
+      "id": "pf-slack-notify",
+      "name": "Slack \u2014 Prospect Report",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        3180,
+        200
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "5Q37UpOjGx4YsbyC",
+          "name": "Slack account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblGhzSJ5RXWDS8h8",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ records: [{ fields: { agent: 'prospect_finder', event_type: 'prospects_discovered', severity: 'info', message: $('Parse Enriched Prospects').first().json.count + ' new prospects discovered and added to pipeline', payload: JSON.stringify({ count: $('Parse Enriched Prospects').first().json.count, industries: $('Parse Enriched Prospects').first().json.industries, high_score: ($('Parse Enriched Prospects').first().json.highScoreProspects || []).map(function(p) { return p.company_name; }) }), created_at: new Date().toISOString() } }] }) }}",
+        "options": {}
+      },
+      "id": "pf-write-event",
+      "name": "Write Event \u2014 Prospects Found",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3180,
+        400
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "find-prospects",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "pf-webhook",
+      "name": "Webhook \u2014 Find Prospects",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        300,
+        600
+      ],
+      "webhookId": "find-prospects-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Parse webhook body \u2014 accept custom industries, signals, or queries\n// POST /find-prospects { industries?, signals?, queries? }\n// signals: 'funded' | 'meta_ads' | 'hiring' | 'shark_tank' |\n//          'marketplace_to_d2c' | 'creator_collab' | 'industry_discovery'\n// ============================================================\nconst body = $input.first().json.body || $input.first().json;\nconst year = new Date().getFullYear();\n\nconst allIndustries = [\n  'skincare', 'fashion', 'fitness', 'food and beverage',\n  'home decor', 'wellness', 'pet care', 'electronics', 'jewelry',\n  'supplements', 'baby care', 'organic food', 'athleisure',\n  'SaaS', 'fintech', 'edtech', 'healthtech', 'real estate',\n  'gaming', 'logistics', 'insurtech', 'agritech', 'legaltech'\n];\n\nconst queries = [];\nlet selectedIndustries = body.industries || [];\nif (selectedIndustries.length === 0) {\n  const shuffled = [...allIndustries].sort(() => Math.random() - 0.5);\n  selectedIndustries = shuffled.slice(0, 3);\n}\n\n// If custom queries provided, use them directly\nif (body.queries && Array.isArray(body.queries) && body.queries.length > 0) {\n  for (const q of body.queries) queries.push({ query: q, signal: 'custom', industry: 'custom' });\n} else {\n  // Build queries from requested signals (default: all)\n  const signals = body.signals || ['funded', 'meta_ads', 'hiring', 'shark_tank', 'marketplace_to_d2c', 'creator_collab', 'industry_discovery'];\n  const signalSet = new Set(signals);\n\n  if (signalSet.has('funded')) {\n    queries.push({ query: `D2C brand raised funding India ${year}`, signal: 'funded', industry: 'general' });\n    queries.push({ query: `D2C startup seed series A India ${year}`, signal: 'funded', industry: 'general' });\n  }\n  if (signalSet.has('meta_ads')) {\n    queries.push({ query: `D2C brand advertising on Instagram India ${year}`, signal: 'meta_ads', industry: 'general' });\n    queries.push({ query: `Indian D2C brands scaling performance marketing`, signal: 'meta_ads', industry: 'general' });\n  }\n  if (signalSet.has('hiring')) {\n    queries.push({ query: `D2C brand hiring content marketing manager India`, signal: 'hiring', industry: 'general' });\n  }\n  if (signalSet.has('shark_tank')) {\n    queries.push({ query: `Shark Tank India brand ${year}`, signal: 'shark_tank', industry: 'general' });\n  }\n  if (signalSet.has('marketplace_to_d2c')) {\n    queries.push({ query: `Amazon seller launched own website D2C India`, signal: 'marketplace_to_d2c', industry: 'general' });\n  }\n  if (signalSet.has('creator_collab')) {\n    queries.push({ query: `D2C brand influencer collaboration India ${year}`, signal: 'creator_collab', industry: 'general' });\n  }\n  if (signalSet.has('industry_discovery')) {\n    for (const ind of selectedIndustries) {\n      queries.push({ query: `best D2C ${ind} brands India ${year}`, signal: 'industry_discovery', industry: ind });\n    }\n  }\n}\n\nconst signalCounts = {};\nfor (const q of queries) signalCounts[q.signal] = (signalCounts[q.signal] || 0) + 1;\n\nreturn [{ json: { queries, industries: selectedIndustries, signalCounts, totalQueries: queries.length, source: 'webhook' } }];"
+      },
+      "id": "pf-parse-webhook",
+      "name": "Parse Webhook Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        560,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ JSON.stringify({ status: 'success', action: 'find_prospects', prospects_created: $('Parse Enriched Prospects').first().json.count, industries: $('Parse Enriched Prospects').first().json.industries, message: $('Parse Enriched Prospects').first().json.count + ' qualified prospects added to pipeline' }) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "pf-respond",
+      "name": "Respond \u2014 Prospects Found",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        3440,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tbl6qih4ODd7qKFZ1?fields%5B%5D=company_name&pageSize=100",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "options": {}
+      },
+      "id": "pf-fetch-existing-2",
+      "name": "Re-fetch Leads for Dedup",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2540,
+        400
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Final deduplication gate \u2014 remove any prospects from the batch\n// whose company_name already exists in the Leads table.\n// This catches leads created between the initial fetch and now\n// (e.g., by Sales Pipeline or manual entry).\n// ============================================================\nconst parseData = $('Parse Enriched Prospects').first().json;\nconst existingResponse = $input.first().json;\n\nconst batchBody = parseData.batchBody || { records: [] };\nconst slackMsg = parseData.slackMsg || '';\nconst count = parseData.count || 0;\n\n// If no records to create, pass through as-is\nif (!batchBody.records || batchBody.records.length === 0) {\n  return [{ json: parseData }];\n}\n\n// Build set of existing company names (lowercased)\nconst existingNames = new Set();\nconst existingRecords = (existingResponse.records || []).map(r => r.fields || {});\nfor (const rec of existingRecords) {\n  if (rec.company_name) {\n    existingNames.add(rec.company_name.toLowerCase().trim());\n  }\n}\n\n// Filter out any prospect whose company_name already exists\nlet dedupRemoved = 0;\nconst filteredRecords = batchBody.records.filter(rec => {\n  const name = (rec.fields?.company_name || '').toLowerCase().trim();\n  if (existingNames.has(name)) {\n    dedupRemoved++;\n    return false;\n  }\n  return true;\n});\n\n// Update the output\nconst updatedBatchBody = { records: filteredRecords };\nconst finalCount = filteredRecords.length;\n\n// If all were duplicates, update the slack message\nlet finalSlackMsg = slackMsg;\nif (dedupRemoved > 0) {\n  finalSlackMsg = slackMsg.replace(\n    /Brands extracted & qualified: \\d+/,\n    `Brands extracted & qualified: ${finalCount} (${dedupRemoved} last-minute duplicates removed)`\n  );\n}\n\n// If no records left after dedup, update message\nif (finalCount === 0 && dedupRemoved > 0) {\n  finalSlackMsg = `:telescope: *Prospect Finder \u2014 All Prospects Already Exist*\\n\\nAll ${dedupRemoved} qualified prospects were already in the Leads table.\\n\\n_No new leads created. Will try different queries next run._`;\n}\n\nreturn [{ json: {\n  ...parseData,\n  batchBody: updatedBatchBody,\n  slackMsg: finalSlackMsg,\n  count: finalCount,\n  lastMinuteDedupRemoved: dedupRemoved\n} }];"
+      },
+      "id": "pf-dedup-before-create",
+      "name": "Final Dedup Before Create",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2730,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Prepare payload for Outreach Automation enrichment\n// Extracts created records from Airtable response\n// ============================================================\nconst createResponse = $input.first().json;\nconst records = createResponse.records || [];\n\n// If no leads were created, signal skip\nif (records.length === 0) {\n  return [{ json: { _skip: true, leads: [], count: 0 } }];\n}\n\n// Build leads array from created records\nconst leads = records.map(r => ({\n  record_id: r.id,\n  company_name: r.fields.company_name || '',\n  website: r.fields.website || '',\n  industry: r.fields.industry || '',\n  email: r.fields.email || '',\n  notes: (r.fields.notes || '').substring(0, 500),\n  source: r.fields.source || 'prospect_finder'\n}));\n\nreturn [{ json: { leads, count: leads.length, _skip: false } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3140,
+        500
+      ],
+      "id": "pf-prep-outreach",
+      "name": "Prep Outreach Trigger"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "outreach-check",
+              "leftValue": "={{ $json.count }}",
+              "rightValue": "0",
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        3360,
+        500
+      ],
+      "id": "pf-if-outreach",
+      "name": "Has New Leads?"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://n8n-jeet.duckdns.org:5678/webhook/enrich-leads",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ leads: $('Prep Outreach Trigger').first().json.leads }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3580,
+        500
+      ],
+      "id": "pf-trigger-outreach",
+      "name": "Trigger Outreach Enrichment",
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Schedule \u2014 11AM IST Daily": {
+      "main": [
+        [
+          {
+            "node": "Build Search Queries",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Search Queries": {
+      "main": [
+        [
+          {
+            "node": "SerpAPI Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Webhook Input": {
+      "main": [
+        [
+          {
+            "node": "SerpAPI Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SerpAPI Search": {
+      "main": [
+        [
+          {
+            "node": "Fetch Existing Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Existing Leads": {
+      "main": [
+        [
+          {
+            "node": "Deduplicate Prospects",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Deduplicate Prospects": {
+      "main": [
+        [
+          {
+            "node": "Has New Prospects?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has New Prospects?": {
+      "main": [
+        [
+          {
+            "node": "Build Enrich Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Build Enrich Prompt": {
+      "main": [
+        [
+          {
+            "node": "Gemini \u2014 Enrich Prospects",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini \u2014 Enrich Prospects": {
+      "main": [
+        [
+          {
+            "node": "Parse Enriched Prospects",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Enriched Prospects": {
+      "main": [
+        [
+          {
+            "node": "Re-fetch Leads for Dedup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Leads in Airtable": {
+      "main": [
+        [
+          {
+            "node": "Slack \u2014 Prospect Report",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Write Event \u2014 Prospects Found",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Respond \u2014 Prospects Found",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prep Outreach Trigger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook \u2014 Find Prospects": {
+      "main": [
+        [
+          {
+            "node": "Parse Webhook Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Re-fetch Leads for Dedup": {
+      "main": [
+        [
+          {
+            "node": "Final Dedup Before Create",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Final Dedup Before Create": {
+      "main": [
+        [
+          {
+            "node": "Create Leads in Airtable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep Outreach Trigger": {
+      "main": [
+        [
+          {
+            "node": "Has New Leads?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has New Leads?": {
+      "main": [
+        [
+          {
+            "node": "Trigger Outreach Enrichment",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": {
+    "node:Schedule \u2014 11AM IST Daily": {
+      "recurrenceRules": []
+    }
+  },
+  "meta": null,
+  "pinData": null,
+  "versionId": "9d220fca-6b7c-4cbf-9a3c-96143642447b",
+  "activeVersionId": "9d220fca-6b7c-4cbf-9a3c-96143642447b",
+  "versionCounter": 39,
+  "triggerCount": 2,
+  "shared": [
+    {
+      "updatedAt": "2026-02-24T19:55:45.252Z",
+      "createdAt": "2026-02-24T19:55:45.252Z",
+      "role": "workflow:owner",
+      "workflowId": "9u2JEpZGK81jkCXP",
+      "projectId": "AD8mXtbIf5cdYNIV",
+      "project": {
+        "updatedAt": "2026-01-26T04:34:53.263Z",
+        "createdAt": "2026-01-26T04:34:35.063Z",
+        "id": "AD8mXtbIf5cdYNIV",
+        "name": "SenseInfo Tech <senseinfotechno@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "ed50a507-d93d-45c3-9412-d80babb81dd0",
+        "projectRelations": [
+          {
+            "updatedAt": "2026-01-26T04:34:35.063Z",
+            "createdAt": "2026-01-26T04:34:35.063Z",
+            "userId": "ed50a507-d93d-45c3-9412-d80babb81dd0",
+            "projectId": "AD8mXtbIf5cdYNIV",
+            "user": {
+              "updatedAt": "2026-02-24T18:32:01.000Z",
+              "createdAt": "2026-01-26T04:34:34.578Z",
+              "id": "ed50a507-d93d-45c3-9412-d80babb81dd0",
+              "email": "senseinfotechno@gmail.com",
+              "firstName": "SenseInfo",
+              "lastName": "Tech",
+              "personalizationAnswers": {
+                "version": "v4",
+                "personalization_survey_submitted_at": "2026-01-26T04:35:01.423Z",
+                "personalization_survey_n8n_version": "2.4.6",
+                "companySize": "<20",
+                "companyType": "saas",
+                "role": "business-owner",
+                "reportedSource": "google"
+              },
+              "settings": {
+                "userActivated": true,
+                "firstSuccessfulWorkflowId": "T2U_raVAJPmEIai1EY6TF",
+                "userActivatedAt": 1769404953077,
+                "easyAIWorkflowOnboarded": true,
+                "npsSurvey": {
+                  "responded": true,
+                  "lastShownAt": 1771407918931
+                }
+              },
+              "disabled": false,
+              "mfaEnabled": false,
+              "lastActiveAt": "2026-02-24",
+              "isPending": false
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-02-24T21:08:54.214Z",
+    "createdAt": "2026-02-24T21:08:54.214Z",
+    "versionId": "9d220fca-6b7c-4cbf-9a3c-96143642447b",
+    "workflowId": "9u2JEpZGK81jkCXP",
+    "nodes": [
+      {
+        "parameters": {
+          "content": "## PROSPECT FINDER \u2014 Multi-Signal D2C Discovery\n\n**7 Lead Signals (all run daily):**\n1. Recently Funded D2C Brands (highest intent)\n2. Brands Running Meta/Google Ads\n3. Hiring Marketing/Content Roles\n4. Shark Tank India / TV Appearances\n5. Marketplace \u2192 D2C Transitions\n6. Creator/Influencer Collaborations\n7. Industry-Specific Discovery (rotating)\n\n**2 entry points:**\n- **Schedule 5:30 UTC (11 AM IST)** \u2014 ~19 queries across all signals\n- **POST /find-prospects** \u2014 On-demand with custom signals/industries/queries\n\n**Flow:** Build signal queries \u2192 SerpAPI search \u2192 Fetch existing leads \u2192 Deduplicate \u2192 Gemini enrich+score+pitch \u2192 Create qualified leads \u2192 Slack report \u2192 Event bus\n\nEach prospect gets: UGC readiness score, personalized pitch hook, suggested outreach platform",
+          "height": 400,
+          "width": 520,
+          "color": 7
+        },
+        "id": "pf-info-note",
+        "name": "Sticky Note \u2014 Overview",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          -280,
+          -60
+        ]
+      },
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "cronExpression",
+                "expression": "30 5 * * *"
+              }
+            ]
+          }
+        },
+        "id": "pf-schedule",
+        "name": "Schedule \u2014 11AM IST Daily",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          300,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "// ============================================================\n// Build SerpAPI queries across 7 lead signal types\n// Each day covers ALL signal types with rotating industries\n// ============================================================\n// Industries: D2C + SaaS + Fintech + Edtech + Healthtech + more\nconst allIndustries = [\n  'skincare', 'fashion', 'fitness', 'food and beverage',\n  'home decor', 'wellness', 'pet care', 'electronics', 'jewelry',\n  'supplements', 'baby care', 'organic food', 'athleisure',\n  'SaaS', 'fintech', 'edtech', 'healthtech', 'real estate',\n  'gaming', 'logistics', 'insurtech', 'agritech', 'legaltech'\n];\n\nconst now = new Date();\nconst startOfYear = new Date(now.getFullYear(), 0, 0);\nconst dayOfYear = Math.floor((now - startOfYear) / (1000 * 60 * 60 * 24));\nconst year = now.getFullYear();\n\n// Rotate 4 industries per day (covers all 23 in ~6 days)\nconst startIdx = (dayOfYear * 4) % allIndustries.length;\nconst todayIndustries = [];\nfor (let i = 0; i < 4; i++) {\n  todayIndustries.push(allIndustries[(startIdx + i) % allIndustries.length]);\n}\n\nconst queries = [];\n\n// === SIGNAL 1: Recently Funded Brands (D2C + tech) ===\nqueries.push({ query: `startup raised funding India ${year} D2C SaaS`, signal: 'funded', industry: 'general' });\nqueries.push({ query: `seed series A funding India ${year} startup`, signal: 'funded', industry: 'general' });\nqueries.push({ query: `Indian startup funding announcement ${year}`, signal: 'funded', industry: 'general' });\n\n// === SIGNAL 2: Brands Running Meta/Google Ads ===\nqueries.push({ query: `brand advertising Instagram Facebook India ${year}`, signal: 'meta_ads', industry: 'general' });\nqueries.push({ query: `Indian startup scaling performance marketing paid ads`, signal: 'meta_ads', industry: 'general' });\n\n// === SIGNAL 3: Hiring Marketing/Content Roles ===\nqueries.push({ query: `startup hiring content marketing manager India`, signal: 'hiring', industry: 'general' });\nqueries.push({ query: `\"hiring\" \"growth marketing\" startup India ${year}`, signal: 'hiring', industry: 'general' });\n\n// === SIGNAL 4: Shark Tank / Business Reality Shows ===\nqueries.push({ query: `Shark Tank India brand ${year}`, signal: 'shark_tank', industry: 'general' });\n\n// === SIGNAL 5: Marketplace to D2C Transition ===\nqueries.push({ query: `brand launching own website D2C India ${year}`, signal: 'marketplace_to_d2c', industry: 'general' });\n\n// === SIGNAL 6: Creator/Influencer Collaborations ===\nqueries.push({ query: `brand influencer collaboration India ${year} UGC`, signal: 'creator_collab', industry: 'general' });\n\n// === SIGNAL 7: Industry-Specific Discovery (rotating) ===\nfor (const industry of todayIndustries) {\n  queries.push({ query: `best ${industry} brands India ${year}`, signal: 'industry_discovery', industry });\n  queries.push({ query: `new ${industry} startup India growing`, signal: 'industry_discovery', industry });\n}\n\nconst signalCounts = {};\nfor (const q of queries) {\n  signalCounts[q.signal] = (signalCounts[q.signal] || 0) + 1;\n}\n\nreturn [{ json: { queries, industries: todayIndustries, signalCounts, totalQueries: queries.length, source: 'schedule' } }];"
+        },
+        "id": "pf-build-queries",
+        "name": "Build Search Queries",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          560,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "// ============================================================\n// Search SerpAPI \u2014 collects both brand sites AND news articles\n// News articles (funding, hiring, shark tank) contain brand names\n// that Gemini will extract in the enrichment step\n// ============================================================\nconst input = $input.first().json;\nconst queries = input.queries || [];\nconst SERP_API_KEY = 'b183c082b67f0971673dbab7ce0a14883f75e5012d09720d17c540efce67bc39';\n\n// Helper: extract domain from URL without URL constructor\nfunction getDomain(link) {\n  if (!link) return '';\n  const match = link.match(/^https?:\\/\\/(?:www\\.)?([^\\/?#]+)/i);\n  return match ? match[1].toLowerCase() : '';\n}\n\n// News/article domains \u2014 results from these contain brand MENTIONS\n// We keep them but flag as 'article' type for Gemini to extract brands\nconst articleDomains = new Set([\n  'inc42.com', 'yourstory.com', 'entrackr.com', 'economictimes.indiatimes.com',\n  'livemint.com', 'moneycontrol.com', 'businessinsider.in', 'techcrunch.com',\n  'vccircle.com', 'dealstreetasia.com', 'thehindu.com', 'ndtv.com',\n  'businesstoday.in', 'financialexpress.com', 'thehindubusinessline.com',\n  'forbesindia.com', 'cnbctv18.com'\n]);\n\n// Completely useless domains to skip\nconst skipDomains = new Set([\n  'wikipedia.org', 'google.com', 'facebook.com', 'twitter.com', 'x.com',\n  'reddit.com', 'quora.com', 'pinterest.com', 'tiktok.com',\n  'play.google.com', 'apps.apple.com', 'medium.com',\n  'instagram.com', 'linkedin.com', 'amazon.in', 'amazon.com',\n  'flipkart.com', 'myntra.com', 'nykaa.com', 'ajio.com',\n  'youtube.com', 'crunchbase.com', 'zoominfo.com', 'tracxn.com',\n  'wellfound.com', 'glassdoor.co.in', 'naukri.com', 'indeed.com'\n]);\n\nconst allResults = [];\nconst seenUrls = new Set();\nconst signalHits = {};\n\nfor (let i = 0; i < queries.length; i++) {\n  const q = queries[i];\n  try {\n    const url = `https://serpapi.com/search.json?engine=google&q=${encodeURIComponent(q.query)}&api_key=${SERP_API_KEY}&gl=in&hl=en&num=10`;\n    const response = await this.helpers.httpRequest({ method: 'GET', url, json: true });\n    const organicResults = response.organic_results || [];\n\n    signalHits[q.signal] = (signalHits[q.signal] || 0) + organicResults.length;\n\n    for (const result of organicResults) {\n      const link = result.link || '';\n      const domain = getDomain(link);\n      if (!domain) continue;\n      if (skipDomains.has(domain)) continue;\n      if (seenUrls.has(link)) continue;\n      seenUrls.add(link);\n\n      const isArticle = articleDomains.has(domain) || domain.endsWith('.com') && (\n        link.includes('/funding') || link.includes('/startup') ||\n        link.includes('/news') || link.includes('/article')\n      );\n\n      const title = (result.title || '').trim();\n      const snippet = (result.snippet || '').substring(0, 400);\n\n      allResults.push({\n        title,\n        website: link,\n        domain,\n        snippet,\n        industry: q.industry,\n        signal: q.signal || 'unknown',\n        search_query: q.query,\n        is_article: isArticle\n      });\n    }\n  } catch (err) {\n    // Continue on individual query failure\n  }\n\n  // 1.2-second delay between requests\n  if (i < queries.length - 1) {\n    await new Promise(resolve => setTimeout(resolve, 1200));\n  }\n}\n\n// Cap at 50 results\nconst capped = allResults.slice(0, 50);\nconst articleCount = capped.filter(r => r.is_article).length;\nconst directCount = capped.filter(r => !r.is_article).length;\n\nreturn [{ json: {\n  results: capped,\n  totalFound: capped.length,\n  articleResults: articleCount,\n  directResults: directCount,\n  queriesRun: queries.length,\n  industries: input.industries || [],\n  signalCounts: input.signalCounts || {},\n  signalHits\n} }];"
+        },
+        "id": "pf-search-serp",
+        "name": "SerpAPI Search",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          820,
+          400
+        ]
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tbl6qih4ODd7qKFZ1?fields%5B%5D=company_name&fields%5B%5D=website&fields%5B%5D=email&pageSize=100",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "airtableTokenApi",
+          "options": {}
+        },
+        "id": "pf-fetch-existing",
+        "name": "Fetch Existing Leads",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1080,
+          400
+        ],
+        "credentials": {
+          "airtableTokenApi": {
+            "id": "WelvlJEjoHaI3l9G",
+            "name": "Airtable Personal Access Token account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "// ============================================================\n// Filter search results: remove existing leads (by domain)\n// Keep BOTH article results AND direct brand results\n// Articles will be processed by Gemini to extract brand names\n// ============================================================\nconst searchData = $('SerpAPI Search').first().json;\nconst existingResponse = $input.first().json;\n\nconst results = searchData.results || [];\nconst existingRecords = (existingResponse.records || []).map(r => r.fields || {});\n\n// Build set of existing domains from Airtable\nconst existingDomains = new Set();\nconst existingNames = new Set();\nfor (const rec of existingRecords) {\n  if (rec.company_name) existingNames.add(rec.company_name.toLowerCase().trim());\n  if (rec.website) {\n    const match = rec.website.match(/^https?:\\/\\/(?:www\\.)?([^\\/?#]+)/i);\n    if (match) existingDomains.add(match[1].toLowerCase());\n  }\n}\n\nlet duplicatesRemoved = 0;\nconst filtered = [];\n\nfor (const r of results) {\n  // For articles (news sites), always keep them \u2014 they mention brand names\n  if (r.is_article) {\n    filtered.push(r);\n    continue;\n  }\n\n  // For direct brand websites, check if already in our Leads\n  const domain = (r.domain || '').toLowerCase();\n  if (domain && existingDomains.has(domain)) { duplicatesRemoved++; continue; }\n\n  // Also check company name fuzzy match\n  const titleLower = r.title.toLowerCase();\n  let nameMatch = false;\n  for (const name of existingNames) {\n    if (name.length > 3 && titleLower.includes(name)) { nameMatch = true; break; }\n  }\n  if (nameMatch) { duplicatesRemoved++; continue; }\n\n  filtered.push(r);\n}\n\nreturn [{ json: {\n  searchResults: filtered,\n  totalFound: results.length,\n  keptResults: filtered.length,\n  duplicatesRemoved,\n  articleCount: filtered.filter(r => r.is_article).length,\n  directCount: filtered.filter(r => !r.is_article).length,\n  existingLeadCount: existingRecords.length,\n  industries: searchData.industries || [],\n  signalCounts: searchData.signalCounts || {},\n  signalHits: searchData.signalHits || {}\n} }];"
+        },
+        "id": "pf-deduplicate",
+        "name": "Deduplicate Prospects",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1340,
+          400
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict"
+            },
+            "conditions": [
+              {
+                "id": "pf-cond-has-prospects",
+                "leftValue": "={{ $json.searchResults.length }}",
+                "rightValue": 0,
+                "operator": {
+                  "type": "number",
+                  "operation": "gt"
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "pf-if-has-prospects",
+        "name": "Has New Prospects?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          1600,
+          400
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "// ============================================================\n// Build Gemini prompt \u2014 extract brands + score for all services\n// Cosmisk: UGC ads, AI ads, mashup ads, media buying\n// Targets: D2C, SaaS, Fintech, Edtech, Healthtech, etc.\n// ============================================================\nconst data = $input.first().json;\nconst results = (data.searchResults || []).slice(0, 15);\n\nconst signalLabels = {\n  funded: 'Recently Funded',\n  meta_ads: 'Running Meta/Google Ads',\n  hiring: 'Hiring Marketing Roles',\n  shark_tank: 'Shark Tank / TV Appearance',\n  marketplace_to_d2c: 'Marketplace to D2C Transition',\n  creator_collab: 'Creator Collaborations',\n  industry_discovery: 'Industry Search',\n  custom: 'Custom Search'\n};\n\nconst systemPrompt = `You are a business development analyst for Cosmisk, a creative agency in India. Cosmisk offers:\n- UGC ads (creator-driven video content for paid ads)\n- AI-generated ads and mashup ads\n- Performance media buying (Meta + Google)\n- Ad account audits and creative strategy\n\nWe work with ALL growth-stage companies: D2C, SaaS, Fintech, Edtech, Healthtech, Real Estate, Gaming, and more.\n\nYou have TWO jobs:\n\n**JOB 1 \u2014 Extract company names from news articles:**\nSome results are NEWS ARTICLES (from inc42, yourstory, entrackr, techcrunch, etc.). Extract ACTUAL COMPANY NAMES mentioned. Each article may mention 1-5 companies.\n\n**JOB 2 \u2014 Score all companies for creative services readiness:**\nFor every company, evaluate:\n1. Company name (clean name only)\n2. Website URL (from snippet or your knowledge, or empty)\n3. Industry (be specific: skincare, SaaS, fintech, edtech, fashion, etc.)\n4. Discovery signal (funded/meta_ads/hiring/shark_tank/marketplace_to_d2c/creator_collab/industry_discovery)\n5. Opportunity score 1-10:\n   - Recently funded: +2 (budget to spend)\n   - Running digital ads: +2 (understand paid content)\n   - Shark Tank/high visibility: +2 (need content fast)\n   - B2C or prosumer model: +1\n   - Active social presence: +1\n   - SaaS/Fintech scaling: +1 (need explainer + testimonial content)\n   - Base: 3 for any real company\n6. Contact title (Founder, CMO, VP Marketing, Growth Head)\n7. Best Cosmisk service for them (ugc_ads / ai_ads / mashup_ads / media_buying / full_stack)\n8. Brief outreach notes (why they need our services)\n9. Suggested outreach platform (instagram_dm / email / linkedin)\n10. One-line personalized pitch hook\n\n**RULES:**\n- Do NOT include news sites, media companies, or marketplaces\n- Include D2C brands, SaaS companies, fintech startups, edtech, healthtech \u2014 any growth company\n- Deduplicate \u2014 if same company appears in multiple articles, include once\n- Return 5-15 qualified companies (score >= 6)\n\nReturn ONLY a valid JSON array. Keys:\n{ company_name, website, industry, signal, score, contact_title, best_service, notes, suggested_platform, pitch_hook }`;\n\nconst resultList = results.map((r, i) => {\n  const sig = signalLabels[r.signal] || r.signal;\n  const type = r.is_article ? 'NEWS ARTICLE' : 'COMPANY WEBSITE';\n  return `${i + 1}. [${type}] [Signal: ${sig}]\\n   Title: ${r.title}\\n   URL: ${r.website}\\n   Snippet: ${r.snippet}`;\n}).join('\\n\\n');\n\nconst userPrompt = `Here are ${results.length} search results from Google India. Extract companies and score them for Cosmisk's creative services (UGC ads, AI ads, mashup ads, media buying):\\n\\n${resultList}\\n\\nExtract all companies mentioned, deduplicate, score them, and return the JSON array.`;\n\nreturn [{ json: {\n  systemPrompt,\n  userPrompt,\n  rawResults: results,\n  allData: data\n} }];"
+        },
+        "id": "pf-build-enrich-prompt",
+        "name": "Build Enrich Prompt",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1880,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "googlePalmApi",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ systemInstruction: { parts: [{ text: $json.systemPrompt }] }, contents: [{ role: 'user', parts: [{ text: $json.userPrompt }] }], generationConfig: { temperature: 0.3, maxOutputTokens: 16384, thinkingConfig: { thinkingBudget: 0 } } }) }}",
+          "options": {}
+        },
+        "id": "pf-gemini-enrich",
+        "name": "Gemini \u2014 Enrich Prospects",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          2140,
+          300
+        ],
+        "credentials": {
+          "googlePalmApi": {
+            "id": "rIL63TG4xfMQL8uJ",
+            "name": "Cosmisk AI"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "// ============================================================\n// Parse Gemini brand extraction + scoring results\n// Builds Airtable batch create + signal-rich Slack report\n// HARDENED junk filter v2 \u2014 rejects article titles, TV shows,\n// news aggregators, Instagram handles, and overly long names\n// ============================================================\nconst geminiResponse = $input.first().json;\nconst prevData = $('Build Enrich Prompt').first().json;\nconst rawResults = prevData.rawResults || [];\nconst allData = prevData.allData || {};\n\nconst signalEmojis = {\n  funded: ':moneybag:',\n  meta_ads: ':bar_chart:',\n  hiring: ':briefcase:',\n  shark_tank: ':shark:',\n  marketplace_to_d2c: ':shopping_trolley:',\n  creator_collab: ':handshake:',\n  industry_discovery: ':mag:',\n  custom: ':dart:'\n};\n\nconst signalLabels = {\n  funded: 'Funded',\n  meta_ads: 'Running Ads',\n  hiring: 'Hiring',\n  shark_tank: 'Shark Tank',\n  marketplace_to_d2c: 'Marketplace\u2192D2C',\n  creator_collab: 'Creator Collabs',\n  industry_discovery: 'Industry Match',\n  custom: 'Custom'\n};\n\nlet brands = [];\nlet geminiWorked = false;\n\ntry {\n  const text = (geminiResponse.candidates || [])[0]?.content?.parts?.[0]?.text || '';\n  if (!text) throw new Error('No text in Gemini response');\n\n  // Strip markdown code fences\n  let cleaned = text.replace(/```json\\s*/gi, '').replace(/```\\s*/gi, '').trim();\n\n  // Try parsing the full response first\n  try {\n    const arrMatch = cleaned.match(/\\[[\\s\\S]*\\]/);\n    if (arrMatch) {\n      brands = JSON.parse(arrMatch[0]);\n    } else {\n      brands = JSON.parse(cleaned);\n    }\n  } catch (parseErr) {\n    // JSON may be truncated (MAX_TOKENS) \u2014 salvage complete objects\n    const objectPattern = /\\{[^{}]*\"company_name\"\\s*:\\s*\"[^\"]+\\\"[^{}]*\\}/g;\n    const matches = cleaned.match(objectPattern) || [];\n    for (const m of matches) {\n      try {\n        const obj = JSON.parse(m);\n        if (obj.company_name) brands.push(obj);\n      } catch (e) { /* skip malformed */ }\n    }\n  }\n\n  if (brands.length > 0) geminiWorked = true;\n} catch (err) {\n  // Total Gemini failure\n}\n\n// If Gemini didn't extract any brands, DON'T create junk leads \u2014 just report\nif (brands.length === 0) {\n  const sigSummary = Object.entries(allData.signalHits || {}).map(([k, v]) => `${signalLabels[k] || k}: ${v}`).join(', ');\n  return [{ json: {\n    batchBody: { records: [] },\n    slackMsg: `:telescope: *Prospect Finder \u2014 Gemini Could Not Extract Brands*\\n\\nSignals searched: ${sigSummary || 'N/A'}\\nSearch results found: ${allData.totalFound || 0} (${allData.articleCount || 0} articles, ${allData.directCount || 0} direct)\\n\\n_Gemini enrichment failed or returned no qualifying brands. Check execution logs._`,\n    count: 0,\n    highScoreProspects: [],\n    industries: allData.industries || []\n  } }];\n}\n\n// Map signal labels back to signal keys for consistent data\nconst labelToKey = {};\nfor (const [k, v] of Object.entries(signalLabels)) labelToKey[v.toLowerCase()] = k;\nfor (const b of brands) {\n  if (b.signal && !signalEmojis[b.signal]) {\n    const mapped = labelToKey[(b.signal || '').toLowerCase()];\n    if (mapped) b.signal = mapped;\n  }\n}\n\n// ============================================================\n// HARDENED JUNK FILTER \u2014 reject non-brand names\n// ============================================================\nfunction isJunkCompanyName(name) {\n  if (!name || typeof name !== 'string') return true;\n  const trimmed = name.trim();\n  const lower = trimmed.toLowerCase();\n\n  // Length checks: must be 2-40 chars (real brand names)\n  if (trimmed.length < 2 || trimmed.length > 40) return true;\n\n  // Reject overly long names (> 50 chars before trim \u2014 catches long article titles)\n  if (name.length > 50) return true;\n\n  // Reject names starting with a number followed by article keywords\n  // e.g. \"10 Top D2C Brands\", \"5 Best Indian Startups\"\n  if (/^\\d+\\s*(top|best|leading|most)\\b/i.test(trimmed)) return true;\n\n  // Reject news aggregation / tracker patterns\n  if (/\\b(latest|updates|tracker|status)\\b/i.test(trimmed)) return true;\n\n  // Reject Instagram handles (contains @)\n  if (trimmed.includes('@')) return true;\n\n  // Reject TV show references\n  if (/\\b(season|S4|S5|S6|S7|S8|S9|S10|S11|S12)\\b/i.test(trimmed)) return true;\n\n  // Reject article-like titles: starts with \"Top\", \"Best\", \"Leading\", \"Most\"\n  if (/^(top|best|leading|most)\\s/i.test(trimmed)) return true;\n\n  // Reject names that look like list articles: \"X Brands to Watch\"\n  if (/\\b(brands?\\s+to\\s+watch|companies?\\s+to\\s+watch|startups?\\s+to\\s+watch)\\b/i.test(trimmed)) return true;\n\n  // Reject pure numeric names\n  if (/^\\d+$/.test(trimmed)) return true;\n\n  // Reject names with too many words (likely a sentence, not a brand)\n  if (trimmed.split(/\\s+/).length > 6) return true;\n\n  return false;\n}\n\n// Filter to score >= 6, deduplicate by name, AND apply hardened junk filter\nconst seen = new Set();\nconst qualified = [];\nlet junkFiltered = 0;\nfor (const b of brands) {\n  if ((b.score || 0) < 6) continue;\n  const rawName = (b.company_name || '').trim();\n\n  // Apply hardened junk filter\n  if (isJunkCompanyName(rawName)) {\n    junkFiltered++;\n    continue;\n  }\n\n  const key = rawName.toLowerCase();\n  if (seen.has(key)) continue;\n  seen.add(key);\n  qualified.push(b);\n}\n\nif (qualified.length === 0) {\n  const sigSummary = Object.entries(allData.signalHits || {}).map(([k, v]) => `${signalLabels[k] || k}: ${v} hits`).join(', ');\n  return [{ json: {\n    batchBody: { records: [] },\n    slackMsg: `:telescope: *Prospect Finder \u2014 No Qualified Brands Today*\\n\\nSignals: ${sigSummary || 'N/A'}\\nSearch results: ${allData.totalFound || 0} (${allData.articleCount || 0} articles, ${allData.directCount || 0} direct)\\nJunk names filtered: ${junkFiltered}\\n\\n_Gemini didn't find any qualifying D2C brands. Will try different queries tomorrow._`,\n    count: 0,\n    highScoreProspects: [],\n    industries: allData.industries || []\n  } }];\n}\n\n// Build Airtable batch create \u2014 max 10 per API call\nconst records = qualified.slice(0, 10).map(b => ({\n  fields: {\n    company_name: b.company_name,\n      source: 'prospect_finder',\n      email: (b.email && typeof b.email === 'string' && b.email.includes('@')) ? b.email.trim() : undefined || 'Unknown',\n    contact_name: b.contact_title || '(To find)',\n    stage: 'New',\n    website: b.website || '',\n    notes: `Source: Prospect Finder (auto-discovered)\\nBest Service: ${b.best_service || 'ugc_ads'}\\nDiscovery Signal: ${signalLabels[b.signal] || b.signal || 'N/A'}\\nIndustry: ${b.industry || 'N/A'}\\nUGC Score: ${b.score}/10\\nOutreach: ${b.suggested_platform || 'instagram_dm'}\\nPitch: ${b.pitch_hook || 'N/A'}\\nAI Notes: ${b.notes || 'N/A'}`\n  }\n}));\n\nconst batchBody = { records };\n\n// Slack report \u2014 top 8 prospects with signal tags and pitch hooks\nconst topProspects = qualified.sort((a, b) => (b.score || 0) - (a.score || 0)).slice(0, 8);\n\nlet slackLines = topProspects.map((p, i) => {\n  const emoji = signalEmojis[p.signal] || ':mag:';\n  const sigLabel = signalLabels[p.signal] || p.signal || '';\n  const hook = p.pitch_hook ? `\\n   _${p.pitch_hook}_` : '';\n  return `${i + 1}. ${emoji} *${p.company_name}* (${p.industry || '?'}) \u2014 Score: ${p.score}/10\\n   ${p.website || 'website unknown'}\\n   Signal: ${sigLabel} | Outreach via: ${p.suggested_platform || 'instagram'}${hook}`;\n}).join('\\n\\n');\n\n// Signal breakdown\nconst sigBreakdown = {};\nfor (const p of qualified) {\n  const s = p.signal || 'unknown';\n  sigBreakdown[s] = (sigBreakdown[s] || 0) + 1;\n}\nconst sigLine = Object.entries(sigBreakdown).map(([k, v]) => `${signalEmojis[k] || ''} ${signalLabels[k] || k}: ${v}`).join(' | ');\n\nconst slackMsg = `:telescope: *Prospect Finder \u2014 ${qualified.length} D2C Brands Discovered*\\n\\n*Signal Breakdown:* ${sigLine}\\nIndustries: ${(allData.industries || []).join(', ')}\\nSearch results analyzed: ${allData.totalFound || 0} (${allData.articleCount || 0} articles, ${allData.directCount || 0} direct sites)\\nDuplicates filtered: ${allData.duplicatesRemoved || 0} | Junk filtered: ${junkFiltered} | Brands extracted & qualified: ${qualified.length}\\n${geminiWorked ? '' : ':warning: Gemini failed \u2014 using fallback scoring\\n'}\\n*Top Prospects:*\\n\\n${slackLines}${qualified.length > 8 ? '\\n\\n_...and ' + (qualified.length - 8) + ' more in Airtable_' : ''}\\n\\n_All prospects auto-added to Leads pipeline with pitch hooks. Review in #ugc-outreach._`;\n\nreturn [{ json: {\n  batchBody,\n  slackMsg,\n  count: qualified.length,\n  highScoreProspects: topProspects,\n  industries: allData.industries || [],\n  signalBreakdown: sigBreakdown,\n  junkFiltered\n} }];"
+        },
+        "id": "pf-parse-enriched",
+        "name": "Parse Enriched Prospects",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2400,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tbl6qih4ODd7qKFZ1",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "airtableTokenApi",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify($json.batchBody) }}",
+          "options": {}
+        },
+        "id": "pf-create-leads",
+        "name": "Create Leads in Airtable",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          2920,
+          300
+        ],
+        "credentials": {
+          "airtableTokenApi": {
+            "id": "WelvlJEjoHaI3l9G",
+            "name": "Airtable Personal Access Token account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "select": "channel",
+          "channelId": {
+            "__rl": true,
+            "value": "C0AHQUBGR32",
+            "mode": "id"
+          },
+          "text": "={{ $('Parse Enriched Prospects').first().json.slackMsg }}",
+          "otherOptions": {}
+        },
+        "id": "pf-slack-notify",
+        "name": "Slack \u2014 Prospect Report",
+        "type": "n8n-nodes-base.slack",
+        "typeVersion": 2.2,
+        "position": [
+          3180,
+          200
+        ],
+        "credentials": {
+          "slackApi": {
+            "id": "5Q37UpOjGx4YsbyC",
+            "name": "Slack account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblGhzSJ5RXWDS8h8",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "airtableTokenApi",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ records: [{ fields: { agent: 'prospect_finder', event_type: 'prospects_discovered', severity: 'info', message: $('Parse Enriched Prospects').first().json.count + ' new prospects discovered and added to pipeline', payload: JSON.stringify({ count: $('Parse Enriched Prospects').first().json.count, industries: $('Parse Enriched Prospects').first().json.industries, high_score: ($('Parse Enriched Prospects').first().json.highScoreProspects || []).map(function(p) { return p.company_name; }) }), created_at: new Date().toISOString() } }] }) }}",
+          "options": {}
+        },
+        "id": "pf-write-event",
+        "name": "Write Event \u2014 Prospects Found",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          3180,
+          400
+        ],
+        "credentials": {
+          "airtableTokenApi": {
+            "id": "WelvlJEjoHaI3l9G",
+            "name": "Airtable Personal Access Token account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "find-prospects",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "id": "pf-webhook",
+        "name": "Webhook \u2014 Find Prospects",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          300,
+          600
+        ],
+        "webhookId": "find-prospects-webhook"
+      },
+      {
+        "parameters": {
+          "jsCode": "// ============================================================\n// Parse webhook body \u2014 accept custom industries, signals, or queries\n// POST /find-prospects { industries?, signals?, queries? }\n// signals: 'funded' | 'meta_ads' | 'hiring' | 'shark_tank' |\n//          'marketplace_to_d2c' | 'creator_collab' | 'industry_discovery'\n// ============================================================\nconst body = $input.first().json.body || $input.first().json;\nconst year = new Date().getFullYear();\n\nconst allIndustries = [\n  'skincare', 'fashion', 'fitness', 'food and beverage',\n  'home decor', 'wellness', 'pet care', 'electronics', 'jewelry',\n  'supplements', 'baby care', 'organic food', 'athleisure',\n  'SaaS', 'fintech', 'edtech', 'healthtech', 'real estate',\n  'gaming', 'logistics', 'insurtech', 'agritech', 'legaltech'\n];\n\nconst queries = [];\nlet selectedIndustries = body.industries || [];\nif (selectedIndustries.length === 0) {\n  const shuffled = [...allIndustries].sort(() => Math.random() - 0.5);\n  selectedIndustries = shuffled.slice(0, 3);\n}\n\n// If custom queries provided, use them directly\nif (body.queries && Array.isArray(body.queries) && body.queries.length > 0) {\n  for (const q of body.queries) queries.push({ query: q, signal: 'custom', industry: 'custom' });\n} else {\n  // Build queries from requested signals (default: all)\n  const signals = body.signals || ['funded', 'meta_ads', 'hiring', 'shark_tank', 'marketplace_to_d2c', 'creator_collab', 'industry_discovery'];\n  const signalSet = new Set(signals);\n\n  if (signalSet.has('funded')) {\n    queries.push({ query: `D2C brand raised funding India ${year}`, signal: 'funded', industry: 'general' });\n    queries.push({ query: `D2C startup seed series A India ${year}`, signal: 'funded', industry: 'general' });\n  }\n  if (signalSet.has('meta_ads')) {\n    queries.push({ query: `D2C brand advertising on Instagram India ${year}`, signal: 'meta_ads', industry: 'general' });\n    queries.push({ query: `Indian D2C brands scaling performance marketing`, signal: 'meta_ads', industry: 'general' });\n  }\n  if (signalSet.has('hiring')) {\n    queries.push({ query: `D2C brand hiring content marketing manager India`, signal: 'hiring', industry: 'general' });\n  }\n  if (signalSet.has('shark_tank')) {\n    queries.push({ query: `Shark Tank India brand ${year}`, signal: 'shark_tank', industry: 'general' });\n  }\n  if (signalSet.has('marketplace_to_d2c')) {\n    queries.push({ query: `Amazon seller launched own website D2C India`, signal: 'marketplace_to_d2c', industry: 'general' });\n  }\n  if (signalSet.has('creator_collab')) {\n    queries.push({ query: `D2C brand influencer collaboration India ${year}`, signal: 'creator_collab', industry: 'general' });\n  }\n  if (signalSet.has('industry_discovery')) {\n    for (const ind of selectedIndustries) {\n      queries.push({ query: `best D2C ${ind} brands India ${year}`, signal: 'industry_discovery', industry: ind });\n    }\n  }\n}\n\nconst signalCounts = {};\nfor (const q of queries) signalCounts[q.signal] = (signalCounts[q.signal] || 0) + 1;\n\nreturn [{ json: { queries, industries: selectedIndustries, signalCounts, totalQueries: queries.length, source: 'webhook' } }];"
+        },
+        "id": "pf-parse-webhook",
+        "name": "Parse Webhook Input",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          560,
+          600
+        ]
+      },
+      {
+        "parameters": {
+          "respondWith": "text",
+          "responseBody": "={{ JSON.stringify({ status: 'success', action: 'find_prospects', prospects_created: $('Parse Enriched Prospects').first().json.count, industries: $('Parse Enriched Prospects').first().json.industries, message: $('Parse Enriched Prospects').first().json.count + ' qualified prospects added to pipeline' }) }}",
+          "options": {
+            "responseHeaders": {
+              "entries": [
+                {
+                  "name": "Content-Type",
+                  "value": "application/json"
+                }
+              ]
+            }
+          }
+        },
+        "id": "pf-respond",
+        "name": "Respond \u2014 Prospects Found",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.1,
+        "position": [
+          3440,
+          500
+        ]
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tbl6qih4ODd7qKFZ1?fields%5B%5D=company_name&pageSize=100",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "airtableTokenApi",
+          "options": {}
+        },
+        "id": "pf-fetch-existing-2",
+        "name": "Re-fetch Leads for Dedup",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          2540,
+          400
+        ],
+        "credentials": {
+          "airtableTokenApi": {
+            "id": "WelvlJEjoHaI3l9G",
+            "name": "Airtable Personal Access Token account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "// ============================================================\n// Final deduplication gate \u2014 remove any prospects from the batch\n// whose company_name already exists in the Leads table.\n// This catches leads created between the initial fetch and now\n// (e.g., by Sales Pipeline or manual entry).\n// ============================================================\nconst parseData = $('Parse Enriched Prospects').first().json;\nconst existingResponse = $input.first().json;\n\nconst batchBody = parseData.batchBody || { records: [] };\nconst slackMsg = parseData.slackMsg || '';\nconst count = parseData.count || 0;\n\n// If no records to create, pass through as-is\nif (!batchBody.records || batchBody.records.length === 0) {\n  return [{ json: parseData }];\n}\n\n// Build set of existing company names (lowercased)\nconst existingNames = new Set();\nconst existingRecords = (existingResponse.records || []).map(r => r.fields || {});\nfor (const rec of existingRecords) {\n  if (rec.company_name) {\n    existingNames.add(rec.company_name.toLowerCase().trim());\n  }\n}\n\n// Filter out any prospect whose company_name already exists\nlet dedupRemoved = 0;\nconst filteredRecords = batchBody.records.filter(rec => {\n  const name = (rec.fields?.company_name || '').toLowerCase().trim();\n  if (existingNames.has(name)) {\n    dedupRemoved++;\n    return false;\n  }\n  return true;\n});\n\n// Update the output\nconst updatedBatchBody = { records: filteredRecords };\nconst finalCount = filteredRecords.length;\n\n// If all were duplicates, update the slack message\nlet finalSlackMsg = slackMsg;\nif (dedupRemoved > 0) {\n  finalSlackMsg = slackMsg.replace(\n    /Brands extracted & qualified: \\d+/,\n    `Brands extracted & qualified: ${finalCount} (${dedupRemoved} last-minute duplicates removed)`\n  );\n}\n\n// If no records left after dedup, update message\nif (finalCount === 0 && dedupRemoved > 0) {\n  finalSlackMsg = `:telescope: *Prospect Finder \u2014 All Prospects Already Exist*\\n\\nAll ${dedupRemoved} qualified prospects were already in the Leads table.\\n\\n_No new leads created. Will try different queries next run._`;\n}\n\nreturn [{ json: {\n  ...parseData,\n  batchBody: updatedBatchBody,\n  slackMsg: finalSlackMsg,\n  count: finalCount,\n  lastMinuteDedupRemoved: dedupRemoved\n} }];"
+        },
+        "id": "pf-dedup-before-create",
+        "name": "Final Dedup Before Create",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2730,
+          300
+        ]
+      }
+    ],
+    "connections": {
+      "Schedule \u2014 11AM IST Daily": {
+        "main": [
+          [
+            {
+              "node": "Build Search Queries",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build Search Queries": {
+        "main": [
+          [
+            {
+              "node": "SerpAPI Search",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Parse Webhook Input": {
+        "main": [
+          [
+            {
+              "node": "SerpAPI Search",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "SerpAPI Search": {
+        "main": [
+          [
+            {
+              "node": "Fetch Existing Leads",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Fetch Existing Leads": {
+        "main": [
+          [
+            {
+              "node": "Deduplicate Prospects",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Deduplicate Prospects": {
+        "main": [
+          [
+            {
+              "node": "Has New Prospects?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Has New Prospects?": {
+        "main": [
+          [
+            {
+              "node": "Build Enrich Prompt",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          []
+        ]
+      },
+      "Build Enrich Prompt": {
+        "main": [
+          [
+            {
+              "node": "Gemini \u2014 Enrich Prospects",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Gemini \u2014 Enrich Prospects": {
+        "main": [
+          [
+            {
+              "node": "Parse Enriched Prospects",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Parse Enriched Prospects": {
+        "main": [
+          [
+            {
+              "node": "Re-fetch Leads for Dedup",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Create Leads in Airtable": {
+        "main": [
+          [
+            {
+              "node": "Slack \u2014 Prospect Report",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Write Event \u2014 Prospects Found",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Respond \u2014 Prospects Found",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Webhook \u2014 Find Prospects": {
+        "main": [
+          [
+            {
+              "node": "Parse Webhook Input",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Re-fetch Leads for Dedup": {
+        "main": [
+          [
+            {
+              "node": "Final Dedup Before Create",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Final Dedup Before Create": {
+        "main": [
+          [
+            {
+              "node": "Create Leads in Airtable",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "SenseInfo Tech",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-02-24T21:08:54.314Z",
+        "id": 449,
+        "workflowId": "9u2JEpZGK81jkCXP",
+        "versionId": "9d220fca-6b7c-4cbf-9a3c-96143642447b",
+        "event": "activated",
+        "userId": "ed50a507-d93d-45c3-9412-d80babb81dd0"
+      },
+      {
+        "createdAt": "2026-02-24T21:08:55.269Z",
+        "id": 450,
+        "workflowId": "9u2JEpZGK81jkCXP",
+        "versionId": "9d220fca-6b7c-4cbf-9a3c-96143642447b",
+        "event": "activated",
+        "userId": "ed50a507-d93d-45c3-9412-d80babb81dd0"
+      }
+    ]
+  }
+}

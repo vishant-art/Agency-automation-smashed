@@ -1,0 +1,886 @@
+{
+  "name": "Ad Account Analysis v6",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## AD ACCOUNT ANALYSIS v6 (Gemini REST API)\n\n**Gemini 2.5 Flash \u2014 Video + Image Analysis via REST API**\n\nWebhook POST /analyze-ads\n- project_id (required)\n- ad_account_id (optional, default: act_921159353090591)\n- days (optional, default: 30)\n- limit (optional, default: 5, max 10)\n\nFetches top ads by spend from Meta \u2192 detects video vs image \u2192\nVideo: downloads video \u2192 Gemini 2.5 Flash native video analysis (REST API)\nImage: downloads thumbnail \u2192 Gemini 2.5 Flash native image analysis (REST API)\n\nStores results in Airtable Reference_Ads table.\nUses HTTP Request + predefinedCredentialType for Gemini auth.",
+        "height": 400,
+        "width": 420,
+        "color": 7
+      },
+      "id": "aa-sticky",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -200,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "analyze-ads",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "aa-webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        100,
+        300
+      ],
+      "webhookId": "analyze-ads-webhook"
+    },
+    {
+      "parameters": {},
+      "id": "aa-manual",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        100,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || $input.first().json;\nconst project_id = body.project_id || '';\nif (!project_id) throw new Error('project_id is required');\nconst ad_account_id = body.ad_account_id || 'act_921159353090591';\nconst days = Math.min(Math.max(parseInt(body.days) || 30, 1), 90);\nconst limit = Math.min(Math.max(parseInt(body.limit) || 5, 1), 10);\n\nconst now = new Date();\nconst since = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);\nconst sinceStr = since.toISOString().split('T')[0];\nconst untilStr = now.toISOString().split('T')[0];\n\nreturn [{ json: { project_id, ad_account_id, days, limit, since: sinceStr, until: untilStr } }];"
+      },
+      "id": "aa-extract-params",
+      "name": "Extract Params",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        340,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://graph.facebook.com/v23.0/{{ $json.ad_account_id }}/insights",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "level",
+              "value": "ad"
+            },
+            {
+              "name": "fields",
+              "value": "ad_id,ad_name,spend,impressions,clicks,ctr,cpc,cpm,actions,action_values,cost_per_action_type"
+            },
+            {
+              "name": "time_range",
+              "value": "={{ JSON.stringify({ since: $json.since, until: $json.until }) }}"
+            },
+            {
+              "name": "sort",
+              "value": "spend_descending"
+            },
+            {
+              "name": "limit",
+              "value": "={{ $json.limit }}"
+            },
+            {
+              "name": "filtering",
+              "value": "=[{\"field\":\"spend\",\"operator\":\"GREATER_THAN\",\"value\":\"0\"}]"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "aa-fetch-top-ads",
+      "name": "Fetch Top Ads by Spend",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        580,
+        400
+      ],
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "G4AHd7ZseuLWhZkk",
+          "name": "Facebook Graph account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const resp = $input.first().json;\nconst data = resp.data || [];\nif (!data.length) return [{ json: { _empty: true } }];\n\nreturn data.map(ad => {\n  const actions = ad.actions || [];\n  const actionValues = ad.action_values || [];\n  const purchases = actions.find(a => a.action_type === 'purchase') || {};\n  const revenue = actionValues.find(a => a.action_type === 'purchase') || {};\n  const spend = parseFloat(ad.spend || 0);\n  const rev = parseFloat(revenue.value || 0);\n  return {\n    json: {\n      ad_id: ad.ad_id,\n      ad_name: ad.ad_name,\n      spend: spend.toFixed(2),\n      impressions: ad.impressions || '0',\n      clicks: ad.clicks || '0',\n      ctr: parseFloat(ad.ctr || 0).toFixed(2),\n      cpc: parseFloat(ad.cpc || 0).toFixed(2),\n      cpm: parseFloat(ad.cpm || 0).toFixed(2),\n      purchases: purchases.value || '0',\n      revenue: rev.toFixed(2),\n      roas: spend > 0 ? (rev / spend).toFixed(2) : '0.00'\n    }\n  };\n});"
+      },
+      "id": "aa-parse-ads",
+      "name": "Parse Ads + Metrics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        820,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "empty-check",
+              "leftValue": "={{ $json._empty }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "aa-has-ads",
+      "name": "Has Ads?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1060,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ JSON.stringify({ status: 'error', message: 'No ads found for the given account and date range' }) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "aa-respond-no-ads",
+      "name": "Respond \u2014 No Ads",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1300,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "aa-split-batches",
+      "name": "Process Each Ad",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1300,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://graph.facebook.com/v23.0/{{ $json.ad_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "fields",
+              "value": "id,name,creative{id,object_story_spec,thumbnail_url,video_id,image_hash,body,title,call_to_action_type}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "aa-fetch-creative",
+      "name": "Fetch Ad Creative",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1560,
+        520
+      ],
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "G4AHd7ZseuLWhZkk",
+          "name": "Facebook Graph account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst metrics = $('Parse Ads + Metrics').all();\nreturn items.map((item, i) => {\n  const ad = item.json;\n  const adId = ad.id || ad.ad_id;\n  const m = metrics.find(m => m.json.ad_id === adId)?.json || {};\n  const creative = ad.creative || {};\n  const spec = creative.object_story_spec || {};\n  let creativeType = 'image';\n  if (creative.video_id || spec.video_data) creativeType = 'video';\n  const videoId = creative.video_id || (spec.video_data ? spec.video_data.video_id : '') || '';\n  const thumbnailUrl = creative.thumbnail_url || (spec.link_data ? spec.link_data.picture : '') || '';\n  const adCopy = creative.body || (spec.link_data ? spec.link_data.message : '') || '';\n  const headline = creative.title || (spec.link_data ? spec.link_data.name : '') || '';\n  const ctaType = creative.call_to_action_type || (spec.link_data && spec.link_data.call_to_action ? spec.link_data.call_to_action.type : '') || '';\n  return { json: { ...m, creative_type: creativeType, video_id: videoId, image_url: thumbnailUrl, ad_copy: adCopy, headline, cta_type: ctaType } };\n});"
+      },
+      "id": "aa-extract-creative",
+      "name": "Extract Creative Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1800,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "is-video-check",
+              "leftValue": "={{ $json.creative_type }}",
+              "rightValue": "video",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "aa-is-video",
+      "name": "Is Video?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2040,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://graph.facebook.com/v23.0/{{ $json.video_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "fields",
+              "value": "source"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "aa-fetch-video-source",
+      "name": "Fetch Video Source",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2300,
+        380
+      ],
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "G4AHd7ZseuLWhZkk",
+          "name": "Facebook Graph account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "has-source-check",
+              "leftValue": "={{ $json.source }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "aa-has-video-source",
+      "name": "Has Video Source?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2420,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Video source unavailable, fallback to thumbnail analysis\nconst adData = $('Extract Creative Data').first().json;\nreturn [{ json: { image_url: adData.image_url || adData.thumbnail_url || '' } }];"
+      },
+      "id": "aa-fallback-thumbnail",
+      "name": "Prep Thumbnail Fallback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2540,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.source }}",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0"
+            }
+          ]
+        },
+        "options": {
+          "redirect": {
+            "redirect": {}
+          },
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "video_bin"
+            }
+          },
+          "timeout": 300000
+        }
+      },
+      "id": "aa-download-video",
+      "name": "Download Video",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2600,
+        300
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.image_url }}",
+        "authentication": "none",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "aa-download-thumbnail",
+      "name": "Download Thumbnail",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2300,
+        660
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "function extractText(obj) {\n  if (!obj) return \"\";\n  // REST API format: { candidates: [{ content: { parts: [{ text: \"...\" }] } }] }\n  if (obj.candidates && obj.candidates[0]?.content?.parts?.[0]?.text) {\n    return obj.candidates[0].content.parts[0].text;\n  }\n  // LangChain node format\n  if (obj.content?.parts?.[0]?.text) return obj.content.parts[0].text;\n  if (typeof obj === \"string\") return obj;\n  if (obj.text) return obj.text;\n  if (obj.output) return obj.output;\n  return \"\";\n}\n\nfunction extractJSON(text) {\n  if (!text || typeof text !== \"string\") return null;\n  try { return JSON.parse(text); } catch(e) {}\n  const codeBlock = text.match(/```json([\\s\\S]*?)```/);\n  if (codeBlock) { try { return JSON.parse(codeBlock[1].trim()); } catch(e) {} }\n  const first = text.indexOf('{');\n  const last = text.lastIndexOf('}');\n  if (first !== -1 && last !== -1) {\n    try { return JSON.parse(text.slice(first, last + 1)); } catch(e) {}\n  }\n  return null;\n}\n\nconst items = $input.all();\nreturn items.map(item => {\n  const rawText = extractText(item.json);\n  const parsed = extractJSON(rawText);\n  if (parsed) {\n    return { json: { ...item.json, gemini: parsed } };\n  }\n  // If we got an error response from Gemini\n  const error = item.json.error;\n  const errorMsg = error ? (typeof error === 'string' ? error : (error.message || JSON.stringify(error))) : 'Could not parse Gemini response';\n  return { json: { ...item.json, gemini: { error: errorMsg } } };\n});"
+      },
+      "id": "aa-parse-gemini",
+      "name": "Parse Gemini Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3060,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const adData = $('Extract Creative Data').first().json;\nconst project_id = $('Extract Params').first().json.project_id;\nconst gemini = $json.gemini || {};\n// Use gemini.kind (from actual analysis) not adData.creative_type (from ad metadata)\nconst isVideo = gemini.kind === 'video';\n\nconst hookText = gemini.hook_text || adData.headline || '';\n\n// Clean markdown from why_it_works\nfunction cleanMd(s) { return (s || '').replace(/\\*\\*/g, '').replace(/\\*/g, '').trim(); }\n\nconst whyItWorks = Array.isArray(gemini.why_it_works)\n  ? gemini.why_it_works.map(cleanMd).join('; ')\n  : cleanMd(gemini.why_it_works || '');\n\nconst scores = gemini.scores || {};\nconst scoreVals = Object.values(scores).map(v => parseFloat(v) || 0);\nconst avgScore = scoreVals.length > 0 ? (scoreVals.reduce((a,b) => a+b, 0) / scoreVals.length).toFixed(1) : 'N/A';\nconst scoreStr = Object.entries(scores).map(([k,v]) => k + ': ' + v).join(', ');\n\nconst takeaways = Array.isArray(gemini.key_takeaways_for_writer)\n  ? gemini.key_takeaways_for_writer.map(cleanMd).join('; ')\n  : cleanMd(gemini.key_takeaways_for_writer || '');\n\nlet adCopy = adData.ad_copy || '';\nif (isVideo && gemini.transcript) {\n  adCopy = gemini.transcript;\n}\n\nlet notes = '';\nif (isVideo) {\n  const keyPhrases = Array.isArray(gemini.key_phrases) ? gemini.key_phrases.join(', ') : '';\n  const editNotes = cleanMd(gemini.editing_notes || '');\n  notes = 'KEY PHRASES: ' + keyPhrases + ' | EDITING: ' + editNotes + ' | TAKEAWAYS: ' + takeaways;\n} else {\n  // Image analysis\n  const onImageText = Array.isArray(gemini.on_image_text) ? gemini.on_image_text.join(', ') : '';\n  const assessment = cleanMd(gemini.ad_copy_assessment || '');\n  notes = 'Scores: ' + scoreStr + ' (avg ' + avgScore + ') | TEXT: ' + onImageText + ' | ASSESSMENT: ' + assessment + ' | TAKEAWAYS: ' + takeaways;\n}\n\nreturn [{ json: {\n  project_id: project_id,\n  ad_name: adData.ad_name,\n  hook_text: cleanMd(hookText),\n  ad_copy: adCopy,\n  why_it_works: whyItWorks,\n  metrics_text: 'CTR ' + (parseFloat(adData.ctr) || 0).toFixed(2) + '%, CPC $' + (parseFloat(adData.cpc) || 0).toFixed(2) + ', ROAS ' + (parseFloat(adData.roas) || 0).toFixed(1) + 'x, Spend $' + (parseFloat(adData.spend) || 0).toFixed(0),\n  notes: notes,\n  uploaded_by: 'Ad Analysis Bot'\n} }];"
+      },
+      "id": "aa-format-analysis",
+      "name": "Format Analysis",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3300,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tbl6ePpaHIQvCqy8K",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ fields: { ad_name: $json.ad_name, hook_text: $json.hook_text, ad_copy: $json.ad_copy, why_it_works: $json.why_it_works, metrics: $json.metrics_text, notes: $json.notes, uploaded_by: $json.uploaded_by, project_id: $json.project_id } }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "aa-store-airtable",
+      "name": "Store in Reference_Ads",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3540,
+        520
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const params = $('Extract Params').first().json;\nconst adCount = $('Parse Ads + Metrics').all().filter(a => !a.json._empty).length;\nreturn [{ json: { status: 'success', ads_analyzed: adCount, message: adCount + ' ads analyzed and stored in Reference_Ads for project ' + params.project_id } }];"
+      },
+      "id": "aa-collect-results",
+      "name": "Collect Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "aa-respond-success",
+      "name": "Respond \u2014 Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1800,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Read binary data from filesystem storage\nconst binaryKey = $input.first().binary?.video_bin ? 'video_bin' : 'data';\nlet base64Data, mimeType;\ntry {\n  const buffer = await this.helpers.getBinaryDataBuffer(0, binaryKey);\n  base64Data = buffer.toString('base64');\n  mimeType = $input.first().binary[binaryKey]?.mimeType || 'video/mp4';\n} catch(e) {\n  return [{ json: { requestBody: { contents: [{ parts: [{ text: \"Video binary data not available: \" + e.message }] }] } } }];\n}\n\nconst prompt = \"You are an expert UGC ad analyst. Analyze this video ad for a UGC script writer.\\n\\nAnalyze with extreme detail:\\n\\n1. OPENING HOOK (first 3 seconds): What visual and audio elements grab attention? What exact words are spoken first?\\n2. FULL TRANSCRIPT: Transcribe all spoken words with approximate timestamps\\n3. SCRIPT STRUCTURE: Break down into sections (Hook -> Problem -> Solution -> Proof -> CTA) with timestamps\\n4. VISUAL ELEMENTS: Camera angles, text overlays, product shots, B-roll, scene transitions\\n5. AUDIO: Music, sound effects, speaking tone, energy level, pacing\\n6. KEY PHRASES: Most persuasive words/phrases and why they work\\n7. EDITING: Cut frequency, transitions, pacing rhythm\\n8. WHY IT WORKS: 5 specific reasons this video ad converts\\n9. SCORES (0-10): hook_strength, script_structure, visual_quality, audio_impact, authenticity, overall\\n10. KEY TAKEAWAYS: Actionable insights for a UGC script writer to replicate this ad's success\\n\\nReturn ONLY valid JSON (no markdown) with this schema:\\n{\\\"kind\\\":\\\"video\\\",\\\"hook_text\\\":\\\"opening hook words\\\",\\\"transcript\\\":\\\"full transcript\\\",\\\"script_breakdown\\\":[{\\\"section\\\":\\\"Hook\\\",\\\"timestamp\\\":\\\"0:00-0:03\\\",\\\"text\\\":\\\"...\\\",\\\"purpose\\\":\\\"...\\\"}],\\\"visual_elements\\\":[\\\"element1\\\",\\\"element2\\\"],\\\"audio_analysis\\\":{\\\"music\\\":\\\"...\\\",\\\"tone\\\":\\\"...\\\",\\\"pacing\\\":\\\"...\\\"},\\\"key_phrases\\\":[\\\"phrase1\\\",\\\"phrase2\\\"],\\\"editing_notes\\\":\\\"...\\\",\\\"why_it_works\\\":[\\\"reason1\\\",\\\"reason2\\\"],\\\"scores\\\":{\\\"hook_strength\\\":0,\\\"script_structure\\\":0,\\\"visual_quality\\\":0,\\\"audio_impact\\\":0,\\\"authenticity\\\":0,\\\"overall\\\":0},\\\"key_takeaways_for_writer\\\":[\\\"takeaway1\\\",\\\"takeaway2\\\"],\\\"tone\\\":\\\"...\\\",\\\"cta_text\\\":\\\"...\\\"}\";\nreturn [{ json: { requestBody: { contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: mimeType, data: base64Data } }] }], generationConfig: { temperature: 0.2, maxOutputTokens: 4096 } } } }];"
+      },
+      "id": "aa-build-video-req",
+      "name": "Build Video Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.requestBody) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "aa-gemini-video",
+      "name": "Gemini Analyze Video",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2960,
+        300
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "rIL63TG4xfMQL8uJ",
+          "name": "Cosmisk AI"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Read binary data from filesystem storage\nconst binaryKey = 'data';\nlet base64Data, mimeType;\ntry {\n  const buffer = await this.helpers.getBinaryDataBuffer(0, binaryKey);\n  base64Data = buffer.toString('base64');\n  mimeType = $input.first().binary[binaryKey]?.mimeType || 'image/jpeg';\n} catch(e) {\n  return [{ json: { requestBody: { contents: [{ parts: [{ text: \"Image binary data not available: \" + e.message }] }] } } }];\n}\n\nconst prompt = \"You are an expert UGC ad analyst. Analyze this ad creative image for a UGC script writer.\\n\\nAnalyze:\\n1. VISUAL HOOK: What grabs attention first? Color, composition, subject\\n2. ON-IMAGE TEXT: All visible text in reading order\\n3. VISUAL ELEMENTS: Products, people, background, layout, branding\\n4. AD COPY ASSESSMENT: Is the message clear? What's the value proposition?\\n5. WHY IT WORKS: 3-5 specific reasons\\n6. SCORES (0-10): scroll_stop, message_clarity, conversion_readiness, authenticity\\n7. KEY TAKEAWAYS for a UGC script writer\\n\\nReturn ONLY valid JSON (no markdown) with this schema:\\n{\\\"kind\\\":\\\"image\\\",\\\"hook_text\\\":\\\"visual hook description\\\",\\\"on_image_text\\\":[\\\"text1\\\",\\\"text2\\\"],\\\"visual_elements\\\":[\\\"element1\\\",\\\"element2\\\"],\\\"ad_copy_assessment\\\":\\\"...\\\",\\\"why_it_works\\\":[\\\"reason1\\\",\\\"reason2\\\"],\\\"scores\\\":{\\\"scroll_stop\\\":0,\\\"message_clarity\\\":0,\\\"conversion_readiness\\\":0,\\\"authenticity\\\":0},\\\"key_takeaways_for_writer\\\":[\\\"takeaway1\\\",\\\"takeaway2\\\"],\\\"tone\\\":\\\"...\\\",\\\"cta_text\\\":\\\"...\\\"}\";\nreturn [{ json: { requestBody: { contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: mimeType, data: base64Data } }] }], generationConfig: { temperature: 0.2, maxOutputTokens: 4096 } } } }];"
+      },
+      "id": "aa-build-image-req",
+      "name": "Build Image Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2440,
+        660
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.requestBody) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "aa-gemini-image",
+      "name": "Gemini Analyze Image",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2640,
+        660
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "rIL63TG4xfMQL8uJ",
+          "name": "Cosmisk AI"
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Extract Params",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Extract Params",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Params": {
+      "main": [
+        [
+          {
+            "node": "Fetch Top Ads by Spend",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Top Ads by Spend": {
+      "main": [
+        [
+          {
+            "node": "Parse Ads + Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Ads + Metrics": {
+      "main": [
+        [
+          {
+            "node": "Has Ads?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Ads?": {
+      "main": [
+        [
+          {
+            "node": "Respond \u2014 No Ads",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Process Each Ad",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Each Ad": {
+      "main": [
+        [
+          {
+            "node": "Collect Results",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fetch Ad Creative",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Ad Creative": {
+      "main": [
+        [
+          {
+            "node": "Extract Creative Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Creative Data": {
+      "main": [
+        [
+          {
+            "node": "Is Video?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Video?": {
+      "main": [
+        [
+          {
+            "node": "Fetch Video Source",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Download Thumbnail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Video Source": {
+      "main": [
+        [
+          {
+            "node": "Has Video Source?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Video Source?": {
+      "main": [
+        [
+          {
+            "node": "Download Video",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prep Thumbnail Fallback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep Thumbnail Fallback": {
+      "main": [
+        [
+          {
+            "node": "Download Thumbnail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Video": {
+      "main": [
+        [
+          {
+            "node": "Build Video Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Analyze Video": {
+      "main": [
+        [
+          {
+            "node": "Parse Gemini Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Thumbnail": {
+      "main": [
+        [
+          {
+            "node": "Build Image Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Analyze Image": {
+      "main": [
+        [
+          {
+            "node": "Parse Gemini Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Gemini Response": {
+      "main": [
+        [
+          {
+            "node": "Format Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Analysis": {
+      "main": [
+        [
+          {
+            "node": "Store in Reference_Ads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store in Reference_Ads": {
+      "main": [
+        [
+          {
+            "node": "Process Each Ad",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect Results": {
+      "main": [
+        [
+          {
+            "node": "Respond \u2014 Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Video Request": {
+      "main": [
+        [
+          {
+            "node": "Gemini Analyze Video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Image Request": {
+      "main": [
+        [
+          {
+            "node": "Gemini Analyze Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  }
+}

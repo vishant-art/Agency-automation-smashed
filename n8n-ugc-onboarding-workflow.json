@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-02-17T09:37:10.064Z",
+  "updatedAt": "2026-02-25T06:27:32.107Z",
   "createdAt": "2026-02-11T21:48:13.996Z",
   "id": "ZJfWCoCYf9c0O8tdywMTj",
   "name": "UGC Client Onboarding \u2014 Smashed Agency",
@@ -150,11 +150,11 @@
         "options": {}
       },
       "id": "fd315f0b-f668-4750-bfe1-463dd5abb9fd",
-      "name": "Create Client Folder",
+      "name": "Try Create Folder",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        25600,
+        25500,
         8720
       ],
       "credentials": {
@@ -163,7 +163,43 @@
           "name": "ClickUp account"
         }
       },
-      "onError": "continueErrorOutput"
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.clickup.com/api/v2/space/90165772240/folder",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "clickUpApi",
+        "options": {}
+      },
+      "id": "w0-list-folders",
+      "name": "List ClickUp Folders",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        25700,
+        8720
+      ],
+      "credentials": {
+        "clickUpApi": {
+          "id": "CH8wDVhGoKw39AK1",
+          "name": "ClickUp account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Resolve the client folder \u2014 find by name from the folder list\nconst folderName = $('Parse JotForm & Generate Client Code').first().json.folder_name;\nconst folders = $input.first().json.folders || [];\nconst match = folders.find(f => f.name === folderName);\nif (!match) throw new Error('Folder not found: ' + folderName);\nreturn [{ json: { id: match.id, name: match.name } }];"
+      },
+      "id": "w0-resolve-folder",
+      "name": "Create Client Folder",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        25900,
+        8720
+      ]
     },
     {
       "parameters": {
@@ -385,7 +421,7 @@
         "select": "channel",
         "channelId": {
           "__rl": true,
-          "value": "C0AFBQ5UF0E",
+          "value": "C0AHQU1BUU8",
           "mode": "id"
         },
         "text": "={{ (() => {\nconst d = $('Parse JotForm & Generate Client Code').first().json;\nconst product = (d.product_feature || '').substring(0, 100);\nconst target = (d.target_user || '').substring(0, 100);\nconst diff = (d.differentiator || '').substring(0, 100);\nconst comp = d.compliance || 'None';\nconst dontSay = d.do_not_say || 'None';\nconst personality = d.brand_personality || 'Not specified';\nreturn `\ud83c\udfac *New UGC Client Onboarded!*\\n\\n*${d.client_code} \u2014 ${d.brand_name}*\\nProduct: ${product}\\nTarget: ${target}\\nDifferentiator: ${diff}\\nBrand: ${personality}\\n\\n\u26a0\ufe0f Compliance: ${comp}\\n\ud83d\udeab Do not: ${dontSay}\\n\\n\ud83d\udccb ClickUp: ${d.folder_name} created with 10 tasks (15-day timeline) + ${d.num_scripts || 0} UGC script cards + Chat Channel + Onboarding Brief Doc\\nAM: TBD\\n\\n_Let's make some fire ads!_ \ud83d\udd25`;\n})() }}",
@@ -518,7 +554,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// ============================================================\n// Error Handler \u2014 Capture error details\n// ============================================================\n\nconst errorData = $input.first().json;\n\n// Try to get brand name from the parse node if it ran\nlet brand_name = 'Unknown';\nlet client_code = 'N/A';\ntry {\n  const parseData = $('Parse JotForm & Generate Client Code').first().json;\n  brand_name = parseData.brand_name || 'Unknown';\n  client_code = parseData.client_code || 'N/A';\n} catch (e) {\n  // Parse node may not have run\n}\n\nconst errorMessage = errorData.error?.message || errorData.message || 'Unknown error';\nconst errorNode = errorData.error?.node?.name || errorData.node || 'Unknown node';\n\nreturn [{\n  json: {\n    brand_name,\n    client_code,\n    error_message: errorMessage,\n    error_node: errorNode,\n    timestamp: new Date().toISOString()\n  }\n}];"
+        "jsCode": "// ============================================================\n// Error Handler \u2014 Capture error details\n// ============================================================\n\nconst errorData = $input.first().json;\n\n// Try to get brand name from the parse node if it ran\nlet brand_name = 'Unknown';\nlet client_code = 'N/A';\ntry {\n  const parseData = $('Parse JotForm & Generate Client Code').first().json;\n  brand_name = parseData.brand_name || 'Unknown';\n  client_code = parseData.client_code || 'N/A';\n} catch (e) {\n  // Parse node may not have run\n}\n\nconst errorMessage = errorData.error?.message || errorData.message || 'Unknown error';\nconst errorNode = errorData.error?.node?.name || errorData.node || 'Unknown node';\n\nreturn [{\n  json: {\n    brand_name,\n    client_code,\n    error_message: errorMessage,\n    error_node: errorNode,\n    created_at: new Date().toISOString()\n  }\n}];"
       },
       "id": "006a243d-a299-46d9-839f-23a41dcb5ed9",
       "name": "Handle Error",
@@ -912,6 +948,74 @@
         27344,
         8720
       ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblGhzSJ5RXWDS8h8",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ records: [{ fields: { agent: \"onboarding\", event_type: \"status_change\", severity: \"info\", brand_name: $('Parse JotForm & Generate Client Code').first().json.brand_name, client_code: $('Parse JotForm & Generate Client Code').first().json.client_code, message: \"New project onboarded: \" + $('Parse JotForm & Generate Client Code').first().json.brand_name, payload: JSON.stringify({ client_code: $('Parse JotForm & Generate Client Code').first().json.client_code, brand_name: $('Parse JotForm & Generate Client Code').first().json.brand_name, num_scripts: $('Parse JotForm & Generate Client Code').first().json.num_scripts }), created_at: new Date().toISOString() } }] }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        29752,
+        8420
+      ],
+      "id": "d44c167d-c1e8-4076-8422-2ab00ea10574",
+      "name": "Write Event \u2014 Project Onboarded",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Build Brand record payload for Airtable upsert\n// Uses fieldsToMergeOn to avoid duplicates\n// ============================================================\nconst d = $('Parse JotForm & Generate Client Code').first().json;\n\n// Build brand fields from onboarding data\nconst fields = {\n  brand_name: d.brand_name,\n  primary_contact: d.client_name || '',\n  contact_email: d.client_email || '',\n  whatsapp: d.whatsapp_number || '',\n  website_url: d.website_url || '',\n  status: 'Active',\n  onboarded_date: new Date().toISOString().split('T')[0]\n};\n\n// Try to get Drive folder ID if available\ntry {\n  const driveFolder = $('Create Brand Folder in Drive').first().json;\n  if (driveFolder && driveFolder.id) {\n    fields.drive_folder_id = driveFolder.id;\n  }\n} catch(e) {}\n\n// Try to get ClickUp list ID if available\ntry {\n  const clickupList = $('Create Pipeline List in Folder').first().json;\n  if (clickupList && clickupList.id) {\n    fields.clickup_list_id = clickupList.id;\n  }\n} catch(e) {}\n\nreturn [{ json: {\n  body: {\n    performUpsert: { fieldsToMergeOn: ['brand_name'] },\n    records: [{ fields }]\n  }\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        29752,
+        8620
+      ],
+      "id": "brand_build",
+      "name": "Build Brand Record",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblEkb2WGoh407zEn",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        29972,
+        8620
+      ],
+      "id": "brand_upsert",
+      "name": "Upsert Brand in Airtable",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
     }
   ],
   "connections": {
@@ -963,6 +1067,28 @@
       "main": [
         [
           {
+            "node": "Try Create Folder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Try Create Folder": {
+      "main": [
+        [
+          {
+            "node": "List ClickUp Folders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List ClickUp Folders": {
+      "main": [
+        [
+          {
             "node": "Create Client Folder",
             "type": "main",
             "index": 0
@@ -980,13 +1106,6 @@
           },
           {
             "node": "Create Onboarding Doc",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Handle Error",
             "type": "main",
             "index": 0
           }
@@ -1211,6 +1330,16 @@
             "node": "Notify Team on Slack",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "Write Event \u2014 Project Onboarded",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Build Brand Record",
+            "type": "main",
+            "index": 0
           }
         ],
         [
@@ -1243,6 +1372,17 @@
           }
         ]
       ]
+    },
+    "Build Brand Record": {
+      "main": [
+        [
+          {
+            "node": "Upsert Brand in Airtable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
@@ -1255,9 +1395,9 @@
     "templateCredsSetupCompleted": true
   },
   "pinData": {},
-  "versionId": "64018dc3-9aa4-466c-a566-1449a3d372c4",
-  "activeVersionId": "64018dc3-9aa4-466c-a566-1449a3d372c4",
-  "versionCounter": 257,
+  "versionId": "10a09cf5-cf9d-42dd-92cf-08b925c34c27",
+  "activeVersionId": "10a09cf5-cf9d-42dd-92cf-08b925c34c27",
+  "versionCounter": 286,
   "triggerCount": 1,
   "shared": [
     {
@@ -1282,7 +1422,7 @@
             "userId": "ed50a507-d93d-45c3-9412-d80babb81dd0",
             "projectId": "AD8mXtbIf5cdYNIV",
             "user": {
-              "updatedAt": "2026-02-16T19:22:13.000Z",
+              "updatedAt": "2026-02-24T18:32:01.000Z",
               "createdAt": "2026-01-26T04:34:34.578Z",
               "id": "ed50a507-d93d-45c3-9412-d80babb81dd0",
               "email": "senseinfotechno@gmail.com",
@@ -1303,14 +1443,13 @@
                 "userActivatedAt": 1769404953077,
                 "easyAIWorkflowOnboarded": true,
                 "npsSurvey": {
-                  "waitingForResponse": true,
-                  "ignoredCount": 2,
-                  "lastShownAt": 1770721963325
+                  "responded": true,
+                  "lastShownAt": 1771407918931
                 }
               },
               "disabled": false,
               "mfaEnabled": false,
-              "lastActiveAt": "2026-02-16",
+              "lastActiveAt": "2026-02-24",
               "isPending": false
             }
           }
@@ -1320,9 +1459,9 @@
   ],
   "tags": [],
   "activeVersion": {
-    "updatedAt": "2026-02-17T09:37:10.068Z",
-    "createdAt": "2026-02-17T09:37:10.068Z",
-    "versionId": "64018dc3-9aa4-466c-a566-1449a3d372c4",
+    "updatedAt": "2026-02-25T06:27:32.109Z",
+    "createdAt": "2026-02-25T06:27:32.109Z",
+    "versionId": "10a09cf5-cf9d-42dd-92cf-08b925c34c27",
     "workflowId": "ZJfWCoCYf9c0O8tdywMTj",
     "nodes": [
       {
@@ -1468,11 +1607,11 @@
           "options": {}
         },
         "id": "fd315f0b-f668-4750-bfe1-463dd5abb9fd",
-        "name": "Create Client Folder",
+        "name": "Try Create Folder",
         "type": "n8n-nodes-base.httpRequest",
         "typeVersion": 4.2,
         "position": [
-          25600,
+          25500,
           8720
         ],
         "credentials": {
@@ -1481,7 +1620,43 @@
             "name": "ClickUp account"
           }
         },
-        "onError": "continueErrorOutput"
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "https://api.clickup.com/api/v2/space/90165772240/folder",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "clickUpApi",
+          "options": {}
+        },
+        "id": "w0-list-folders",
+        "name": "List ClickUp Folders",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          25700,
+          8720
+        ],
+        "credentials": {
+          "clickUpApi": {
+            "id": "CH8wDVhGoKw39AK1",
+            "name": "ClickUp account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "// Resolve the client folder \u2014 find by name from the folder list\nconst folderName = $('Parse JotForm & Generate Client Code').first().json.folder_name;\nconst folders = $input.first().json.folders || [];\nconst match = folders.find(f => f.name === folderName);\nif (!match) throw new Error('Folder not found: ' + folderName);\nreturn [{ json: { id: match.id, name: match.name } }];"
+        },
+        "id": "w0-resolve-folder",
+        "name": "Create Client Folder",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          25900,
+          8720
+        ]
       },
       {
         "parameters": {
@@ -1703,7 +1878,7 @@
           "select": "channel",
           "channelId": {
             "__rl": true,
-            "value": "C0AFBQ5UF0E",
+            "value": "C0AHQU1BUU8",
             "mode": "id"
           },
           "text": "={{ (() => {\nconst d = $('Parse JotForm & Generate Client Code').first().json;\nconst product = (d.product_feature || '').substring(0, 100);\nconst target = (d.target_user || '').substring(0, 100);\nconst diff = (d.differentiator || '').substring(0, 100);\nconst comp = d.compliance || 'None';\nconst dontSay = d.do_not_say || 'None';\nconst personality = d.brand_personality || 'Not specified';\nreturn `\ud83c\udfac *New UGC Client Onboarded!*\\n\\n*${d.client_code} \u2014 ${d.brand_name}*\\nProduct: ${product}\\nTarget: ${target}\\nDifferentiator: ${diff}\\nBrand: ${personality}\\n\\n\u26a0\ufe0f Compliance: ${comp}\\n\ud83d\udeab Do not: ${dontSay}\\n\\n\ud83d\udccb ClickUp: ${d.folder_name} created with 10 tasks (15-day timeline) + ${d.num_scripts || 0} UGC script cards + Chat Channel + Onboarding Brief Doc\\nAM: TBD\\n\\n_Let's make some fire ads!_ \ud83d\udd25`;\n})() }}",
@@ -1836,7 +2011,7 @@
       },
       {
         "parameters": {
-          "jsCode": "// ============================================================\n// Error Handler \u2014 Capture error details\n// ============================================================\n\nconst errorData = $input.first().json;\n\n// Try to get brand name from the parse node if it ran\nlet brand_name = 'Unknown';\nlet client_code = 'N/A';\ntry {\n  const parseData = $('Parse JotForm & Generate Client Code').first().json;\n  brand_name = parseData.brand_name || 'Unknown';\n  client_code = parseData.client_code || 'N/A';\n} catch (e) {\n  // Parse node may not have run\n}\n\nconst errorMessage = errorData.error?.message || errorData.message || 'Unknown error';\nconst errorNode = errorData.error?.node?.name || errorData.node || 'Unknown node';\n\nreturn [{\n  json: {\n    brand_name,\n    client_code,\n    error_message: errorMessage,\n    error_node: errorNode,\n    timestamp: new Date().toISOString()\n  }\n}];"
+          "jsCode": "// ============================================================\n// Error Handler \u2014 Capture error details\n// ============================================================\n\nconst errorData = $input.first().json;\n\n// Try to get brand name from the parse node if it ran\nlet brand_name = 'Unknown';\nlet client_code = 'N/A';\ntry {\n  const parseData = $('Parse JotForm & Generate Client Code').first().json;\n  brand_name = parseData.brand_name || 'Unknown';\n  client_code = parseData.client_code || 'N/A';\n} catch (e) {\n  // Parse node may not have run\n}\n\nconst errorMessage = errorData.error?.message || errorData.message || 'Unknown error';\nconst errorNode = errorData.error?.node?.name || errorData.node || 'Unknown node';\n\nreturn [{\n  json: {\n    brand_name,\n    client_code,\n    error_message: errorMessage,\n    error_node: errorNode,\n    created_at: new Date().toISOString()\n  }\n}];"
         },
         "id": "006a243d-a299-46d9-839f-23a41dcb5ed9",
         "name": "Handle Error",
@@ -2230,6 +2405,74 @@
           27344,
           8720
         ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblGhzSJ5RXWDS8h8",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "airtableTokenApi",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ records: [{ fields: { agent: \"onboarding\", event_type: \"status_change\", severity: \"info\", brand_name: $('Parse JotForm & Generate Client Code').first().json.brand_name, client_code: $('Parse JotForm & Generate Client Code').first().json.client_code, message: \"New project onboarded: \" + $('Parse JotForm & Generate Client Code').first().json.brand_name, payload: JSON.stringify({ client_code: $('Parse JotForm & Generate Client Code').first().json.client_code, brand_name: $('Parse JotForm & Generate Client Code').first().json.brand_name, num_scripts: $('Parse JotForm & Generate Client Code').first().json.num_scripts }), created_at: new Date().toISOString() } }] }) }}",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          29752,
+          8420
+        ],
+        "id": "d44c167d-c1e8-4076-8422-2ab00ea10574",
+        "name": "Write Event \u2014 Project Onboarded",
+        "credentials": {
+          "airtableTokenApi": {
+            "id": "WelvlJEjoHaI3l9G",
+            "name": "Airtable Personal Access Token account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "// ============================================================\n// Build Brand record payload for Airtable upsert\n// Uses fieldsToMergeOn to avoid duplicates\n// ============================================================\nconst d = $('Parse JotForm & Generate Client Code').first().json;\n\n// Build brand fields from onboarding data\nconst fields = {\n  brand_name: d.brand_name,\n  primary_contact: d.client_name || '',\n  contact_email: d.client_email || '',\n  whatsapp: d.whatsapp_number || '',\n  website_url: d.website_url || '',\n  status: 'Active',\n  onboarded_date: new Date().toISOString().split('T')[0]\n};\n\n// Try to get Drive folder ID if available\ntry {\n  const driveFolder = $('Create Brand Folder in Drive').first().json;\n  if (driveFolder && driveFolder.id) {\n    fields.drive_folder_id = driveFolder.id;\n  }\n} catch(e) {}\n\n// Try to get ClickUp list ID if available\ntry {\n  const clickupList = $('Create Pipeline List in Folder').first().json;\n  if (clickupList && clickupList.id) {\n    fields.clickup_list_id = clickupList.id;\n  }\n} catch(e) {}\n\nreturn [{ json: {\n  body: {\n    performUpsert: { fieldsToMergeOn: ['brand_name'] },\n    records: [{ fields }]\n  }\n} }];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          29752,
+          8620
+        ],
+        "id": "brand_build",
+        "name": "Build Brand Record",
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "method": "PATCH",
+          "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblEkb2WGoh407zEn",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "airtableTokenApi",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify($json.body) }}",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          29972,
+          8620
+        ],
+        "id": "brand_upsert",
+        "name": "Upsert Brand in Airtable",
+        "credentials": {
+          "airtableTokenApi": {
+            "id": "WelvlJEjoHaI3l9G",
+            "name": "Airtable Personal Access Token account"
+          }
+        },
+        "onError": "continueRegularOutput"
       }
     ],
     "connections": {
@@ -2281,6 +2524,28 @@
         "main": [
           [
             {
+              "node": "Try Create Folder",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Try Create Folder": {
+        "main": [
+          [
+            {
+              "node": "List ClickUp Folders",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "List ClickUp Folders": {
+        "main": [
+          [
+            {
               "node": "Create Client Folder",
               "type": "main",
               "index": 0
@@ -2298,13 +2563,6 @@
             },
             {
               "node": "Create Onboarding Doc",
-              "type": "main",
-              "index": 0
-            }
-          ],
-          [
-            {
-              "node": "Handle Error",
               "type": "main",
               "index": 0
             }
@@ -2529,6 +2787,16 @@
               "node": "Notify Team on Slack",
               "type": "main",
               "index": 0
+            },
+            {
+              "node": "Write Event \u2014 Project Onboarded",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Build Brand Record",
+              "type": "main",
+              "index": 0
             }
           ],
           [
@@ -2561,6 +2829,17 @@
             }
           ]
         ]
+      },
+      "Build Brand Record": {
+        "main": [
+          [
+            {
+              "node": "Upsert Brand in Airtable",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       }
     },
     "authors": "SenseInfo Tech",
@@ -2569,10 +2848,18 @@
     "autosaved": false,
     "workflowPublishHistory": [
       {
-        "createdAt": "2026-02-17T09:37:10.188Z",
-        "id": 77,
+        "createdAt": "2026-02-25T06:27:32.208Z",
+        "id": 474,
         "workflowId": "ZJfWCoCYf9c0O8tdywMTj",
-        "versionId": "64018dc3-9aa4-466c-a566-1449a3d372c4",
+        "versionId": "10a09cf5-cf9d-42dd-92cf-08b925c34c27",
+        "event": "activated",
+        "userId": "ed50a507-d93d-45c3-9412-d80babb81dd0"
+      },
+      {
+        "createdAt": "2026-02-25T06:27:33.947Z",
+        "id": 475,
+        "workflowId": "ZJfWCoCYf9c0O8tdywMTj",
+        "versionId": "10a09cf5-cf9d-42dd-92cf-08b925c34c27",
         "event": "activated",
         "userId": "ed50a507-d93d-45c3-9412-d80babb81dd0"
       }

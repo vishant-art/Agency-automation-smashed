@@ -1,0 +1,210 @@
+{
+  "name": "Calendar Booking Connector",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "calendar-booking",
+        "httpMethod": "POST",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 300],
+      "id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+      "name": "cal-webhook",
+      "webhookId": "calendar-booking"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body || $json;\nconst rawData = JSON.stringify(body).substring(0, 2000);\n\n// Helper: search answers array or flat body for a field by keyword\nfunction findAnswer(answers, body, keywords) {\n  if (answers && Array.isArray(answers)) {\n    for (const a of answers) {\n      const q = (a.question || a.label || a.key || '').toLowerCase();\n      for (const kw of keywords) {\n        if (q.includes(kw)) return a.answer || a.value || a.response || '';\n      }\n    }\n  }\n  // Also check flat body keys\n  for (const kw of keywords) {\n    for (const [k, v] of Object.entries(body)) {\n      if (k.toLowerCase().includes(kw) && typeof v === 'string') return v;\n    }\n  }\n  return '';\n}\n\nlet name = body.name || body.contact_name || body.full_name || '';\nlet email = body.email || body.contact_email || '';\nlet phone = body.phone || body.mobile || body.contact_phone || '';\nlet bookingDate = body.booking_date || body.start_time || body.date || body.scheduled_at || '';\n\n// DaySchedule sends answers array with form responses\nconst answers = body.answers || body.questions || body.responses || body.form_data || [];\n\n// Extract rich form data from DaySchedule booking questions\nconst website = findAnswer(answers, body, ['website', 'brand\\'s website', 'url', 'site']);\nconst leadSource = findAnswer(answers, body, ['find us', 'found us', 'hear about', 'source', 'how did you']);\nconst revenue = findAnswer(answers, body, ['revenue', 'monthly revenue', 'current revenue']);\nconst services = findAnswer(answers, body, ['looking for', 'services', 'what are you looking']);\nconst challenges = findAnswer(answers, body, ['challenge', 'biggest content', 'pain point', 'problem']);\nconst urgency = findAnswer(answers, body, ['urgent', 'urgently', 'timeline', 'when', 'get started']);\nconst budget = findAnswer(answers, body, ['budget', 'content budget', 'monthly budget']);\nconst perfMarketing = findAnswer(answers, body, ['performance marketing', 'meta and google', 'manage my']);\nconst idealOutcome = findAnswer(answers, body, ['ideal outcome', 'outcome for you', 'expect from']);\n\n// Derive company from website if not directly provided\nlet company = body.company || body.company_name || '';\nif (!company && website) {\n  company = website.replace(/^https?:\\/\\//, '').replace(/^www\\./, '').split('/')[0].split('.')[0];\n  company = company.charAt(0).toUpperCase() + company.slice(1);\n}\n\n// Map lead source to channel\nlet channel = 'calendar';\nif (leadSource.toLowerCase().includes('instagram') || leadSource.toLowerCase().includes('meta') || leadSource.toLowerCase().includes('fb')) channel = 'paid_social';\nelse if (leadSource.toLowerCase().includes('google')) channel = 'paid_search';\nelse if (leadSource.toLowerCase().includes('referral') || leadSource.toLowerCase().includes('friend')) channel = 'referral';\nelse if (leadSource.toLowerCase().includes('linkedin')) channel = 'linkedin';\n\n// Build rich notes\nconst noteLines = ['=== BOOKING FORM DATA ==='];\nif (bookingDate) noteLines.push('Call booked for: ' + bookingDate);\nif (website) noteLines.push('Website: ' + website);\nif (leadSource) noteLines.push('Source: ' + leadSource);\nif (revenue) noteLines.push('Monthly Revenue: ' + revenue);\nif (services) noteLines.push('Services Interested: ' + services);\nif (challenges) noteLines.push('Content Challenges: ' + challenges);\nif (urgency) noteLines.push('Urgency: ' + urgency);\nif (budget) noteLines.push('Budget: ' + budget);\nif (perfMarketing) noteLines.push('Performance Marketing: ' + perfMarketing);\nif (idealOutcome) noteLines.push('Ideal Outcome: ' + idealOutcome);\n\n// Build lead fields for Airtable (field names match Leads table schema)\n// Note: source is a select field — only use predefined values\nconst leadFields = {\n  contact_name: name,\n  email: email,\n  stage: 'New'\n};\nif (phone) leadFields.phone = phone;\nif (company) leadFields.company_name = company;\nif (website) leadFields.website = website;\n// Set next_follow_up to booking date or 2 days from now\nif (bookingDate) {\n  try { leadFields.next_follow_up = new Date(bookingDate).toISOString().split('T')[0]; } catch(e) {}\n}\nif (!leadFields.next_follow_up) {\n  const d = new Date(); d.setDate(d.getDate() + 2);\n  leadFields.next_follow_up = d.toISOString().split('T')[0];\n}\nleadFields.notes = noteLines.join('\\n');\n\nreturn [{\n  json: {\n    leadFields,\n    leadName: name,\n    company: company || '(not provided)',\n    email,\n    phone,\n    bookingDate,\n    website,\n    leadSource,\n    revenue,\n    services,\n    challenges,\n    urgency,\n    budget,\n    perfMarketing,\n    idealOutcome,\n    rawData\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [470, 300],
+      "id": "b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e",
+      "name": "cal-parse-booking"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tbl6qih4ODd7qKFZ1",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ fields: $json.leadFields }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [690, 300],
+      "id": "c3d4e5f6-a7b8-4c9d-0e1f-2a3b4c5d6e7f",
+      "name": "cal-create-lead",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ JSON.stringify({ success: true, message: 'Lead created', lead_id: $json.id || 'unknown' }) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [910, 200],
+      "id": "d4e5f6a7-b8c9-4d0e-1f2a-3b4c5d6e7f80",
+      "name": "cal-respond"
+    },
+    {
+      "parameters": {
+        "jsCode": "const lead = $('cal-parse-booking').first().json;\nconst airtableResult = $json;\nconst recordId = airtableResult?.id || 'unknown';\nconst error = airtableResult?.error || airtableResult?.statusCode >= 400;\n\nlet message = '';\nif (error) {\n  message = `:warning: *Calendar Booking — Lead Creation Failed*\\n\\n` +\n    `*Name:* ${lead.leadName}\\n` +\n    `*Email:* ${lead.email}\\n` +\n    `*Company:* ${lead.company}\\n` +\n    `*Booking:* ${lead.bookingDate || 'N/A'}\\n\\n` +\n    `_Error: Failed to create lead in Airtable. Please add manually._`;\n} else {\n  message = `:calendar: *New Call Booking Received*\\n\\n` +\n    `*Name:* ${lead.leadName}\\n` +\n    `*Email:* ${lead.email}\\n` +\n    `*Phone:* ${lead.phone || 'N/A'}\\n` +\n    `*Company:* ${lead.company}\\n`;\n  if (lead.website) message += `*Website:* ${lead.website}\\n`;\n  message += `*Booking:* ${lead.bookingDate || 'N/A'}\\n\\n`;\n  if (lead.leadSource) message += `:mag: *Source:* ${lead.leadSource}\\n`;\n  if (lead.revenue) message += `:chart_with_upwards_trend: *Revenue:* ${lead.revenue}\\n`;\n  if (lead.budget) message += `:moneybag: *Budget:* ${lead.budget}\\n`;\n  if (lead.urgency) message += `:zap: *Urgency:* ${lead.urgency}\\n`;\n  if (lead.services) message += `\\n:dart: *Services Interested:*\\n${lead.services}\\n`;\n  if (lead.challenges) message += `\\n:warning: *Content Challenges:*\\n${lead.challenges}\\n`;\n  if (lead.perfMarketing) message += `\\n:bar_chart: *Perf Marketing:* ${lead.perfMarketing}\\n`;\n  if (lead.idealOutcome) message += `\\n:star: *Ideal Outcome:* ${lead.idealOutcome}\\n`;\n  message += `\\n_Lead added to pipeline (ID: ${recordId})_`;\n}\n\nreturn [{ json: { message, leadName: lead.leadName, company: lead.company, _error: !!error } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [910, 400],
+      "id": "e5f6a7b8-c9d0-4e1f-2a3b-4c5d6e7f8091",
+      "name": "cal-prep-slack"
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0AHQU1BUU8",
+          "mode": "id"
+        },
+        "text": "={{ $json.message }}",
+        "otherOptions": {}
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [1130, 400],
+      "id": "f6a7b8c9-d0e1-4f2a-3b4c-5d6e7f809102",
+      "name": "cal-slack-notify",
+      "credentials": {
+        "slackApi": {
+          "id": "5Q37UpOjGx4YsbyC",
+          "name": "Slack account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblGhzSJ5RXWDS8h8",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ records: [{ fields: { event_type: 'new_lead_from_booking', source: 'calendar_connector', details: JSON.stringify({ lead_name: $('cal-prep-slack').first().json.leadName, company: $('cal-prep-slack').first().json.company }), status: 'unprocessed' } }] }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1350, 400],
+      "id": "a7b8c9d0-e1f2-4a3b-4c5d-6e7f80910213",
+      "name": "cal-write-event",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "content": "## Calendar Booking Connector\n\nReceives webhooks from booking/calendar tools and creates leads.\n\n**Supported formats:**\n- DaySchedule: `{ name, email, phone, booking_date, answers }`\n- Calendly: `{ payload: { name, email, questions_and_answers, scheduled_event } }`\n- Cal.com: `{ triggerEvent, payload: { attendees, startTime } }`\n- Generic: any JSON with name/email at top level\n\n**Webhook URL:** `POST /webhook/calendar-booking`\n\n**Flow:**\n1. Parse booking data from any calendar tool\n2. Create lead in Airtable Leads table\n3. Send Slack notification to #ugc-agent-notifications\n4. Log event to Agent_Events for orchestrator\n5. Respond to webhook with success/lead_id",
+        "width": 400,
+        "height": 320
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [250, 500],
+      "id": "b8c9d0e1-f2a3-4b4c-5d6e-7f8091021324",
+      "name": "cal-info-note"
+    }
+  ],
+  "connections": {
+    "cal-webhook": {
+      "main": [
+        [
+          {
+            "node": "cal-parse-booking",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "cal-parse-booking": {
+      "main": [
+        [
+          {
+            "node": "cal-create-lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "cal-create-lead": {
+      "main": [
+        [
+          {
+            "node": "cal-respond",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "cal-prep-slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "cal-prep-slack": {
+      "main": [
+        [
+          {
+            "node": "cal-slack-notify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "cal-slack-notify": {
+      "main": [
+        [
+          {
+            "node": "cal-write-event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null
+}

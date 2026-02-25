@@ -1,0 +1,492 @@
+{
+  "name": "Media Buying Monitor — Agent 6",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## MEDIA BUYING MONITOR — Agent 6\n\nRuns every 6 hours. For each active brand with an ad_account_id:\n1. Fetches last 7 days campaign insights from Meta Graph API\n2. Calculates ROAS, spend pacing, creative fatigue\n3. Gemini 2.5 Flash generates media buyer recommendations\n4. Posts actionable summary to Slack\n\nCredentials:\n- Meta Graph API (system user): G4AHd7ZseuLWhZkk\n- Gemini (Cosmisk AI): rIL63TG4xfMQL8uJ\n- Airtable: WelvlJEjoHaI3l9G\n- Slack: 5Q37UpOjGx4YsbyC",
+        "height": 380,
+        "width": 400,
+        "color": 7
+      },
+      "id": "mm-sticky",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -200,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "triggerAtHour": 2,
+              "hoursInterval": 6
+            }
+          ]
+        }
+      },
+      "id": "mm-schedule",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        280,
+        320
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "mm-manual",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        280,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Brands?filterByFormula={{ encodeURIComponent(\"AND({status}='Active', {ad_account_id} != '')\") }}&pageSize=100",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "options": {}
+      },
+      "id": "mm-fetch-brands",
+      "name": "Fetch Active Brands",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        580,
+        420
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const records = $input.first().json.records || [];\nif (!records.length) {\n  return [{ json: { _empty: true, error: 'No active brands with ad accounts found' } }];\n}\n\nconst brands = records.map(r => ({\n  json: {\n    _empty: false,\n    brand_record_id: r.id,\n    brand_name: r.fields.brand_name || 'Unknown Brand',\n    ad_account_id: r.fields.ad_account_id,\n    roas_target: parseFloat(r.fields.roas_target) || 3.0,\n    insights_url: `https://graph.facebook.com/v21.0/act_${r.fields.ad_account_id}/insights?fields=campaign_name,campaign_id,spend,impressions,clicks,cpc,cpm,frequency,actions,action_values&date_preset=last_7d&level=campaign&limit=50`\n  }\n}));\n\nreturn brands;"
+      },
+      "id": "mm-build-requests",
+      "name": "Build Meta API Requests",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "empty-check",
+              "leftValue": "={{ $json._empty }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "mm-has-brands",
+      "name": "Has Active Brands?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1140,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.insights_url }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "mm-fetch-insights",
+      "name": "Fetch Campaign Insights",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1440,
+        520
+      ],
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "G4AHd7ZseuLWhZkk",
+          "name": "Facebook Graph API account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst data = input.data || [];\n\n// Carry forward brand context from previous node via $('Build Meta API Requests')\nlet brand_name = 'Unknown Brand';\nlet roas_target = 3.0;\nlet ad_account_id = '';\n\ntry {\n  const prev = $('Build Meta API Requests').first().json;\n  brand_name = prev.brand_name || brand_name;\n  roas_target = prev.roas_target || roas_target;\n  ad_account_id = prev.ad_account_id || ad_account_id;\n} catch (e) {\n  // fallback\n}\n\nif (!data.length) {\n  return [{\n    json: {\n      brand_name,\n      ad_account_id,\n      roas_target,\n      has_data: false,\n      summary: `No campaign data found for ${brand_name} (act_${ad_account_id}) in the last 7 days.`,\n      campaigns: [],\n      totals: { spend: 0, impressions: 0, clicks: 0, purchases: 0, revenue: 0, roas: 0 }\n    }\n  }];\n}\n\nlet totalSpend = 0;\nlet totalImpressions = 0;\nlet totalClicks = 0;\nlet totalPurchases = 0;\nlet totalRevenue = 0;\n\nconst campaigns = data.map(c => {\n  const spend = parseFloat(c.spend || 0);\n  const impressions = parseInt(c.impressions || 0);\n  const clicks = parseInt(c.clicks || 0);\n  const frequency = parseFloat(c.frequency || 0);\n  const cpc = parseFloat(c.cpc || 0);\n  const cpm = parseFloat(c.cpm || 0);\n\n  const actions = c.actions || [];\n  const actionValues = c.action_values || [];\n\n  const purchaseAction = actions.find(a => a.action_type === 'purchase') || {};\n  const purchaseValue = actionValues.find(a => a.action_type === 'purchase') || {};\n  const purchases = parseInt(purchaseAction.value || 0);\n  const revenue = parseFloat(purchaseValue.value || 0);\n  const roas = spend > 0 ? revenue / spend : 0;\n\n  // Fatigue detection\n  const is_fatigued = frequency > 3;\n\n  // ROAS flags\n  const roas_below_target = roas > 0 && roas < roas_target;\n  const roas_strong = roas >= roas_target;\n\n  totalSpend += spend;\n  totalImpressions += impressions;\n  totalClicks += clicks;\n  totalPurchases += purchases;\n  totalRevenue += revenue;\n\n  return {\n    campaign_name: c.campaign_name || c.campaign_id,\n    campaign_id: c.campaign_id,\n    spend: spend.toFixed(2),\n    impressions,\n    clicks,\n    cpc: cpc.toFixed(2),\n    cpm: cpm.toFixed(2),\n    frequency: frequency.toFixed(2),\n    purchases,\n    revenue: revenue.toFixed(2),\n    roas: roas.toFixed(2),\n    is_fatigued,\n    roas_below_target,\n    roas_strong\n  };\n});\n\n// Sort by spend desc\ncampaigns.sort((a, b) => parseFloat(b.spend) - parseFloat(a.spend));\n\nconst overallRoas = totalSpend > 0 ? (totalRevenue / totalSpend) : 0;\n\n// Flag summary\nconst fatiguedCampaigns = campaigns.filter(c => c.is_fatigued);\nconst underperformers = campaigns.filter(c => c.roas_below_target);\nconst topPerformers = campaigns.filter(c => c.roas_strong).sort((a, b) => parseFloat(b.roas) - parseFloat(a.roas));\n\nreturn [{\n  json: {\n    brand_name,\n    ad_account_id,\n    roas_target,\n    has_data: true,\n    totals: {\n      spend: totalSpend.toFixed(2),\n      impressions: totalImpressions,\n      clicks: totalClicks,\n      purchases: totalPurchases,\n      revenue: totalRevenue.toFixed(2),\n      roas: overallRoas.toFixed(2),\n      ctr: totalImpressions > 0 ? ((totalClicks / totalImpressions) * 100).toFixed(2) : '0.00'\n    },\n    campaigns,\n    fatigued_count: fatiguedCampaigns.length,\n    underperformer_count: underperformers.length,\n    top_performer_count: topPerformers.length,\n    fatigued_campaigns: fatiguedCampaigns.map(c => c.campaign_name),\n    underperforming_campaigns: underperformers.map(c => `${c.campaign_name} (${c.roas} ROAS vs ${roas_target} target)`),\n    top_campaigns: topPerformers.slice(0, 3).map(c => `${c.campaign_name} (${c.roas} ROAS)`)\n  }\n}];"
+      },
+      "id": "mm-aggregate-results",
+      "name": "Aggregate Campaign Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1740,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-data-check",
+              "leftValue": "={{ $json.has_data }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "mm-has-data",
+      "name": "Has Campaign Data?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2040,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ systemInstruction: { parts: [{ text: 'You are a senior media buyer at Smashed Agency, a performance marketing agency. Your job is to analyze Meta ad campaign data and give brutally honest, actionable recommendations. You think in terms of ROAS, CPA, and scaling winners. You are NOT generic — you give SPECIFIC campaign-level recommendations like \"Pause Campaign X (1.2 ROAS, wasting $430/week) and reallocate to Campaign Y (5.1 ROAS, room to scale).\" You flag: (1) campaigns with ROAS below target — recommend pause or iterate, (2) creative fatigue (frequency > 3) — recommend new creatives, (3) budget pacing issues — underspend means missed opportunity, overspend means burning cash, (4) scaling opportunities — campaigns with strong ROAS that could handle more budget. Format your response as a Slack message using *bold*, _italic_, and bullet points. Keep it under 2000 characters. Start with a one-line verdict (e.g. \"Overall: Bleeding money on 3 campaigns, 1 winner worth scaling.\"). Then list specific actions.' }] }, contents: [{ role: 'user', parts: [{ text: `Analyze this brand\\'s Meta ad performance for the last 7 days and give me specific, actionable media buying recommendations.\\n\\nBrand: ${$json.brand_name}\\nAd Account: act_${$json.ad_account_id}\\nROAS Target: ${$json.roas_target}x\\n\\nOverall Totals:\\n- Spend: $${$json.totals.spend}\\n- Revenue: $${$json.totals.revenue}\\n- ROAS: ${$json.totals.roas}x (target: ${$json.roas_target}x)\\n- Impressions: ${$json.totals.impressions}\\n- Clicks: ${$json.totals.clicks}\\n- CTR: ${$json.totals.ctr}%\\n- Purchases: ${$json.totals.purchases}\\n\\nFlags:\\n- Fatigued campaigns (frequency > 3): ${$json.fatigued_count} — ${$json.fatigued_campaigns.join(', ') || 'None'}\\n- Underperformers (ROAS below ${$json.roas_target}x): ${$json.underperformer_count} — ${$json.underperforming_campaigns.join(', ') || 'None'}\\n- Top performers: ${$json.top_campaigns.join(', ') || 'None'}\\n\\nCampaign Breakdown:\\n${$json.campaigns.map(c => `- ${c.campaign_name}: Spend $${c.spend} | Rev $${c.revenue} | ROAS ${c.roas}x | Freq ${c.frequency} | CPC $${c.cpc} | Purchases ${c.purchases}${c.is_fatigued ? ' [FATIGUED]' : ''}${c.roas_below_target ? ' [BELOW TARGET]' : ''}${c.roas_strong ? ' [STRONG]' : ''}`).join('\\n')}` }] }], generationConfig: { temperature: 0.4, maxOutputTokens: 2048 } }) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "mm-gemini-analyze",
+      "name": "Gemini — Media Buyer Analysis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2340,
+        440
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "rIL63TG4xfMQL8uJ",
+          "name": "Cosmisk AI"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\n\n// Extract Gemini response\nlet analysis = 'Unable to generate analysis.';\ntry {\n  analysis = input.candidates[0].content.parts[0].text;\n} catch (e) {\n  analysis = `Gemini analysis failed: ${e.message}. Raw: ${JSON.stringify(input).substring(0, 500)}`;\n}\n\n// Get brand context from upstream\nlet brand_name = 'Unknown Brand';\nlet totals = {};\nlet roas_target = 3.0;\ntry {\n  const agg = $('Aggregate Campaign Results').first().json;\n  brand_name = agg.brand_name;\n  totals = agg.totals;\n  roas_target = agg.roas_target;\n} catch (e) {}\n\n// Build Slack message\nconst roasEmoji = parseFloat(totals.roas || 0) >= roas_target ? ':white_check_mark:' : ':warning:';\nconst header = `:bar_chart: *Media Monitor — ${brand_name}* (Last 7 Days)\\n${roasEmoji} Spend: $${totals.spend || '0'} | Revenue: $${totals.revenue || '0'} | ROAS: ${totals.roas || '0'}x (target ${roas_target}x)\\n---`;\n\nconst message = `${header}\\n\\n${analysis}`;\n\nreturn [{ json: { brand_name, message, totals, roas_target } }];"
+      },
+      "id": "mm-format-slack",
+      "name": "Format Slack Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0AFBQ5UF0E",
+          "mode": "id"
+        },
+        "text": "={{ $json.message }}",
+        "otherOptions": {}
+      },
+      "id": "mm-slack-notify",
+      "name": "Post to Slack",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        2940,
+        440
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "5Q37UpOjGx4YsbyC",
+          "name": "Slack account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const brand_name = $json.brand_name || 'Unknown';\nconst summary = $json.summary || `No data for ${brand_name}`;\n\nconst message = `:bar_chart: *Media Monitor — ${brand_name}*\\n${summary}`;\n\nreturn [{ json: { brand_name, message } }];"
+      },
+      "id": "mm-no-data-message",
+      "name": "Build No-Data Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2340,
+        680
+      ]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0AFBQ5UF0E",
+          "mode": "id"
+        },
+        "text": "={{ $json.message }}",
+        "otherOptions": {}
+      },
+      "id": "mm-slack-no-data",
+      "name": "Slack — No Data",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        2640,
+        680
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "5Q37UpOjGx4YsbyC",
+          "name": "Slack account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// No active brands found — just log and stop\nreturn [{ json: { message: 'No active brands with ad accounts found. Skipping media monitor run.' } }];"
+      },
+      "id": "mm-no-brands",
+      "name": "No Active Brands",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblGhzSJ5RXWDS8h8",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ records: [{ fields: { agent: \"media_monitor\", event_type: \"campaign_alert\", brand_name: $json.brand_name || \"\", client_code: \"\", severity: parseFloat(String($json.totals?.roas || \"0\")) >= ($json.roas_target || 3) ? \"info\" : \"warning\", message: \"Campaign update for \" + $json.brand_name, payload: JSON.stringify({ brand_name: $json.brand_name, spend: $json.totals?.spend, revenue: $json.totals?.revenue, roas: $json.totals?.roas, roas_target: $json.roas_target }), created_at: new Date().toISOString() } }] }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2840,
+        240
+      ],
+      "id": "e3ef5206-4e05-41e2-8e1b-592fad08e8c8",
+      "name": "Write Event — Campaign Alert",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Active Brands",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Active Brands",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Active Brands": {
+      "main": [
+        [
+          {
+            "node": "Build Meta API Requests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Meta API Requests": {
+      "main": [
+        [
+          {
+            "node": "Has Active Brands?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Active Brands?": {
+      "main": [
+        [
+          {
+            "node": "No Active Brands",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fetch Campaign Insights",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Campaign Insights": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Campaign Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Campaign Results": {
+      "main": [
+        [
+          {
+            "node": "Has Campaign Data?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Campaign Data?": {
+      "main": [
+        [
+          {
+            "node": "Gemini — Media Buyer Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build No-Data Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini — Media Buyer Analysis": {
+      "main": [
+        [
+          {
+            "node": "Format Slack Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Slack Message": {
+      "main": [
+        [
+          {
+            "node": "Post to Slack",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Write Event — Campaign Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build No-Data Message": {
+      "main": [
+        [
+          {
+            "node": "Slack — No Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "tags": []
+}

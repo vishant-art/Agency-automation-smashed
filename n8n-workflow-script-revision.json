@@ -1,0 +1,514 @@
+{
+  "name": "UGC Script Revision — Feedback Loop",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ugc-script-revision",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "sr-webhook",
+      "name": "Webhook — Script Revision",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [
+        280,
+        320
+      ],
+      "webhookId": "ugc-script-revision-webhook",
+      "credentials": {}
+    },
+    {
+      "parameters": {},
+      "id": "sr-manual-trigger",
+      "name": "Manual Trigger — Test",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        280,
+        -140
+      ],
+      "credentials": {}
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { body: { project_id: 'rec_TEST_123', script_ids: [], source: 'pm_comments', manual_notes: '' } } }];"
+      },
+      "id": "sr-test-data",
+      "name": "Set Test Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        580,
+        -140
+      ],
+      "credentials": {}
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || $input.first().json;\nconst project_id = (body.project_id || '').trim();\nconst script_ids = body.script_ids || [];\nconst source = (body.source || 'pm_comments').trim();\nconst manual_notes = (body.manual_notes || '').trim();\n\nif (!project_id) throw new Error('project_id is required');\n\nreturn [{ json: { project_id, script_ids, source, manual_notes } }];"
+      },
+      "id": "sr-extract-payload",
+      "name": "Extract Revision Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        580,
+        320
+      ],
+      "credentials": {}
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Projects/{{ $json.project_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "options": {}
+      },
+      "id": "sr-fetch-project",
+      "name": "Fetch Project",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        940,
+        320
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Scripts?filterByFormula={{ encodeURIComponent(\"AND(FIND('\" + $('Fetch Project').first().json.fields.client_code + \"', ARRAYJOIN({project_id})) > 0, {overall_status} != 'Delivered')\") }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "options": {}
+      },
+      "id": "sr-fetch-scripts",
+      "name": "Fetch Scripts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1300,
+        320
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const payload = $('Extract Revision Payload').first().json;\nconst rawProject = $('Fetch Project').first().json;\nconst project = rawProject.fields ? { id: rawProject.id, ...rawProject.fields } : rawProject;\n\nconst rawScripts = $input.first().json.records || [];\nlet scripts = rawScripts.map(r => ({ id: r.id, ...r.fields }));\n\n// Filter by script_ids if provided\nif (payload.script_ids && payload.script_ids.length > 0) {\n  scripts = scripts.filter(s => payload.script_ids.includes(s.id));\n}\n\n// Only revise scripts that have google_doc_id\nscripts = scripts.filter(s => s.google_doc_id);\n\nif (scripts.length === 0) {\n  throw new Error('No scripts with google_doc_id found for revision');\n}\n\nreturn scripts.map(s => ({ json: {\n  ...payload,\n  project,\n  script: s,\n  brand_name: project.brand_name || 'Brand'\n}}));"
+      },
+      "id": "sr-merge-context",
+      "name": "Merge Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1660,
+        320
+      ],
+      "credentials": {}
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://www.googleapis.com/drive/v3/files/{{ $json.script.google_doc_id }}/comments?fields=comments(id,content,quotedFileContent,resolved,createdTime,author(displayName))&includeDeleted=false",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "options": {}
+      },
+      "id": "sr-fetch-comments",
+      "name": "Fetch Google Docs Comments",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2020,
+        320
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "ZYBF6pP5UxUqJgVI",
+          "name": "Google Drive account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $('Merge Context').item;\nconst d = data.json;\nconst script = d.script;\nconst comments = $input.first().json.comments || [];\nconst unresolvedComments = comments.filter(c => !c.resolved);\nconst manualNotes = d.manual_notes || '';\n\n// Build feedback section\nlet feedback = '';\nunresolvedComments.forEach((c, i) => {\n  const quoted = c.quotedFileContent?.value || '';\n  feedback += `[${i+1}] On \"${quoted}\": \"${c.content}\" — ${c.author?.displayName || 'Reviewer'}\\n`;\n});\nif (manualNotes) {\n  feedback += `\\n[Manual Notes]: \"${manualNotes}\"\\n`;\n}\n\nif (!feedback.trim() && !manualNotes) {\n  feedback = 'No specific comments found. Please review and improve the script quality overall.';\n}\n\nconst prompt = `You are revising an existing UGC script based on feedback.\n\n== CURRENT SCRIPT ==\nConcept: ${script.concept_name || 'N/A'}\nHook: ${script.hook_1 || script.hook || 'N/A'}\nFull Script: ${script.full_script || 'N/A'}\nCreative Table: ${script.creative_table_json || '[]'}\n\n== FEEDBACK COMMENTS ==\n${feedback}\n\n== INSTRUCTIONS ==\n1. Address EVERY comment listed above\n2. Preserve the overall concept, hook style, and format\n3. Only change what the feedback specifically asks for\n4. Keep the same structure and flow\n5. Return the COMPLETE revised script in this JSON format:\n\n\\`\\`\\`json\n{\n  \"hook_1\": \"revised main hook\",\n  \"hook_2\": \"revised alternative hook\",\n  \"hook_3\": \"revised third hook\",\n  \"full_script\": \"complete revised script text\",\n  \"creative_table\": [\n    { \"voiceover\": \"...\", \"visuals\": \"...\", \"references\": \"...\" }\n  ],\n  \"revision_summary\": \"Brief summary of what was changed and why\"\n}\n\\`\\`\\`\n\nOutput ONLY valid JSON.`;\n\nconst commentIds = unresolvedComments.map(c => c.id);\n\nreturn [{ json: {\n  ...d,\n  revision_prompt: prompt,\n  comment_ids: commentIds,\n  comment_count: unresolvedComments.length\n}}];"
+      },
+      "id": "sr-build-prompt",
+      "name": "Build Revision Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2380,
+        320
+      ],
+      "credentials": {}
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst body = {\n  systemInstruction: { parts: [{ text: 'You are an expert UGC script writer. Revise scripts based on feedback while preserving the creative direction.' }] },\n  contents: [{ role: 'user', parts: [{ text: d.revision_prompt }] }],\n  generationConfig: { temperature: 0.4, maxOutputTokens: 4096 }\n};\nreturn [{ json: { ...d, gemini_body: JSON.stringify(body) } }];"
+      },
+      "id": "sr-build-request",
+      "name": "Build Gemini Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2740,
+        320
+      ],
+      "credentials": {}
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.gemini_body }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "sr-gemini-revise",
+      "name": "Gemini Revision API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3100,
+        320
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "rIL63TG4xfMQL8uJ",
+          "name": "Cosmisk AI"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $('Build Revision Prompt').item.json;\nconst raw = $input.first().json.candidates?.[0]?.content?.parts?.[0]?.text || '';\n\nlet cleanOutput = raw\n  .replace(/<thinking>[\\s\\S]*?<\\/thinking>/gi, '')\n  .replace(/```json\\s*/gi, '')\n  .replace(/```\\s*/g, '')\n  .trim();\n\nlet revised;\ntry {\n  revised = JSON.parse(cleanOutput);\n} catch(e) {\n  const match = cleanOutput.match(/\\{[\\s\\S]*\\}/);\n  if (match) {\n    try { revised = JSON.parse(match[0]); } catch(e2) {\n      revised = { full_script: d.script.full_script, revision_summary: 'Failed to parse revision' };\n    }\n  } else {\n    revised = { full_script: d.script.full_script, revision_summary: 'Failed to parse revision' };\n  }\n}\n\nconst currentVersion = parseInt(d.script.version) || 1;\n\nreturn [{ json: {\n  script_id: d.script.id,\n  google_doc_id: d.script.google_doc_id,\n  project_id: d.project_id,\n  brand_name: d.brand_name,\n  concept_name: d.script.concept_name || 'Script',\n  script_number: d.script.script_number || 0,\n  source: d.source,\n  comment_ids: d.comment_ids,\n  comment_count: d.comment_count,\n  new_version: currentVersion + 1,\n  hook_1: revised.hook_1 || d.script.hook_1 || '',\n  hook_2: revised.hook_2 || d.script.hook_2 || '',\n  hook_3: revised.hook_3 || d.script.hook_3 || '',\n  full_script: revised.full_script || d.script.full_script || '',\n  creative_table_json: revised.creative_table ? JSON.stringify(revised.creative_table) : (d.script.creative_table_json || '[]'),\n  revision_notes: revised.revision_summary || 'Script revised based on feedback'\n}}];"
+      },
+      "id": "sr-parse-revision",
+      "name": "Parse Revised Script",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3460,
+        320
+      ],
+      "credentials": {}
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Scripts/{{ $json.script_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ fields: { version: $json.new_version, hook_1: $json.hook_1, hook_2: $json.hook_2, hook_3: $json.hook_3, full_script: $json.full_script, creative_table_json: $json.creative_table_json, revision_notes: $json.revision_notes, overall_status: $json.source === 'client_comments' ? 'Client Review' : 'PM Review', last_comment_check: new Date().toISOString() } }) }}",
+        "options": {}
+      },
+      "id": "sr-update-airtable",
+      "name": "Update Script in Airtable",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3820,
+        320
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build HTTP requests to resolve each comment\nconst d = $input.first().json;\nconst commentIds = d.comment_ids || [];\nconst docId = d.google_doc_id;\n\n// Return items for each comment to resolve\nif (commentIds.length === 0) return [{ json: d }];\n\nconst items = commentIds.map(cId => ({\n  json: {\n    ...d,\n    resolve_url: `https://www.googleapis.com/drive/v3/files/${docId}/comments/${cId}`,\n    resolve_body: JSON.stringify({ resolved: true })\n  }\n}));\nreturn items;"
+      },
+      "id": "sr-resolve-comments",
+      "name": "Resolve Comments",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4180,
+        320
+      ],
+      "credentials": {}
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $json.resolve_url }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.resolve_body }}",
+        "options": {}
+      },
+      "id": "sr-resolve-api",
+      "name": "Resolve Comment API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4540,
+        320
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "ZYBF6pP5UxUqJgVI",
+          "name": "Google Drive account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0AG86W1XT2",
+          "mode": "id"
+        },
+        "text": "={{ `Scripts revised for ${$('Parse Revised Script').first().json.brand_name} (v${$('Parse Revised Script').first().json.new_version}). ${$('Parse Revised Script').first().json.comment_count} comments addressed for \"${$('Parse Revised Script').first().json.concept_name}\".\n\nDoc: https://docs.google.com/document/d/${$('Parse Revised Script').first().json.google_doc_id}/edit` }}",
+        "otherOptions": {}
+      },
+      "id": "sr-slack-notify",
+      "name": "Slack — Revision Complete",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        4900,
+        320
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "5Q37UpOjGx4YsbyC",
+          "name": "Slack account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'success', revised_scripts: 1, version: $('Parse Revised Script').first().json.new_version, comments_addressed: $('Parse Revised Script').first().json.comment_count }) }}",
+        "options": {}
+      },
+      "id": "sr-respond",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        5260,
+        320
+      ],
+      "credentials": {}
+    }
+  ],
+  "connections": {
+    "Webhook — Script Revision": {
+      "main": [
+        [
+          {
+            "node": "Extract Revision Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger — Test": {
+      "main": [
+        [
+          {
+            "node": "Set Test Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Test Data": {
+      "main": [
+        [
+          {
+            "node": "Extract Revision Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Revision Payload": {
+      "main": [
+        [
+          {
+            "node": "Fetch Project",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Project": {
+      "main": [
+        [
+          {
+            "node": "Fetch Scripts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Scripts": {
+      "main": [
+        [
+          {
+            "node": "Merge Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Context": {
+      "main": [
+        [
+          {
+            "node": "Fetch Google Docs Comments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Google Docs Comments": {
+      "main": [
+        [
+          {
+            "node": "Build Revision Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Revision Prompt": {
+      "main": [
+        [
+          {
+            "node": "Build Gemini Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Gemini Request": {
+      "main": [
+        [
+          {
+            "node": "Gemini Revision API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Revision API": {
+      "main": [
+        [
+          {
+            "node": "Parse Revised Script",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Revised Script": {
+      "main": [
+        [
+          {
+            "node": "Update Script in Airtable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Script in Airtable": {
+      "main": [
+        [
+          {
+            "node": "Resolve Comments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve Comments": {
+      "main": [
+        [
+          {
+            "node": "Resolve Comment API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve Comment API": {
+      "main": [
+        [
+          {
+            "node": "Slack — Revision Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack — Revision Complete": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner"
+  }
+}

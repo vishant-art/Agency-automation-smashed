@@ -1,0 +1,285 @@
+{
+  "name": "UGC Comment Watch \u2014 Google Docs Feedback",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      },
+      "id": "cw-schedule",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        280,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Projects?filterByFormula={{ encodeURIComponent(\"OR({status}='Script Review',{status}='Client Review')\") }}&pageSize=100",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "options": {}
+      },
+      "id": "cw-fetch-projects",
+      "name": "Fetch Active Projects",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        580,
+        320
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const records = $input.first().json.records || [];\nif (records.length === 0) return [];\nconst projects = records.map(r => ({ id: r.id, ...r.fields }));\nreturn projects.map(p => ({ json: p }));"
+      },
+      "id": "cw-check-projects",
+      "name": "Check If Projects Found",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        940,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Scripts?filterByFormula={{ encodeURIComponent(\"AND(FIND('\" + $json.client_code + \"', ARRAYJOIN({project_id})) > 0, {google_doc_id} != '', {overall_status} != 'Delivered')\") }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "options": {}
+      },
+      "id": "cw-fetch-scripts",
+      "name": "Fetch Scripts for Project",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1300,
+        320
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const projectData = $('Check If Projects Found').item;\nconst records = $input.first().json.records || [];\nif (records.length === 0) return [];\n\nconst items = [];\nfor (const r of records) {\n  const s = { id: r.id, ...r.fields };\n  const docId = s.google_doc_id;\n  if (!docId) continue;\n  \n  items.push({ json: {\n    script_id: s.id,\n    google_doc_id: docId,\n    concept_name: s.concept_name || 'Script',\n    script_number: s.script_number || 0,\n    last_comment_check: s.last_comment_check || '2000-01-01T00:00:00Z',\n    project_id: projectData.json.id,\n    brand_name: projectData.json.brand_name || 'Brand',\n    client_code: projectData.json.client_code || '',\n    project_status: projectData.json.status || ''\n  }});\n}\nreturn items;"
+      },
+      "id": "cw-build-checks",
+      "name": "Build Comment Check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1660,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://www.googleapis.com/drive/v3/files/{{ $json.google_doc_id }}/comments?fields=comments(id,content,quotedFileContent,resolved,createdTime,author(displayName))&includeDeleted=false",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "options": {}
+      },
+      "id": "cw-fetch-comments",
+      "name": "Fetch Google Docs Comments",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2020,
+        320
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "ZYBF6pP5UxUqJgVI",
+          "name": "Google Drive account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const scriptData = $('Build Comment Check').item;\nconst comments = $input.first().json.comments || [];\nconst lastCheck = new Date(scriptData.json.last_comment_check || '2000-01-01T00:00:00Z');\n\nconst newUnresolved = comments.filter(c => \n  !c.resolved && new Date(c.createdTime) > lastCheck\n);\n\nif (newUnresolved.length === 0) return [];\n\nreturn [{ json: {\n  ...scriptData.json,\n  new_comments: newUnresolved.map(c => ({\n    id: c.id,\n    content: c.content,\n    quoted_text: c.quotedFileContent?.value || '',\n    author: c.author?.displayName || 'Unknown',\n    created: c.createdTime\n  })),\n  comment_count: newUnresolved.length\n}}];"
+      },
+      "id": "cw-filter-comments",
+      "name": "Filter New Unresolved Comments",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2380,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0AG86W1XT2",
+          "mode": "id"
+        },
+        "text": "={{ `New comments on ${$json.brand_name} scripts:\\n\\n*${$json.concept_name}* (Script #${$json.script_number}) \u2014 ${$json.comment_count} new comment(s)\\n\\n` + $json.new_comments.map((c, i) => `${i+1}. \"${c.content.substring(0, 100)}\" \u2014 _${c.author}_`).join('\\n') + `\\n\\nDoc: https://docs.google.com/document/d/${$json.google_doc_id}/edit` }}",
+        "otherOptions": {}
+      },
+      "id": "cw-slack-notify",
+      "name": "Send Slack Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        2740,
+        320
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "5Q37UpOjGx4YsbyC",
+          "name": "Slack account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Scripts/{{ $json.script_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ fields: { last_comment_check: new Date().toISOString() } }) }}",
+        "options": {}
+      },
+      "id": "cw-update-timestamp",
+      "name": "Update Last Comment Check",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3100,
+        320
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Active Projects",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Active Projects": {
+      "main": [
+        [
+          {
+            "node": "Check If Projects Found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check If Projects Found": {
+      "main": [
+        [
+          {
+            "node": "Fetch Scripts for Project",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Scripts for Project": {
+      "main": [
+        [
+          {
+            "node": "Build Comment Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Comment Check": {
+      "main": [
+        [
+          {
+            "node": "Fetch Google Docs Comments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Google Docs Comments": {
+      "main": [
+        [
+          {
+            "node": "Filter New Unresolved Comments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter New Unresolved Comments": {
+      "main": [
+        [
+          {
+            "node": "Send Slack Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Slack Notification": {
+      "main": [
+        [
+          {
+            "node": "Update Last Comment Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner"
+  }
+}

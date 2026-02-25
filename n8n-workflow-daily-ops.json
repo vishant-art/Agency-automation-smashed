@@ -1,0 +1,429 @@
+{
+  "name": "Agent 1 — Daily Operations Briefing",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 2,
+              "triggerAtMinute": 30
+            }
+          ]
+        }
+      },
+      "id": "daily-ops-trigger",
+      "name": "Schedule — 8AM IST",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        400,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Fetch all data from Airtable in parallel using this.helpers.httpRequest\nconst baseUrl = 'https://api.airtable.com/v0/appvFxwZc9yU8o8pK';\n\nconst headers = {}; // Auth handled by predefinedCredentialType via HTTP Request nodes\n// Use this.helpers.httpRequestWithAuthentication is NOT available in Code nodes\n// So we'll output URLs for downstream HTTP Request nodes\n\n// Instead, let's just output a trigger signal\nreturn [{ json: { trigger: true, timestamp: new Date().toISOString() } }];"
+      },
+      "id": "daily-ops-init",
+      "name": "Init",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        620,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Projects?filterByFormula=AND(NOT(%7Bstatus%7D%3D'Delivered')%2CNOT(%7Bstatus%7D%3D'Churned'))&pageSize=100",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "options": {}
+      },
+      "id": "daily-ops-fetch-projects",
+      "name": "Fetch Active Projects",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        860,
+        200
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Scripts?filterByFormula=OR(%7Bstatus%7D%3D'Draft'%2C%7Bstatus%7D%3D'In%20Review'%2C%7Bstatus%7D%3D'Client%20Review')&pageSize=100",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "options": {}
+      },
+      "id": "daily-ops-fetch-scripts",
+      "name": "Fetch Pending Scripts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        860,
+        400
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Leads?filterByFormula=AND(IS_BEFORE(%7Bnext_follow_up%7D%2CDATEADD(TODAY()%2C1%2C'days'))%2C%7Bnext_follow_up%7D!%3D'')&pageSize=100",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "options": {}
+      },
+      "id": "daily-ops-fetch-leads",
+      "name": "Fetch Due Follow-ups",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        860,
+        600
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Invoices?filterByFormula=%7Bstatus%7D%3D'Overdue'&pageSize=100",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "options": {}
+      },
+      "id": "daily-ops-fetch-invoices",
+      "name": "Fetch Overdue Invoices",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        860,
+        800
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Aggregate all parallel Airtable responses\n// n8n runs Code node once per item, but with wait-for-all we get all items\nconst allItems = $input.all();\n\nlet projects = [];\nlet scripts = [];\nlet leads = [];\nlet invoices = [];\nlet events = [];\n\nfor (const item of allItems) {\n  const records = item.json.records || [];\n  if (records.length === 0) continue;\n  \n  const firstFields = records[0]?.fields || {};\n  \n  // Identify which table this is from based on field names\n  if ('event_type' in firstFields || 'agent_name' in firstFields || 'event_source' in firstFields) {\n    events = records.map(r => ({ id: r.id, ...r.fields }));\n  } else if ('client_code' in firstFields || 'num_scripts' in firstFields || ('brand_name' in firstFields && 'status' in firstFields && !('services' in firstFields))) {\n    projects = records.map(r => ({ id: r.id, ...r.fields }));\n  } else if ('script_title' in firstFields || 'script_number' in firstFields || 'google_doc_id' in firstFields) {\n    scripts = records.map(r => ({ id: r.id, ...r.fields }));\n  } else if ('company_name' in firstFields || ('next_follow_up' in firstFields && 'stage' in firstFields)) {\n    leads = records.map(r => ({ id: r.id, ...r.fields }));\n  } else if ('invoice_number' in firstFields || 'payment_link' in firstFields) {\n    invoices = records.map(r => ({ id: r.id, ...r.fields }));\n  }\n}\n\nconst now = new Date();\nconst todayStr = now.toISOString().split('T')[0];\n\n// Detect stuck projects (status unchanged for > 2 days)\nconst stuckProjects = projects.filter(p => {\n  const lastUpdate = p.updated_at || p.created_at;\n  if (!lastUpdate) return false;\n  const days = (now - new Date(lastUpdate)) / (1000 * 60 * 60 * 24);\n  return days > 2;\n});\n\n// Group projects by status\nconst projectsByStatus = {};\nfor (const p of projects) {\n  const s = p.status || 'Unknown';\n  projectsByStatus[s] = (projectsByStatus[s] || 0) + 1;\n}\n\n// Group scripts by status\nconst scriptsByStatus = {};\nfor (const s of scripts) {\n  const st = s.status || 'Unknown';\n  scriptsByStatus[st] = (scriptsByStatus[st] || 0) + 1;\n}\n\n// Summarize events by type\nconst eventsByType = {};\nconst escalations = [];\nconst phaseTransitions = [];\nconst campaignAlerts = [];\nconst leadActions = [];\nfor (const e of events) {\n  const t = e.event_type || 'unknown';\n  eventsByType[t] = (eventsByType[t] || 0) + 1;\n  \n  if (t === 'escalation' || t === 'sla_breach' || (e.severity && e.severity === 'high')) {\n    escalations.push({ type: t, brand: e.brand_name || e.project_id, detail: e.detail || e.message || '', agent: e.agent_name || '' });\n  }\n  if (t === 'phase_complete' || t === 'phase_triggered' || t === 'workflow_complete') {\n    phaseTransitions.push({ type: t, brand: e.brand_name || e.project_id, detail: e.detail || e.message || '', agent: e.agent_name || '' });\n  }\n  if (t === 'campaign_alert' || t === 'ad_performance' || t === 'budget_alert') {\n    campaignAlerts.push({ type: t, brand: e.brand_name, detail: e.detail || e.message || '' });\n  }\n  if (t === 'lead_action' || t === 'new_lead' || t === 'proposal_sent') {\n    leadActions.push({ type: t, company: e.company_name || e.lead_name, detail: e.detail || e.message || '' });\n  }\n}\n\n// Capacity\nconst MAX_CAPACITY = 15;\nconst available = Math.max(0, MAX_CAPACITY - projects.length);\n\nconst briefingData = {\n  date: todayStr,\n  active_projects: projects.length,\n  projects_by_status: projectsByStatus,\n  stuck_projects: stuckProjects.map(p => ({ brand: p.brand_name, code: p.client_code, status: p.status })),\n  pending_scripts: scripts.length,\n  scripts_by_status: scriptsByStatus,\n  scripts_awaiting_review: scripts.filter(s => s.status === 'In Review' || s.status === 'Client Review').map(s => ({ title: s.script_title, brand: s.brand_name, status: s.status })),\n  leads_to_follow_up: leads.map(l => ({ company: l.company_name, contact: l.contact_name, stage: l.stage, follow_up: l.next_follow_up })),\n  overdue_invoices: invoices.map(i => ({ number: i.invoice_number, amount: i.amount, due: i.due_date })),\n  capacity: { current: projects.length, max: MAX_CAPACITY, available },\n  agent_events: {\n    total_events: events.length,\n    events_by_type: eventsByType,\n    escalations,\n    phase_transitions: phaseTransitions,\n    campaign_alerts: campaignAlerts,\n    lead_actions: leadActions\n  }\n};\n\nreturn [{ json: briefingData }];"
+      },
+      "id": "daily-ops-aggregate",
+      "name": "Aggregate All Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1140,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ systemInstruction: { parts: [{ text: 'You are the Daily Operations Assistant for Smashed Agency, a UGC and AI creatives agency. Generate a concise, actionable morning briefing. Use *bold* for headers, bullet points for items. Structure: 1) Priority Actions (things needing immediate attention), 2) Pipeline Status (projects by stage), 3) Scripts Status, 4) Agent Activity Highlights (key events from the last 24h including phase transitions, campaign alerts, new leads, and any escalations or SLA breaches), 5) Sales (leads to follow up), 6) Finance (overdue invoices), 7) Capacity. Keep it under 1000 words. Be direct and actionable. If there are escalations or SLA breaches, put them at the top of Priority Actions.' }] }, contents: [{ role: 'user', parts: [{ text: 'Generate morning briefing for ' + $json.date + ':\\n' + JSON.stringify($json, null, 2) }] }], generationConfig: { temperature: 0.3, maxOutputTokens: 2500 } }) }}",
+        "options": {}
+      },
+      "id": "daily-ops-gemini",
+      "name": "Gemini — Generate Briefing",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1380,
+        400
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "rIL63TG4xfMQL8uJ",
+          "name": "Cosmisk AI"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst aggregatedData = $('Aggregate All Data').first().json;\n\n// Check for Gemini errors\nconst hasError = response.error || response.statusCode >= 400 || !response.candidates;\n\nlet briefing;\nif (!hasError) {\n  briefing = response.candidates?.[0]?.content?.parts?.[0]?.text;\n}\n\nif (!briefing) {\n  // Fallback: build plain-text briefing from raw aggregated data\n  const d = aggregatedData;\n  const lines = [];\n  lines.push('*Daily Operations Briefing — ' + (d.date || new Date().toISOString().split('T')[0]) + '*');\n  lines.push('_(Gemini unavailable — auto-generated fallback)_\\n');\n\n  // Priority actions\n  lines.push('*Priority Actions:*');\n  if (d.stuck_projects && d.stuck_projects.length > 0) {\n    for (const p of d.stuck_projects) {\n      lines.push('• STUCK: ' + p.brand + ' (' + p.code + ') — ' + p.status);\n    }\n  }\n  if (d.agent_events?.escalations?.length > 0) {\n    for (const e of d.agent_events.escalations) {\n      lines.push('• ESCALATION: ' + e.brand + ' — ' + e.detail);\n    }\n  }\n  if (d.stuck_projects?.length === 0 && (!d.agent_events?.escalations || d.agent_events.escalations.length === 0)) {\n    lines.push('• No urgent items');\n  }\n\n  // Pipeline\n  lines.push('\\n*Pipeline Status (' + d.active_projects + ' active):*');\n  for (const [status, count] of Object.entries(d.projects_by_status || {})) {\n    lines.push('• ' + status + ': ' + count);\n  }\n\n  // Scripts\n  lines.push('\\n*Scripts (' + d.pending_scripts + ' pending):*');\n  for (const [status, count] of Object.entries(d.scripts_by_status || {})) {\n    lines.push('• ' + status + ': ' + count);\n  }\n\n  // Leads\n  if (d.leads_to_follow_up?.length > 0) {\n    lines.push('\\n*Leads Due (' + d.leads_to_follow_up.length + '):*');\n    for (const l of d.leads_to_follow_up.slice(0, 5)) {\n      lines.push('• ' + l.company + ' (' + l.stage + ') — follow up: ' + l.follow_up);\n    }\n  }\n\n  // Invoices\n  if (d.overdue_invoices?.length > 0) {\n    lines.push('\\n*Overdue Invoices (' + d.overdue_invoices.length + '):*');\n    for (const i of d.overdue_invoices) {\n      lines.push('• ' + i.number + ' — ' + i.amount);\n    }\n  }\n\n  // Capacity\n  lines.push('\\n*Capacity:* ' + d.capacity?.current + '/' + d.capacity?.max + ' (' + d.capacity?.available + ' available)');\n\n  briefing = lines.join('\\n');\n}\n\nconst _geminiError = hasError ? (response.error || response.statusMessage || 'No candidates in response') : null;\nreturn [{ json: { briefing, _geminiError } }];"
+      },
+      "id": "daily-ops-parse",
+      "name": "Parse Briefing",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1600,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0AFBQ5UF0E",
+          "mode": "id"
+        },
+        "text": "={{ $json.briefing }}",
+        "otherOptions": {}
+      },
+      "id": "daily-ops-slack",
+      "name": "Post to Slack Channel",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        1840,
+        400
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "5Q37UpOjGx4YsbyC",
+          "name": "Slack account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblGhzSJ5RXWDS8h8?filterByFormula=DATETIME_DIFF(NOW()%2CCREATED_TIME()%2C%27hours%27)%3C24&sort%5B0%5D%5Bfield%5D=created_at&sort%5B0%5D%5Bdirection%5D=desc&maxRecords=100",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "options": {}
+      },
+      "id": "daily-ops-fetch-events",
+      "name": "Fetch Recent Events",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        860,
+        1000
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Check if Gemini or Slack had errors and log them\nconst parsedData = $('Parse Briefing').first().json;\nconst slackResult = $input.first().json;\n\nconst errors = [];\nif (parsedData._geminiError) {\n  errors.push('Gemini: ' + parsedData._geminiError);\n}\nif (slackResult.error || slackResult.statusCode >= 400) {\n  errors.push('Slack: ' + (slackResult.error || slackResult.statusMessage || 'HTTP ' + slackResult.statusCode));\n}\n\nif (errors.length === 0) return [];\n\nreturn [{ json: {\n  records: [{\n    fields: {\n      agent: 'daily_ops',\n      event_type: 'system_error',\n      severity: 'high',\n      message: 'Daily Ops errors: ' + errors.join('; '),\n      payload: JSON.stringify({ errors, timestamp: new Date().toISOString() }),\n      created_at: new Date().toISOString()\n    }\n  }]\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2080, 400],
+      "id": "daily-ops-check-errors",
+      "name": "Check Errors"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblGhzSJ5RXWDS8h8",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2320, 400],
+      "id": "daily-ops-write-error",
+      "name": "Write Error Event",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Schedule — 8AM IST": {
+      "main": [
+        [
+          {
+            "node": "Init",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Init": {
+      "main": [
+        [
+          {
+            "node": "Fetch Active Projects",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Pending Scripts",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Due Follow-ups",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Overdue Invoices",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Recent Events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Active Projects": {
+      "main": [
+        [
+          {
+            "node": "Aggregate All Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Pending Scripts": {
+      "main": [
+        [
+          {
+            "node": "Aggregate All Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Due Follow-ups": {
+      "main": [
+        [
+          {
+            "node": "Aggregate All Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Overdue Invoices": {
+      "main": [
+        [
+          {
+            "node": "Aggregate All Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate All Data": {
+      "main": [
+        [
+          {
+            "node": "Gemini — Generate Briefing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini — Generate Briefing": {
+      "main": [
+        [
+          {
+            "node": "Parse Briefing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Briefing": {
+      "main": [
+        [
+          {
+            "node": "Post to Slack Channel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post to Slack Channel": {
+      "main": [
+        [
+          {
+            "node": "Check Errors",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Errors": {
+      "main": [
+        [
+          {
+            "node": "Write Error Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Recent Events": {
+      "main": [
+        [
+          {
+            "node": "Aggregate All Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

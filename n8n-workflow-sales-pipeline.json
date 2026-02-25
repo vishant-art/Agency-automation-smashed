@@ -1,0 +1,2794 @@
+{
+  "updatedAt": "2026-02-25T06:26:47.749Z",
+  "createdAt": "2026-02-24T04:45:46.082Z",
+  "id": "KYSdsLXV50H7MHGr",
+  "name": "Agent 5 \u2014 Sales Pipeline (Smashed Agency)",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## AGENT 5: SALES PIPELINE\n\n3 entry points:\n1. POST /add-lead \u2014 Add new lead to Airtable, notify Slack\n2. Schedule 9 AM IST \u2014 Daily follow-up suggestions via Gemini\n3. POST /generate-proposal \u2014 AI proposal generation with pricing tiers\n\nAirtable base: appvFxwZc9yU8o8pK / Leads table\nGemini 2.5 Flash for AI generation\nSlack notifications to ugc-agent-notifications",
+        "height": 380,
+        "width": 500,
+        "color": 7
+      },
+      "id": "sp-sticky-overview",
+      "name": "Sticky Note - Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -280,
+        -60
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## BRANCH 1: ADD LEAD\nWebhook \u2192 Parse \u2192 Create Airtable \u2192 Slack \u2192 Respond",
+        "height": 100,
+        "width": 600,
+        "color": 4
+      },
+      "id": "sp-sticky-add-lead",
+      "name": "Sticky Note - Add Lead",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        280,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## BRANCH 2: DAILY FOLLOW-UPS\nSchedule 9AM IST \u2192 Fetch overdue leads \u2192 Gemini follow-up \u2192 Slack per lead",
+        "height": 100,
+        "width": 800,
+        "color": 6
+      },
+      "id": "sp-sticky-followups",
+      "name": "Sticky Note - Follow-ups",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        280,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## BRANCH 3: GENERATE PROPOSAL\nWebhook \u2192 Fetch lead + projects \u2192 Gemini proposal \u2192 Store + Update stage \u2192 Slack \u2192 Respond",
+        "height": 100,
+        "width": 1000,
+        "color": 3
+      },
+      "id": "sp-sticky-proposal",
+      "name": "Sticky Note - Proposal",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        280,
+        920
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "add-lead",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "sp-webhook-add-lead",
+      "name": "Webhook \u2014 Add Lead",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [
+        320,
+        280
+      ],
+      "webhookId": "sales-add-lead-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Parse and validate incoming lead data\n// ============================================================\nconst body = $input.first().json.body || $input.first().json;\n\nfunction clean(val) {\n  if (val === undefined || val === null) return '';\n  if (Array.isArray(val)) return val.join(', ');\n  return String(val).trim();\n}\n\nconst company_name = clean(body.company_name || body.companyName || body.company);\nconst contact_name = clean(body.contact_name || body.contactName || body.name);\nconst email = clean(body.email);\nconst phone = clean(body.phone);\nconst instagram = clean(body.instagram);\nconst linkedin = clean(body.linkedin);\nconst website = clean(body.website);\nconst industry = clean(body.industry);\nconst monthly_ad_spend = clean(body.monthly_ad_spend || body.monthlyAdSpend || body.ad_spend);\nconst source = clean(body.source);\nconst notes = clean(body.notes);\nconst estimated_value = clean(body.estimated_value || body.estimatedValue);\n\nif (!company_name) throw new Error('company_name is required');\nif (!contact_name) throw new Error('contact_name is required');\n\n// Set next_follow_up to 2 days from now by default\nconst followUp = new Date();\nfollowUp.setDate(followUp.getDate() + 2);\nconst next_follow_up = body.next_follow_up || followUp.toISOString().split('T')[0];\n\nreturn [{ json: {\n  company_name,\n  contact_name,\n  email,\n  phone,\n  instagram,\n  linkedin,\n  website,\n  industry,\n  monthly_ad_spend,\n  source,\n  notes,\n  estimated_value,\n  next_follow_up,\n  stage: 'New',\n  created_at: new Date().toISOString().split('T')[0]\n} }];"
+      },
+      "id": "sp-parse-lead",
+      "name": "Parse Lead Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        620,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Build Airtable create payload \u2014 validate select fields against allowed values\n// Airtable rejects unknown select options without schema:bases:write scope\n// ============================================================\nconst lead = $input.first().json;\nconst fields = {};\n\n// Allowed select field values (must match Airtable table schema exactly)\nconst VALID_SOURCES = ['Referral', 'Instagram', 'LinkedIn', 'Website', 'Cold Outreach'];\nconst VALID_STAGES = ['New', 'Contacted', 'Meeting Scheduled', 'Proposal Sent', 'Negotiating', 'Won', 'Lost'];\n\n// Always set these\nfields.company_name = lead.company_name;\nfields.contact_name = lead.contact_name;\n\n// Validate stage \u2014 must be a known select option\nconst stage = lead.stage || 'New';\nif (VALID_STAGES.includes(stage)) {\n  fields.stage = stage;\n} else {\n  fields.stage = 'New'; // Default to 'New' for unknown stages\n}\n\n// Only set created_at if it's a valid date-only format\nif (lead.created_at) {\n  const dateOnly = String(lead.created_at).split('T')[0];\n  if (/^\\d{4}-\\d{2}-\\d{2}$/.test(dateOnly)) {\n    fields.created_at = dateOnly;\n  }\n}\n\n// Only set non-empty optional fields\nif (lead.email) fields.email = lead.email;\nif (lead.phone) fields.phone = lead.phone;\nif (lead.instagram) fields.instagram = lead.instagram;\nif (lead.linkedin) fields.linkedin = lead.linkedin;\nif (lead.website) fields.website = lead.website;\nif (lead.industry) fields.industry = lead.industry;\nif (lead.monthly_ad_spend) {\n  const spend = Number(String(lead.monthly_ad_spend).replace(/[^0-9.]/g, ''));\n  if (!isNaN(spend) && spend > 0) fields.monthly_ad_spend = spend;\n}\n\n// Validate source \u2014 must be a known select option (omit if unknown)\nif (lead.source) {\n  const src = String(lead.source).trim();\n  if (VALID_SOURCES.includes(src)) {\n    fields.source = src;\n  }\n  // If source doesn't match, omit it rather than crash\n}\n\nif (lead.notes) fields.notes = lead.notes;\nif (lead.estimated_value) {\n  const num = Number(String(lead.estimated_value).replace(/[^0-9.]/g, ''));\n  if (!isNaN(num) && num > 0) fields.estimated_value = num;\n}\nif (lead.next_follow_up) {\n  const dateOnly = String(lead.next_follow_up).split('T')[0];\n  if (/^\\d{4}-\\d{2}-\\d{2}$/.test(dateOnly)) {\n    fields.next_follow_up = dateOnly;\n  }\n}\n\nreturn [{ json: { fields, lead } }];"
+      },
+      "id": "sp-build-lead-payload",
+      "name": "Build Lead Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        920,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Leads",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ fields: $json.fields }) }}",
+        "options": {}
+      },
+      "id": "sp-create-lead",
+      "name": "Create Lead in Airtable",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1220,
+        280
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare Slack notification for new lead \u2014 with error detection\nconst record = $input.first().json;\nconst f = record.fields || {};\nconst lead = $('Build Lead Payload').first().json.lead;\n\n// Detect Airtable create failure\nif (!record.id || record.error || record.statusCode >= 400) {\n  return [{ json: {\n    _error: true,\n    errorMessage: record.error || record.statusMessage || 'Failed to create lead in Airtable (no record ID returned)',\n    company_name: lead.company_name,\n    contact_name: lead.contact_name\n  } }];\n}\n\nreturn [{ json: {\n  _error: false,\n  record_id: record.id,\n  company_name: f.company_name || lead.company_name,\n  contact_name: f.contact_name || lead.contact_name,\n  email: f.email || lead.email || 'N/A',\n  phone: f.phone || lead.phone || 'N/A',\n  industry: f.industry || lead.industry || 'N/A',\n  source: f.source || lead.source || 'N/A',\n  monthly_ad_spend: f.monthly_ad_spend || lead.monthly_ad_spend || 'N/A',\n  estimated_value: f.estimated_value || lead.estimated_value || 'N/A',\n  next_follow_up: f.next_follow_up || lead.next_follow_up || 'N/A',\n  notes: f.notes || lead.notes || ''\n} }];"
+      },
+      "id": "sp-prep-lead-notify",
+      "name": "Prepare Lead Notification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1520,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "sp-cond-lead-ok",
+              "leftValue": "={{ $json._error }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "notEquals",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "sp-if-lead-ok",
+      "name": "Lead Created OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1720,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0AFBQ5UF0E",
+          "mode": "id"
+        },
+        "text": "={{ `*New Lead Added to Pipeline*\\n\\n*Company:* ${$json.company_name}\\n*Contact:* ${$json.contact_name}\\n*Email:* ${$json.email}\\n*Phone:* ${$json.phone}\\n*Industry:* ${$json.industry}\\n*Source:* ${$json.source}\\n*Monthly Ad Spend:* ${$json.monthly_ad_spend}\\n*Estimated Value:* ${$json.estimated_value}\\n*Next Follow-up:* ${$json.next_follow_up}\\n${$json.notes ? '*Notes:* ' + $json.notes : ''}\\n\\n_Stage: New Lead | Record: ${$json.record_id}_` }}",
+        "otherOptions": {}
+      },
+      "id": "sp-slack-new-lead",
+      "name": "Slack \u2014 New Lead",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        2020,
+        180
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "5Q37UpOjGx4YsbyC",
+          "name": "Slack account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ JSON.stringify({ status: 'success', action: 'add_lead', record_id: $json.record_id || $('Prepare Lead Notification').first().json.record_id, company_name: $('Prepare Lead Notification').first().json.company_name, message: 'Lead created and team notified.' }) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "sp-respond-add-lead",
+      "name": "Respond \u2014 Lead Added",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2320,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ JSON.stringify({ status: 'error', action: 'add_lead', company_name: $json.company_name || '', error: $json.errorMessage || 'Unknown error creating lead' }) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "responseCode": 500
+        }
+      },
+      "id": "sp-respond-lead-error",
+      "name": "Respond \u2014 Lead Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2020,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblGhzSJ5RXWDS8h8",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ records: [{ fields: { agent: 'sales_pipeline', event_type: 'system_error', severity: 'high', message: 'Failed to create lead: ' + ($json.company_name || 'unknown') + ' \u2014 ' + ($json.errorMessage || 'unknown error'), payload: JSON.stringify({ company_name: $json.company_name, error: $json.errorMessage }), created_at: new Date().toISOString() } }] }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2020,
+        360
+      ],
+      "id": "sp-write-error-event-lead",
+      "name": "Write Error Event \u2014 Lead",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "30 3 * * *"
+            }
+          ]
+        }
+      },
+      "id": "sp-schedule-followups",
+      "name": "Schedule \u2014 9AM IST Daily",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        320,
+        680
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Build Airtable filter: next_follow_up <= today AND stage is active\n// ============================================================\nconst today = new Date().toISOString().split('T')[0];\nconst formula = `AND(IS_BEFORE({next_follow_up}, '${today}T23:59:59.000Z'), OR({stage}='New', {stage}='Contacted', {stage}='Meeting Scheduled', {stage}='Proposal Sent', {stage}='Negotiating'))`;\nconst encoded = encodeURIComponent(formula);\nreturn [{ json: { filter_url: `https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Leads?filterByFormula=${encoded}&pageSize=100` } }];"
+      },
+      "id": "sp-build-followup-filter",
+      "name": "Build Follow-up Filter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        620,
+        680
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.filter_url }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "options": {}
+      },
+      "id": "sp-fetch-overdue-leads",
+      "name": "Fetch Overdue Leads",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        920,
+        680
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Check if there are leads to follow up on \u2014 with error handling\nconst response = $input.first().json;\n\n// Handle Airtable fetch errors\nif (response.error || response.statusCode >= 400 || !response.records) {\n  return [{ json: { has_leads: false, count: 0, leads: [], _fetchError: response.error || response.statusMessage || 'Airtable fetch failed' } }];\n}\n\nconst records = response.records || [];\nif (records.length === 0) {\n  return [{ json: { has_leads: false, count: 0, leads: [] } }];\n}\n\nconst leads = records.map(r => ({\n  record_id: r.id,\n  company_name: r.fields.company_name || '',\n  contact_name: r.fields.contact_name || '',\n  email: r.fields.email || '',\n  phone: r.fields.phone || '',\n  industry: r.fields.industry || '',\n  monthly_ad_spend: r.fields.monthly_ad_spend || '',\n  stage: r.fields.stage || '',\n  notes: r.fields.notes || '',\n  next_follow_up: r.fields.next_follow_up || '',\n  source: r.fields.source || '',\n  website: r.fields.website || '',\n  instagram: r.fields.instagram || '',\n  linkedin: r.fields.linkedin || ''\n}));\n\nreturn [{ json: { has_leads: true, count: leads.length, leads } }];"
+      },
+      "id": "sp-check-leads",
+      "name": "Check Leads Exist",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1220,
+        680
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "sp-cond-has-leads",
+              "leftValue": "={{ $json.has_leads }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "sp-if-has-leads",
+      "name": "Has Leads?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1520,
+        680
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Build Gemini prompt for all follow-up leads at once\n// ============================================================\nconst data = $input.first().json;\nconst leads = data.leads;\n\nconst leadSummaries = leads.map((l, i) => {\n  return `LEAD ${i + 1}:\\n- Company: ${l.company_name}\\n- Contact: ${l.contact_name}\\n- Industry: ${l.industry || 'Unknown'}\\n- Stage: ${l.stage}\\n- Monthly Ad Spend: ${l.monthly_ad_spend || 'Unknown'}\\n- Source: ${l.source || 'Unknown'}\\n- Notes: ${l.notes || 'None'}\\n- Last Follow-up Date: ${l.next_follow_up}\\n- Website: ${l.website || 'N/A'}\\n- Instagram: ${l.instagram || 'N/A'}`;\n}).join('\\n\\n');\n\nconst systemPrompt = `You are the sales assistant for Smashed Agency \u2014 a UGC (user-generated content) and AI creatives agency based in India. We manage ~10 active clients, offering UGC script writing, AI-generated ad creatives, and full-service media buying (Meta + Google Ads).\n\nOur core offerings:\n- UGC Scripts: Hook-driven scripts for Instagram Reels, YouTube Shorts, and TikTok\n- AI Creatives: AI-generated ad images and video variants\n- Media Buying: Full campaign management on Meta and Google\n- Strategy: Monthly content calendars, competitor analysis, performance optimization\n\nYour job is to generate personalized, warm follow-up messages for each lead. The tone should be professional but approachable \u2014 like a knowledgeable friend in the industry, not a pushy salesperson. Reference specific details about their company, industry, or previous conversations when available.\n\nFor each lead, output a JSON object with:\n- lead_index (number, 0-based)\n- subject (short subject line for reference)\n- message (the actual follow-up message, 3-5 sentences, ready to send via WhatsApp/email)\n- channel (\"whatsapp\" if phone exists, \"email\" if only email, \"linkedin\" if only linkedin)\n- urgency (\"high\" if overdue by 3+ days, \"medium\" if 1-2 days, \"low\" if today)\n\nReturn a JSON array of these objects. Only valid JSON, no markdown.`;\n\nconst userPrompt = `Today is ${new Date().toISOString().split('T')[0]}. Generate personalized follow-up messages for these ${leads.length} leads:\\n\\n${leadSummaries}`;\n\nconst geminiBody = {\n  systemInstruction: { parts: [{ text: systemPrompt }] },\n  contents: [{ role: 'user', parts: [{ text: userPrompt }] }],\n  generationConfig: { temperature: 0.3, maxOutputTokens: 4000 }\n};\n\nreturn [{ json: { gemini_body: geminiBody, leads } }];"
+      },
+      "id": "sp-build-followup-prompt",
+      "name": "Build Follow-up Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1820,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.gemini_body) }}",
+        "options": {}
+      },
+      "id": "sp-gemini-followups",
+      "name": "Gemini \u2014 Follow-up Messages",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2120,
+        640
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "rIL63TG4xfMQL8uJ",
+          "name": "Cosmisk AI"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse Gemini response with validation and fallback\nconst geminiResponse = $input.first().json;\nconst leads = $('Build Follow-up Prompt').first().json.leads;\n\n// Validate Gemini response\nlet rawText = '';\nconst hasError = geminiResponse.error || geminiResponse.statusCode >= 400 || !geminiResponse.candidates;\n\nif (!hasError) {\n  try {\n    rawText = geminiResponse.candidates[0].content.parts[0].text || '';\n  } catch (e) {\n    rawText = '';\n  }\n}\n\n// If Gemini failed, generate basic follow-up reminders\nif (!rawText) {\n  const today = new Date();\n  const results = leads.map((lead, idx) => {\n    const overdueDays = lead.next_follow_up ? Math.floor((today - new Date(lead.next_follow_up)) / 86400000) : 0;\n    const urgency = overdueDays >= 3 ? 'high' : overdueDays >= 1 ? 'medium' : 'low';\n    const channel = lead.phone ? 'whatsapp' : lead.email ? 'email' : 'linkedin';\n    return {\n      record_id: lead.record_id,\n      company_name: lead.company_name,\n      contact_name: lead.contact_name,\n      email: lead.email,\n      phone: lead.phone,\n      stage: lead.stage,\n      subject: 'Follow-up: ' + lead.company_name,\n      message: 'Hi ' + lead.contact_name + ', following up regarding ' + lead.company_name + '. We discussed our UGC and creative services \u2014 would love to continue the conversation. Let me know a good time to connect this week.',\n      channel: channel,\n      urgency: urgency\n    };\n  });\n  return results.map(r => ({ json: r }));\n}\n\n// Parse Gemini JSON response\nlet cleaned = rawText.trim();\nif (cleaned.startsWith('```')) {\n  cleaned = cleaned.replace(/^```json?\\s*/, '').replace(/```\\s*$/, '').trim();\n}\n\nlet followUps;\ntry {\n  followUps = JSON.parse(cleaned);\n} catch (e) {\n  // JSON parse failed \u2014 generate basic reminders\n  const results = leads.map(lead => ({\n    record_id: lead.record_id,\n    company_name: lead.company_name,\n    contact_name: lead.contact_name,\n    email: lead.email,\n    phone: lead.phone,\n    stage: lead.stage,\n    subject: 'Follow-up: ' + lead.company_name,\n    message: 'Hi ' + lead.contact_name + ', checking in regarding our conversation about UGC services for ' + lead.company_name + '. Happy to answer any questions or schedule a quick call.',\n    channel: lead.phone ? 'whatsapp' : lead.email ? 'email' : 'linkedin',\n    urgency: 'medium'\n  }));\n  return results.map(r => ({ json: r }));\n}\n\nif (!Array.isArray(followUps)) {\n  followUps = [followUps];\n}\n\nconst results = followUps.map(fu => {\n  const idx = fu.lead_index || 0;\n  const lead = leads[idx] || leads[0] || {};\n  return {\n    record_id: lead.record_id,\n    company_name: lead.company_name,\n    contact_name: lead.contact_name,\n    email: lead.email,\n    phone: lead.phone,\n    stage: lead.stage,\n    subject: fu.subject || '',\n    message: fu.message || '',\n    channel: fu.channel || 'email',\n    urgency: fu.urgency || 'medium'\n  };\n});\n\nreturn results.map(r => ({ json: r }));"
+      },
+      "id": "sp-parse-followups",
+      "name": "Parse Follow-up Messages",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2420,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0AFBQ5UF0E",
+          "mode": "id"
+        },
+        "text": "={{ `*Daily Follow-up: ${$json.company_name}*\\n\\n*Contact:* ${$json.contact_name}\\n*Stage:* ${$json.stage}\\n*Urgency:* ${$json.urgency === 'high' ? '\ud83d\udd34 High' : $json.urgency === 'medium' ? '\ud83d\udfe1 Medium' : '\ud83d\udfe2 Low'}\\n*Channel:* ${$json.channel}\\n\\n*Suggested Message:*\\n>${$json.message.split('\\n').join('\\n>')}\\n\\n_Record: ${$json.record_id}_` }}",
+        "otherOptions": {}
+      },
+      "id": "sp-slack-followup",
+      "name": "Slack \u2014 Follow-up Suggestion",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        2720,
+        640
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "5Q37UpOjGx4YsbyC",
+          "name": "Slack account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "generate-proposal",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "sp-webhook-proposal",
+      "name": "Webhook \u2014 Generate Proposal",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [
+        320,
+        1080
+      ],
+      "webhookId": "sales-generate-proposal-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Extract and validate proposal request\n// ============================================================\nconst body = $input.first().json.body || $input.first().json;\n\nconst lead_id = (body.lead_id || '').trim();\nconst services = body.services || [];\nconst notes = (body.notes || '').trim();\n\nif (!lead_id) throw new Error('lead_id is required');\nif (!Array.isArray(services) || services.length === 0) {\n  throw new Error('services array is required (e.g. [\"ugc_scripts\", \"ai_creatives\", \"media_buying\"])');\n}\n\nreturn [{ json: { lead_id, services, notes } }];"
+      },
+      "id": "sp-extract-proposal-req",
+      "name": "Extract Proposal Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        620,
+        1080
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Leads/{{ $json.lead_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "options": {}
+      },
+      "id": "sp-fetch-lead-for-proposal",
+      "name": "Fetch Lead Record",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        920,
+        1080
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build URL for similar projects \u2014 with lead fetch error detection\nconst leadRecord = $input.first().json;\nconst reqData = $('Extract Proposal Request').first().json;\n\n// Detect Airtable fetch failure\nif (!leadRecord.id || leadRecord.error || leadRecord.statusCode >= 400) {\n  return [{ json: {\n    _error: true,\n    errorMessage: leadRecord.error || leadRecord.statusMessage || 'Lead not found or Airtable fetch failed',\n    lead_id: reqData.lead_id,\n    services: reqData.services\n  } }];\n}\n\nconst f = leadRecord.fields || {};\nconst industry = f.industry || '';\n\nlet filterUrl = 'https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Projects?pageSize=5&sort%5B0%5D%5Bfield%5D=created_at&sort%5B0%5D%5Bdirection%5D=desc';\nif (industry) {\n  const formula = encodeURIComponent(\"{industry}='\" + industry + \"'\");\n  filterUrl += '&filterByFormula=' + formula;\n}\n\nreturn [{ json: {\n  _error: false,\n  lead_record: leadRecord,\n  lead_fields: f,\n  services: reqData.services,\n  proposal_notes: reqData.notes,\n  projects_url: filterUrl\n} }];"
+      },
+      "id": "sp-prep-projects-fetch",
+      "name": "Prepare Projects Fetch",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1220,
+        1080
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.projects_url }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "options": {}
+      },
+      "id": "sp-fetch-similar-projects",
+      "name": "Fetch Similar Projects",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1520,
+        1080
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Build Gemini prompt for proposal generation\n// ============================================================\nconst prevData = $('Prepare Projects Fetch').first().json;\nif (prevData._error) {\n  return [{ json: { ...prevData } }];\n}\nconst lead = prevData.lead_fields;\nconst services = prevData.services;\nconst proposalNotes = prevData.proposal_notes;\nconst leadRecord = prevData.lead_record;\n\n// Parse similar projects for context\nconst projectRecords = $input.first().json.records || [];\nconst projectContext = projectRecords.map(p => {\n  const pf = p.fields || {};\n  return `- ${pf.brand_name || 'Client'} (${pf.industry || 'N/A'}): ${pf.num_scripts || '?'} scripts, status: ${pf.status || 'N/A'}`;\n}).join('\\n');\n\nconst servicesDesc = services.map(s => {\n  switch(s) {\n    case 'ugc_scripts': return 'UGC Script Writing';\n    case 'ai_creatives': return 'AI Ad Creatives';\n    case 'media_buying': return 'Meta & Google Ads Media Buying';\n    case 'strategy': return 'Content Strategy & Monthly Calendar';\n    case 'competitor_analysis': return 'Competitor Ad Analysis';\n    default: return s;\n  }\n}).join(', ');\n\nconst systemPrompt = `You are the proposal generator for Smashed Agency \u2014 a UGC and AI creatives agency based in India. We work with D2C brands, fintech companies, edtech platforms, and e-commerce businesses. We currently manage ~10 active clients.\n\nOur pricing structure (in INR):\n\nSTARTER TIER (for brands spending < \u20b92L/month on ads):\n- 5 UGC Scripts/month: \u20b915,000 - \u20b925,000\n- Includes: Hook research, script writing, 1 round of revisions\n- Turnaround: 5-7 business days\n\nGROWTH TIER (for brands spending \u20b92L-10L/month):\n- 10 UGC Scripts + AI Creatives: \u20b930,000 - \u20b950,000\n- Includes: Deep competitor analysis, hook research, script writing, AI-generated ad images/videos, 2 rounds of revisions\n- Turnaround: 7-10 business days\n\nFULL-SERVICE TIER (for brands spending \u20b910L+/month):\n- 15+ UGC Scripts + AI Creatives + Media Buying: \u20b975,000+\n- Includes: Everything in Growth + full Meta/Google campaign management, weekly performance reports, monthly strategy calls, unlimited revisions\n- Turnaround: Ongoing monthly retainer\n\nADD-ONS:\n- Competitor Ad Analysis Report: \u20b95,000 one-time\n- Monthly Content Calendar: \u20b98,000/month\n- Additional script batches (5 scripts): \u20b912,000\n\nGenerate a professional, personalized proposal. The proposal should:\n1. Open with a brief understanding of their business and challenges\n2. Recommend the appropriate tier based on their ad spend\n3. Break down the selected services with deliverables and pricing\n4. Include a clear timeline\n5. End with next steps and a soft CTA\n\nFormat the proposal in clean text with clear sections (use ** for bold headers). Include specific numbers and deliverables \u2014 no vague promises. Reference their industry and any available context about their business.\n\nOutput ONLY the proposal text. No JSON wrapping. No markdown code fences.`;\n\nconst userPrompt = `Generate a proposal for this lead:\n\nCompany: ${lead.company_name || 'N/A'}\nContact: ${lead.contact_name || 'N/A'}\nIndustry: ${lead.industry || 'N/A'}\nWebsite: ${lead.website || 'N/A'}\nInstagram: ${lead.instagram || 'N/A'}\nMonthly Ad Spend: ${lead.monthly_ad_spend || 'Not disclosed'}\nCurrent Stage: ${lead.stage || 'N/A'}\nPrevious Notes: ${lead.notes || 'None'}\n\nRequested Services: ${servicesDesc}\nAdditional Notes from Sales: ${proposalNotes || 'None'}\n\n${projectContext ? 'Similar past projects for reference:\\n' + projectContext : 'No similar past projects found.'}`;\n\nconst geminiBody = {\n  systemInstruction: { parts: [{ text: systemPrompt }] },\n  contents: [{ role: 'user', parts: [{ text: userPrompt }] }],\n  generationConfig: { temperature: 0.3, maxOutputTokens: 3000 }\n};\n\nreturn [{ json: {\n  gemini_body: geminiBody,\n  lead_id: leadRecord.id,\n  lead_fields: lead,\n  services: services,\n  services_desc: servicesDesc\n} }];"
+      },
+      "id": "sp-build-proposal-prompt",
+      "name": "Build Proposal Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1820,
+        1080
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.gemini_body) }}",
+        "options": {}
+      },
+      "id": "sp-gemini-proposal",
+      "name": "Gemini \u2014 Generate Proposal",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2120,
+        1080
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "rIL63TG4xfMQL8uJ",
+          "name": "Cosmisk AI"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse proposal with Gemini validation\nconst geminiResponse = $input.first().json;\nconst prevData = $('Build Proposal Prompt').first().json;\n\n// Propagate upstream errors\nif (prevData._error) {\n  return [{ json: { _error: true, errorMessage: prevData.errorMessage, lead_id: prevData.lead_id } }];\n}\n\n// Validate Gemini response\nconst hasError = geminiResponse.error || geminiResponse.statusCode >= 400 || !geminiResponse.candidates;\nlet proposalText = '';\n\nif (!hasError) {\n  try {\n    proposalText = geminiResponse.candidates[0].content.parts[0].text || '';\n  } catch (e) {\n    proposalText = '';\n  }\n}\n\nif (!proposalText) {\n  return [{ json: {\n    _error: true,\n    errorMessage: 'Gemini failed to generate proposal: ' + (geminiResponse.error || geminiResponse.statusMessage || 'no content returned'),\n    lead_id: prevData.lead_id,\n    lead_fields: prevData.lead_fields,\n    services_desc: prevData.services_desc\n  } }];\n}\n\n// Clean up code fences\nproposalText = proposalText.trim();\nif (proposalText.startsWith('```')) {\n  proposalText = proposalText.replace(/^```[a-z]*\\s*/, '').replace(/```\\s*$/, '').trim();\n}\n\nreturn [{ json: {\n  _error: false,\n  lead_id: prevData.lead_id,\n  lead_fields: prevData.lead_fields,\n  services: prevData.services,\n  services_desc: prevData.services_desc,\n  proposal_text: proposalText\n} }];"
+      },
+      "id": "sp-parse-proposal",
+      "name": "Parse Proposal",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2420,
+        1080
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "sp-cond-proposal-ok",
+              "leftValue": "={{ $json._error }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "notEquals",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "sp-if-proposal-ok",
+      "name": "Proposal OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2620,
+        1080
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Build Airtable PATCH to store proposal and update stage\n// ============================================================\nconst data = $input.first().json;\n\nconst fields = {\n  notes: data.proposal_text,\n  stage: 'Proposal Sent'\n};\n\nreturn [{ json: {\n  update_url: `https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Leads/${data.lead_id}`,\n  update_body: { fields },\n  lead_id: data.lead_id,\n  lead_fields: data.lead_fields,\n  services_desc: data.services_desc,\n  proposal_text: data.proposal_text\n} }];"
+      },
+      "id": "sp-build-proposal-update",
+      "name": "Build Proposal Update",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2920,
+        1000
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $json.update_url }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.update_body) }}",
+        "options": {}
+      },
+      "id": "sp-update-lead-proposal",
+      "name": "Update Lead \u2014 Proposal Sent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3220,
+        1000
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Prepare Slack notification for proposal\n// ============================================================\nconst prevData = $('Build Proposal Update').first().json;\nconst lead = prevData.lead_fields;\n\n// Truncate proposal for Slack (first 500 chars)\nconst proposalPreview = prevData.proposal_text.length > 500\n  ? prevData.proposal_text.substring(0, 500) + '...'\n  : prevData.proposal_text;\n\nreturn [{ json: {\n  lead_id: prevData.lead_id,\n  company_name: lead.company_name || 'Unknown',\n  contact_name: lead.contact_name || 'Unknown',\n  services_desc: prevData.services_desc,\n  proposal_preview: proposalPreview\n} }];"
+      },
+      "id": "sp-prep-proposal-notify",
+      "name": "Prepare Proposal Notification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3520,
+        1000
+      ]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0AFBQ5UF0E",
+          "mode": "id"
+        },
+        "text": "={{ `*Proposal Generated: ${$json.company_name}*\\n\\n*Contact:* ${$json.contact_name}\\n*Services:* ${$json.services_desc}\\n*Stage:* Proposal Sent\\n\\n*Proposal Preview:*\\n${$json.proposal_preview}\\n\\n_Full proposal stored in Airtable | Lead: ${$json.lead_id}_` }}",
+        "otherOptions": {}
+      },
+      "id": "sp-slack-proposal",
+      "name": "Slack \u2014 Proposal Generated",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        3820,
+        1000
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "5Q37UpOjGx4YsbyC",
+          "name": "Slack account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ JSON.stringify({ status: 'success', action: 'generate_proposal', lead_id: $json.lead_id || $('Prepare Proposal Notification').first().json.lead_id, company_name: $('Prepare Proposal Notification').first().json.company_name, stage: 'Proposal Sent', message: 'Proposal generated, stored in Airtable, and team notified.' }) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "sp-respond-proposal",
+      "name": "Respond \u2014 Proposal Generated",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        4120,
+        1000
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ JSON.stringify({ status: 'error', action: 'generate_proposal', lead_id: $json.lead_id || '', error: $json.errorMessage || 'Unknown error generating proposal' }) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "responseCode": 500
+        }
+      },
+      "id": "sp-respond-proposal-error",
+      "name": "Respond \u2014 Proposal Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2920,
+        1280
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblGhzSJ5RXWDS8h8",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ records: [{ fields: { agent: 'sales_pipeline', event_type: 'system_error', severity: 'high', message: 'Proposal generation failed: ' + ($json.lead_id || 'unknown') + ' \u2014 ' + ($json.errorMessage || 'unknown error'), payload: JSON.stringify({ lead_id: $json.lead_id, error: $json.errorMessage, services: $json.services_desc }), created_at: new Date().toISOString() } }] }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2920,
+        1180
+      ],
+      "id": "sp-write-error-event-proposal",
+      "name": "Write Error Event \u2014 Proposal",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {},
+      "id": "sp-manual-trigger",
+      "name": "Manual Trigger \u2014 Test",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        320,
+        -140
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Test data \u2014 switch between add-lead and generate-proposal\n// ============================================================\nconst testMode = 'add-lead'; // Change to 'generate-proposal' or 'follow-ups' for testing\n\nif (testMode === 'add-lead') {\n  return [{ json: { body: {\n    company_name: 'Test D2C Brand',\n    contact_name: 'Rahul Sharma',\n    email: 'rahul@testbrand.com',\n    phone: '+919876543210',\n    instagram: '@testbrand',\n    website: 'https://testbrand.com',\n    industry: 'D2C / E-commerce',\n    monthly_ad_spend: '5L/month',\n    source: 'Instagram DM',\n    notes: 'Interested in UGC scripts for product launch. Currently running static ads only.',\n    estimated_value: '50000'\n  } } }];\n}\n\nif (testMode === 'generate-proposal') {\n  return [{ json: { body: {\n    lead_id: 'recXXXXXXXXXXXXXX',\n    services: ['ugc_scripts', 'ai_creatives'],\n    notes: 'They want to start with 10 scripts for their new skincare line launch in March.'\n  } } }];\n}\n\n// follow-ups test \u2014 just trigger schedule path\nreturn [{ json: { test: 'follow-ups' } }];"
+      },
+      "id": "sp-test-data",
+      "name": "Set Test Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        620,
+        -140
+      ]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0AFBQ5UF0E",
+          "mode": "id"
+        },
+        "text": "={{ `*No Follow-ups Today*\\n\\nAll leads are up to date. No overdue follow-ups found for ${new Date().toISOString().split('T')[0]}.` }}",
+        "otherOptions": {}
+      },
+      "id": "sp-slack-no-followups",
+      "name": "Slack \u2014 No Follow-ups",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        1820,
+        760
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "5Q37UpOjGx4YsbyC",
+          "name": "Slack account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Update next_follow_up for each lead after posting follow-up\n// Push follow-up 3 days out from today\n// ============================================================\nconst lead = $input.first().json;\nconst nextDate = new Date();\nnextDate.setDate(nextDate.getDate() + 3);\nconst next_follow_up = nextDate.toISOString().split('T')[0];\n\nreturn [{ json: {\n  update_url: `https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Leads/${lead.record_id}`,\n  update_body: { fields: { next_follow_up } },\n  record_id: lead.record_id,\n  company_name: lead.company_name\n} }];"
+      },
+      "id": "sp-build-followup-update",
+      "name": "Build Follow-up Date Update",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3020,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $json.update_url }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.update_body) }}",
+        "options": {}
+      },
+      "id": "sp-update-followup-date",
+      "name": "Update Follow-up Date",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3320,
+        640
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblGhzSJ5RXWDS8h8",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ records: [{ fields: { agent: \"sales_pipeline\", event_type: \"lead_action\", brand_name: $json.company_name || \"\", client_code: \"\", severity: \"info\", message: \"New lead added: \" + $json.company_name + \" (\" + $json.contact_name + \")\", payload: JSON.stringify({ company_name: $json.company_name, contact_name: $json.contact_name, industry: $json.industry, source: $json.source, estimated_value: $json.estimated_value }), created_at: new Date().toISOString() } }] }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2020,
+        80
+      ],
+      "id": "e604ea70-7a31-4719-abf7-831f05574ce1",
+      "name": "Write Event \u2014 Lead Added",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblGhzSJ5RXWDS8h8",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ records: [{ fields: { agent: \"sales_pipeline\", event_type: \"lead_action\", brand_name: $json.company_name || \"\", client_code: \"\", severity: \"info\", message: \"Proposal sent to \" + $json.company_name, payload: JSON.stringify({ lead_id: $json.lead_id, company_name: $json.company_name, contact_name: $json.contact_name, services: $json.services_desc }), created_at: new Date().toISOString() } }] }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3720,
+        1200
+      ],
+      "id": "3634d511-999f-4322-83cb-a99525e9ef12",
+      "name": "Write Event \u2014 Proposal Sent",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Webhook \u2014 Add Lead": {
+      "main": [
+        [
+          {
+            "node": "Parse Lead Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Lead Data": {
+      "main": [
+        [
+          {
+            "node": "Build Lead Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Lead Payload": {
+      "main": [
+        [
+          {
+            "node": "Create Lead in Airtable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Lead in Airtable": {
+      "main": [
+        [
+          {
+            "node": "Prepare Lead Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Lead Notification": {
+      "main": [
+        [
+          {
+            "node": "Lead Created OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lead Created OK?": {
+      "main": [
+        [
+          {
+            "node": "Slack \u2014 New Lead",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Write Event \u2014 Lead Added",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond \u2014 Lead Error",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Write Error Event \u2014 Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack \u2014 New Lead": {
+      "main": [
+        [
+          {
+            "node": "Respond \u2014 Lead Added",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule \u2014 9AM IST Daily": {
+      "main": [
+        [
+          {
+            "node": "Build Follow-up Filter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Follow-up Filter": {
+      "main": [
+        [
+          {
+            "node": "Fetch Overdue Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Overdue Leads": {
+      "main": [
+        [
+          {
+            "node": "Check Leads Exist",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Leads Exist": {
+      "main": [
+        [
+          {
+            "node": "Has Leads?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Leads?": {
+      "main": [
+        [
+          {
+            "node": "Build Follow-up Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Slack \u2014 No Follow-ups",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Follow-up Prompt": {
+      "main": [
+        [
+          {
+            "node": "Gemini \u2014 Follow-up Messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini \u2014 Follow-up Messages": {
+      "main": [
+        [
+          {
+            "node": "Parse Follow-up Messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Follow-up Messages": {
+      "main": [
+        [
+          {
+            "node": "Slack \u2014 Follow-up Suggestion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack \u2014 Follow-up Suggestion": {
+      "main": [
+        [
+          {
+            "node": "Build Follow-up Date Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Follow-up Date Update": {
+      "main": [
+        [
+          {
+            "node": "Update Follow-up Date",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook \u2014 Generate Proposal": {
+      "main": [
+        [
+          {
+            "node": "Extract Proposal Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Proposal Request": {
+      "main": [
+        [
+          {
+            "node": "Fetch Lead Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Lead Record": {
+      "main": [
+        [
+          {
+            "node": "Prepare Projects Fetch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Projects Fetch": {
+      "main": [
+        [
+          {
+            "node": "Fetch Similar Projects",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Similar Projects": {
+      "main": [
+        [
+          {
+            "node": "Build Proposal Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Proposal Prompt": {
+      "main": [
+        [
+          {
+            "node": "Gemini \u2014 Generate Proposal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini \u2014 Generate Proposal": {
+      "main": [
+        [
+          {
+            "node": "Parse Proposal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Proposal": {
+      "main": [
+        [
+          {
+            "node": "Proposal OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Proposal OK?": {
+      "main": [
+        [
+          {
+            "node": "Build Proposal Update",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond \u2014 Proposal Error",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Write Error Event \u2014 Proposal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Proposal Update": {
+      "main": [
+        [
+          {
+            "node": "Update Lead \u2014 Proposal Sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Lead \u2014 Proposal Sent": {
+      "main": [
+        [
+          {
+            "node": "Prepare Proposal Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Proposal Notification": {
+      "main": [
+        [
+          {
+            "node": "Slack \u2014 Proposal Generated",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Write Event \u2014 Proposal Sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack \u2014 Proposal Generated": {
+      "main": [
+        [
+          {
+            "node": "Respond \u2014 Proposal Generated",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger \u2014 Test": {
+      "main": [
+        [
+          {
+            "node": "Set Test Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Test Data": {
+      "main": [
+        [
+          {
+            "node": "Parse Lead Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": {
+    "node:Schedule \u2014 9AM IST Daily": {
+      "recurrenceRules": []
+    }
+  },
+  "meta": null,
+  "pinData": null,
+  "versionId": "e86413be-c942-4c47-a302-9624e3b878b0",
+  "activeVersionId": "e86413be-c942-4c47-a302-9624e3b878b0",
+  "versionCounter": 58,
+  "triggerCount": 3,
+  "shared": [
+    {
+      "updatedAt": "2026-02-24T04:45:46.086Z",
+      "createdAt": "2026-02-24T04:45:46.086Z",
+      "role": "workflow:owner",
+      "workflowId": "KYSdsLXV50H7MHGr",
+      "projectId": "AD8mXtbIf5cdYNIV",
+      "project": {
+        "updatedAt": "2026-01-26T04:34:53.263Z",
+        "createdAt": "2026-01-26T04:34:35.063Z",
+        "id": "AD8mXtbIf5cdYNIV",
+        "name": "SenseInfo Tech <senseinfotechno@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "ed50a507-d93d-45c3-9412-d80babb81dd0",
+        "projectRelations": [
+          {
+            "updatedAt": "2026-01-26T04:34:35.063Z",
+            "createdAt": "2026-01-26T04:34:35.063Z",
+            "userId": "ed50a507-d93d-45c3-9412-d80babb81dd0",
+            "projectId": "AD8mXtbIf5cdYNIV",
+            "user": {
+              "updatedAt": "2026-02-24T18:32:01.000Z",
+              "createdAt": "2026-01-26T04:34:34.578Z",
+              "id": "ed50a507-d93d-45c3-9412-d80babb81dd0",
+              "email": "senseinfotechno@gmail.com",
+              "firstName": "SenseInfo",
+              "lastName": "Tech",
+              "personalizationAnswers": {
+                "version": "v4",
+                "personalization_survey_submitted_at": "2026-01-26T04:35:01.423Z",
+                "personalization_survey_n8n_version": "2.4.6",
+                "companySize": "<20",
+                "companyType": "saas",
+                "role": "business-owner",
+                "reportedSource": "google"
+              },
+              "settings": {
+                "userActivated": true,
+                "firstSuccessfulWorkflowId": "T2U_raVAJPmEIai1EY6TF",
+                "userActivatedAt": 1769404953077,
+                "easyAIWorkflowOnboarded": true,
+                "npsSurvey": {
+                  "responded": true,
+                  "lastShownAt": 1771407918931
+                }
+              },
+              "disabled": false,
+              "mfaEnabled": false,
+              "lastActiveAt": "2026-02-24",
+              "isPending": false
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-02-25T06:26:47.751Z",
+    "createdAt": "2026-02-25T06:26:47.751Z",
+    "versionId": "e86413be-c942-4c47-a302-9624e3b878b0",
+    "workflowId": "KYSdsLXV50H7MHGr",
+    "nodes": [
+      {
+        "parameters": {
+          "content": "## AGENT 5: SALES PIPELINE\n\n3 entry points:\n1. POST /add-lead \u2014 Add new lead to Airtable, notify Slack\n2. Schedule 9 AM IST \u2014 Daily follow-up suggestions via Gemini\n3. POST /generate-proposal \u2014 AI proposal generation with pricing tiers\n\nAirtable base: appvFxwZc9yU8o8pK / Leads table\nGemini 2.5 Flash for AI generation\nSlack notifications to ugc-agent-notifications",
+          "height": 380,
+          "width": 500,
+          "color": 7
+        },
+        "id": "sp-sticky-overview",
+        "name": "Sticky Note - Overview",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          -280,
+          -60
+        ]
+      },
+      {
+        "parameters": {
+          "content": "## BRANCH 1: ADD LEAD\nWebhook \u2192 Parse \u2192 Create Airtable \u2192 Slack \u2192 Respond",
+          "height": 100,
+          "width": 600,
+          "color": 4
+        },
+        "id": "sp-sticky-add-lead",
+        "name": "Sticky Note - Add Lead",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          280,
+          120
+        ]
+      },
+      {
+        "parameters": {
+          "content": "## BRANCH 2: DAILY FOLLOW-UPS\nSchedule 9AM IST \u2192 Fetch overdue leads \u2192 Gemini follow-up \u2192 Slack per lead",
+          "height": 100,
+          "width": 800,
+          "color": 6
+        },
+        "id": "sp-sticky-followups",
+        "name": "Sticky Note - Follow-ups",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          280,
+          520
+        ]
+      },
+      {
+        "parameters": {
+          "content": "## BRANCH 3: GENERATE PROPOSAL\nWebhook \u2192 Fetch lead + projects \u2192 Gemini proposal \u2192 Store + Update stage \u2192 Slack \u2192 Respond",
+          "height": 100,
+          "width": 1000,
+          "color": 3
+        },
+        "id": "sp-sticky-proposal",
+        "name": "Sticky Note - Proposal",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          280,
+          920
+        ]
+      },
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "add-lead",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "id": "sp-webhook-add-lead",
+        "name": "Webhook \u2014 Add Lead",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 1.1,
+        "position": [
+          320,
+          280
+        ],
+        "webhookId": "sales-add-lead-webhook"
+      },
+      {
+        "parameters": {
+          "jsCode": "// ============================================================\n// Parse and validate incoming lead data\n// ============================================================\nconst body = $input.first().json.body || $input.first().json;\n\nfunction clean(val) {\n  if (val === undefined || val === null) return '';\n  if (Array.isArray(val)) return val.join(', ');\n  return String(val).trim();\n}\n\nconst company_name = clean(body.company_name || body.companyName || body.company);\nconst contact_name = clean(body.contact_name || body.contactName || body.name);\nconst email = clean(body.email);\nconst phone = clean(body.phone);\nconst instagram = clean(body.instagram);\nconst linkedin = clean(body.linkedin);\nconst website = clean(body.website);\nconst industry = clean(body.industry);\nconst monthly_ad_spend = clean(body.monthly_ad_spend || body.monthlyAdSpend || body.ad_spend);\nconst source = clean(body.source);\nconst notes = clean(body.notes);\nconst estimated_value = clean(body.estimated_value || body.estimatedValue);\n\nif (!company_name) throw new Error('company_name is required');\nif (!contact_name) throw new Error('contact_name is required');\n\n// Set next_follow_up to 2 days from now by default\nconst followUp = new Date();\nfollowUp.setDate(followUp.getDate() + 2);\nconst next_follow_up = body.next_follow_up || followUp.toISOString().split('T')[0];\n\nreturn [{ json: {\n  company_name,\n  contact_name,\n  email,\n  phone,\n  instagram,\n  linkedin,\n  website,\n  industry,\n  monthly_ad_spend,\n  source,\n  notes,\n  estimated_value,\n  next_follow_up,\n  stage: 'New',\n  created_at: new Date().toISOString().split('T')[0]\n} }];"
+        },
+        "id": "sp-parse-lead",
+        "name": "Parse Lead Data",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          620,
+          280
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "// ============================================================\n// Build Airtable create payload \u2014 validate select fields against allowed values\n// Airtable rejects unknown select options without schema:bases:write scope\n// ============================================================\nconst lead = $input.first().json;\nconst fields = {};\n\n// Allowed select field values (must match Airtable table schema exactly)\nconst VALID_SOURCES = ['Referral', 'Instagram', 'LinkedIn', 'Website', 'Cold Outreach'];\nconst VALID_STAGES = ['New', 'Contacted', 'Meeting Scheduled', 'Proposal Sent', 'Negotiating', 'Won', 'Lost'];\n\n// Always set these\nfields.company_name = lead.company_name;\nfields.contact_name = lead.contact_name;\n\n// Validate stage \u2014 must be a known select option\nconst stage = lead.stage || 'New';\nif (VALID_STAGES.includes(stage)) {\n  fields.stage = stage;\n} else {\n  fields.stage = 'New'; // Default to 'New' for unknown stages\n}\n\n// Only set created_at if it's a valid date-only format\nif (lead.created_at) {\n  const dateOnly = String(lead.created_at).split('T')[0];\n  if (/^\\d{4}-\\d{2}-\\d{2}$/.test(dateOnly)) {\n    fields.created_at = dateOnly;\n  }\n}\n\n// Only set non-empty optional fields\nif (lead.email) fields.email = lead.email;\nif (lead.phone) fields.phone = lead.phone;\nif (lead.instagram) fields.instagram = lead.instagram;\nif (lead.linkedin) fields.linkedin = lead.linkedin;\nif (lead.website) fields.website = lead.website;\nif (lead.industry) fields.industry = lead.industry;\nif (lead.monthly_ad_spend) {\n  const spend = Number(String(lead.monthly_ad_spend).replace(/[^0-9.]/g, ''));\n  if (!isNaN(spend) && spend > 0) fields.monthly_ad_spend = spend;\n}\n\n// Validate source \u2014 must be a known select option (omit if unknown)\nif (lead.source) {\n  const src = String(lead.source).trim();\n  if (VALID_SOURCES.includes(src)) {\n    fields.source = src;\n  }\n  // If source doesn't match, omit it rather than crash\n}\n\nif (lead.notes) fields.notes = lead.notes;\nif (lead.estimated_value) {\n  const num = Number(String(lead.estimated_value).replace(/[^0-9.]/g, ''));\n  if (!isNaN(num) && num > 0) fields.estimated_value = num;\n}\nif (lead.next_follow_up) {\n  const dateOnly = String(lead.next_follow_up).split('T')[0];\n  if (/^\\d{4}-\\d{2}-\\d{2}$/.test(dateOnly)) {\n    fields.next_follow_up = dateOnly;\n  }\n}\n\nreturn [{ json: { fields, lead } }];"
+        },
+        "id": "sp-build-lead-payload",
+        "name": "Build Lead Payload",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          920,
+          280
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Leads",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "airtableTokenApi",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ fields: $json.fields }) }}",
+          "options": {}
+        },
+        "id": "sp-create-lead",
+        "name": "Create Lead in Airtable",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1220,
+          280
+        ],
+        "credentials": {
+          "airtableTokenApi": {
+            "id": "WelvlJEjoHaI3l9G",
+            "name": "Airtable Personal Access Token account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "// Prepare Slack notification for new lead \u2014 with error detection\nconst record = $input.first().json;\nconst f = record.fields || {};\nconst lead = $('Build Lead Payload').first().json.lead;\n\n// Detect Airtable create failure\nif (!record.id || record.error || record.statusCode >= 400) {\n  return [{ json: {\n    _error: true,\n    errorMessage: record.error || record.statusMessage || 'Failed to create lead in Airtable (no record ID returned)',\n    company_name: lead.company_name,\n    contact_name: lead.contact_name\n  } }];\n}\n\nreturn [{ json: {\n  _error: false,\n  record_id: record.id,\n  company_name: f.company_name || lead.company_name,\n  contact_name: f.contact_name || lead.contact_name,\n  email: f.email || lead.email || 'N/A',\n  phone: f.phone || lead.phone || 'N/A',\n  industry: f.industry || lead.industry || 'N/A',\n  source: f.source || lead.source || 'N/A',\n  monthly_ad_spend: f.monthly_ad_spend || lead.monthly_ad_spend || 'N/A',\n  estimated_value: f.estimated_value || lead.estimated_value || 'N/A',\n  next_follow_up: f.next_follow_up || lead.next_follow_up || 'N/A',\n  notes: f.notes || lead.notes || ''\n} }];"
+        },
+        "id": "sp-prep-lead-notify",
+        "name": "Prepare Lead Notification",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1520,
+          280
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict"
+            },
+            "conditions": [
+              {
+                "id": "sp-cond-lead-ok",
+                "leftValue": "={{ $json._error }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "notEquals",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "sp-if-lead-ok",
+        "name": "Lead Created OK?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          1720,
+          280
+        ]
+      },
+      {
+        "parameters": {
+          "select": "channel",
+          "channelId": {
+            "__rl": true,
+            "value": "C0AFBQ5UF0E",
+            "mode": "id"
+          },
+          "text": "={{ `*New Lead Added to Pipeline*\\n\\n*Company:* ${$json.company_name}\\n*Contact:* ${$json.contact_name}\\n*Email:* ${$json.email}\\n*Phone:* ${$json.phone}\\n*Industry:* ${$json.industry}\\n*Source:* ${$json.source}\\n*Monthly Ad Spend:* ${$json.monthly_ad_spend}\\n*Estimated Value:* ${$json.estimated_value}\\n*Next Follow-up:* ${$json.next_follow_up}\\n${$json.notes ? '*Notes:* ' + $json.notes : ''}\\n\\n_Stage: New Lead | Record: ${$json.record_id}_` }}",
+          "otherOptions": {}
+        },
+        "id": "sp-slack-new-lead",
+        "name": "Slack \u2014 New Lead",
+        "type": "n8n-nodes-base.slack",
+        "typeVersion": 2.2,
+        "position": [
+          2020,
+          180
+        ],
+        "credentials": {
+          "slackApi": {
+            "id": "5Q37UpOjGx4YsbyC",
+            "name": "Slack account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "respondWith": "text",
+          "responseBody": "={{ JSON.stringify({ status: 'success', action: 'add_lead', record_id: $json.record_id || $('Prepare Lead Notification').first().json.record_id, company_name: $('Prepare Lead Notification').first().json.company_name, message: 'Lead created and team notified.' }) }}",
+          "options": {
+            "responseHeaders": {
+              "entries": [
+                {
+                  "name": "Content-Type",
+                  "value": "application/json"
+                }
+              ]
+            }
+          }
+        },
+        "id": "sp-respond-add-lead",
+        "name": "Respond \u2014 Lead Added",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.1,
+        "position": [
+          2320,
+          180
+        ]
+      },
+      {
+        "parameters": {
+          "respondWith": "text",
+          "responseBody": "={{ JSON.stringify({ status: 'error', action: 'add_lead', company_name: $json.company_name || '', error: $json.errorMessage || 'Unknown error creating lead' }) }}",
+          "options": {
+            "responseHeaders": {
+              "entries": [
+                {
+                  "name": "Content-Type",
+                  "value": "application/json"
+                }
+              ]
+            },
+            "responseCode": 500
+          }
+        },
+        "id": "sp-respond-lead-error",
+        "name": "Respond \u2014 Lead Error",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.1,
+        "position": [
+          2020,
+          480
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblGhzSJ5RXWDS8h8",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "airtableTokenApi",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ records: [{ fields: { agent: 'sales_pipeline', event_type: 'system_error', severity: 'high', message: 'Failed to create lead: ' + ($json.company_name || 'unknown') + ' \u2014 ' + ($json.errorMessage || 'unknown error'), payload: JSON.stringify({ company_name: $json.company_name, error: $json.errorMessage }), created_at: new Date().toISOString() } }] }) }}",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          2020,
+          360
+        ],
+        "id": "sp-write-error-event-lead",
+        "name": "Write Error Event \u2014 Lead",
+        "credentials": {
+          "airtableTokenApi": {
+            "id": "WelvlJEjoHaI3l9G",
+            "name": "Airtable Personal Access Token account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "cronExpression",
+                "expression": "30 3 * * *"
+              }
+            ]
+          }
+        },
+        "id": "sp-schedule-followups",
+        "name": "Schedule \u2014 9AM IST Daily",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          320,
+          680
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "// ============================================================\n// Build Airtable filter: next_follow_up <= today AND stage is active\n// ============================================================\nconst today = new Date().toISOString().split('T')[0];\nconst formula = `AND(IS_BEFORE({next_follow_up}, '${today}T23:59:59.000Z'), OR({stage}='New', {stage}='Contacted', {stage}='Meeting Scheduled', {stage}='Proposal Sent', {stage}='Negotiating'))`;\nconst encoded = encodeURIComponent(formula);\nreturn [{ json: { filter_url: `https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Leads?filterByFormula=${encoded}&pageSize=100` } }];"
+        },
+        "id": "sp-build-followup-filter",
+        "name": "Build Follow-up Filter",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          620,
+          680
+        ]
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "={{ $json.filter_url }}",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "airtableTokenApi",
+          "options": {}
+        },
+        "id": "sp-fetch-overdue-leads",
+        "name": "Fetch Overdue Leads",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          920,
+          680
+        ],
+        "credentials": {
+          "airtableTokenApi": {
+            "id": "WelvlJEjoHaI3l9G",
+            "name": "Airtable Personal Access Token account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "// Check if there are leads to follow up on \u2014 with error handling\nconst response = $input.first().json;\n\n// Handle Airtable fetch errors\nif (response.error || response.statusCode >= 400 || !response.records) {\n  return [{ json: { has_leads: false, count: 0, leads: [], _fetchError: response.error || response.statusMessage || 'Airtable fetch failed' } }];\n}\n\nconst records = response.records || [];\nif (records.length === 0) {\n  return [{ json: { has_leads: false, count: 0, leads: [] } }];\n}\n\nconst leads = records.map(r => ({\n  record_id: r.id,\n  company_name: r.fields.company_name || '',\n  contact_name: r.fields.contact_name || '',\n  email: r.fields.email || '',\n  phone: r.fields.phone || '',\n  industry: r.fields.industry || '',\n  monthly_ad_spend: r.fields.monthly_ad_spend || '',\n  stage: r.fields.stage || '',\n  notes: r.fields.notes || '',\n  next_follow_up: r.fields.next_follow_up || '',\n  source: r.fields.source || '',\n  website: r.fields.website || '',\n  instagram: r.fields.instagram || '',\n  linkedin: r.fields.linkedin || ''\n}));\n\nreturn [{ json: { has_leads: true, count: leads.length, leads } }];"
+        },
+        "id": "sp-check-leads",
+        "name": "Check Leads Exist",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1220,
+          680
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict"
+            },
+            "conditions": [
+              {
+                "id": "sp-cond-has-leads",
+                "leftValue": "={{ $json.has_leads }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "equals",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "sp-if-has-leads",
+        "name": "Has Leads?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          1520,
+          680
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "// ============================================================\n// Build Gemini prompt for all follow-up leads at once\n// ============================================================\nconst data = $input.first().json;\nconst leads = data.leads;\n\nconst leadSummaries = leads.map((l, i) => {\n  return `LEAD ${i + 1}:\\n- Company: ${l.company_name}\\n- Contact: ${l.contact_name}\\n- Industry: ${l.industry || 'Unknown'}\\n- Stage: ${l.stage}\\n- Monthly Ad Spend: ${l.monthly_ad_spend || 'Unknown'}\\n- Source: ${l.source || 'Unknown'}\\n- Notes: ${l.notes || 'None'}\\n- Last Follow-up Date: ${l.next_follow_up}\\n- Website: ${l.website || 'N/A'}\\n- Instagram: ${l.instagram || 'N/A'}`;\n}).join('\\n\\n');\n\nconst systemPrompt = `You are the sales assistant for Smashed Agency \u2014 a UGC (user-generated content) and AI creatives agency based in India. We manage ~10 active clients, offering UGC script writing, AI-generated ad creatives, and full-service media buying (Meta + Google Ads).\n\nOur core offerings:\n- UGC Scripts: Hook-driven scripts for Instagram Reels, YouTube Shorts, and TikTok\n- AI Creatives: AI-generated ad images and video variants\n- Media Buying: Full campaign management on Meta and Google\n- Strategy: Monthly content calendars, competitor analysis, performance optimization\n\nYour job is to generate personalized, warm follow-up messages for each lead. The tone should be professional but approachable \u2014 like a knowledgeable friend in the industry, not a pushy salesperson. Reference specific details about their company, industry, or previous conversations when available.\n\nFor each lead, output a JSON object with:\n- lead_index (number, 0-based)\n- subject (short subject line for reference)\n- message (the actual follow-up message, 3-5 sentences, ready to send via WhatsApp/email)\n- channel (\"whatsapp\" if phone exists, \"email\" if only email, \"linkedin\" if only linkedin)\n- urgency (\"high\" if overdue by 3+ days, \"medium\" if 1-2 days, \"low\" if today)\n\nReturn a JSON array of these objects. Only valid JSON, no markdown.`;\n\nconst userPrompt = `Today is ${new Date().toISOString().split('T')[0]}. Generate personalized follow-up messages for these ${leads.length} leads:\\n\\n${leadSummaries}`;\n\nconst geminiBody = {\n  systemInstruction: { parts: [{ text: systemPrompt }] },\n  contents: [{ role: 'user', parts: [{ text: userPrompt }] }],\n  generationConfig: { temperature: 0.3, maxOutputTokens: 4000 }\n};\n\nreturn [{ json: { gemini_body: geminiBody, leads } }];"
+        },
+        "id": "sp-build-followup-prompt",
+        "name": "Build Follow-up Prompt",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1820,
+          640
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "googlePalmApi",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify($json.gemini_body) }}",
+          "options": {}
+        },
+        "id": "sp-gemini-followups",
+        "name": "Gemini \u2014 Follow-up Messages",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          2120,
+          640
+        ],
+        "credentials": {
+          "googlePalmApi": {
+            "id": "rIL63TG4xfMQL8uJ",
+            "name": "Cosmisk AI"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "// Parse Gemini response with validation and fallback\nconst geminiResponse = $input.first().json;\nconst leads = $('Build Follow-up Prompt').first().json.leads;\n\n// Validate Gemini response\nlet rawText = '';\nconst hasError = geminiResponse.error || geminiResponse.statusCode >= 400 || !geminiResponse.candidates;\n\nif (!hasError) {\n  try {\n    rawText = geminiResponse.candidates[0].content.parts[0].text || '';\n  } catch (e) {\n    rawText = '';\n  }\n}\n\n// If Gemini failed, generate basic follow-up reminders\nif (!rawText) {\n  const today = new Date();\n  const results = leads.map((lead, idx) => {\n    const overdueDays = lead.next_follow_up ? Math.floor((today - new Date(lead.next_follow_up)) / 86400000) : 0;\n    const urgency = overdueDays >= 3 ? 'high' : overdueDays >= 1 ? 'medium' : 'low';\n    const channel = lead.phone ? 'whatsapp' : lead.email ? 'email' : 'linkedin';\n    return {\n      record_id: lead.record_id,\n      company_name: lead.company_name,\n      contact_name: lead.contact_name,\n      email: lead.email,\n      phone: lead.phone,\n      stage: lead.stage,\n      subject: 'Follow-up: ' + lead.company_name,\n      message: 'Hi ' + lead.contact_name + ', following up regarding ' + lead.company_name + '. We discussed our UGC and creative services \u2014 would love to continue the conversation. Let me know a good time to connect this week.',\n      channel: channel,\n      urgency: urgency\n    };\n  });\n  return results.map(r => ({ json: r }));\n}\n\n// Parse Gemini JSON response\nlet cleaned = rawText.trim();\nif (cleaned.startsWith('```')) {\n  cleaned = cleaned.replace(/^```json?\\s*/, '').replace(/```\\s*$/, '').trim();\n}\n\nlet followUps;\ntry {\n  followUps = JSON.parse(cleaned);\n} catch (e) {\n  // JSON parse failed \u2014 generate basic reminders\n  const results = leads.map(lead => ({\n    record_id: lead.record_id,\n    company_name: lead.company_name,\n    contact_name: lead.contact_name,\n    email: lead.email,\n    phone: lead.phone,\n    stage: lead.stage,\n    subject: 'Follow-up: ' + lead.company_name,\n    message: 'Hi ' + lead.contact_name + ', checking in regarding our conversation about UGC services for ' + lead.company_name + '. Happy to answer any questions or schedule a quick call.',\n    channel: lead.phone ? 'whatsapp' : lead.email ? 'email' : 'linkedin',\n    urgency: 'medium'\n  }));\n  return results.map(r => ({ json: r }));\n}\n\nif (!Array.isArray(followUps)) {\n  followUps = [followUps];\n}\n\nconst results = followUps.map(fu => {\n  const idx = fu.lead_index || 0;\n  const lead = leads[idx] || leads[0] || {};\n  return {\n    record_id: lead.record_id,\n    company_name: lead.company_name,\n    contact_name: lead.contact_name,\n    email: lead.email,\n    phone: lead.phone,\n    stage: lead.stage,\n    subject: fu.subject || '',\n    message: fu.message || '',\n    channel: fu.channel || 'email',\n    urgency: fu.urgency || 'medium'\n  };\n});\n\nreturn results.map(r => ({ json: r }));"
+        },
+        "id": "sp-parse-followups",
+        "name": "Parse Follow-up Messages",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2420,
+          640
+        ]
+      },
+      {
+        "parameters": {
+          "select": "channel",
+          "channelId": {
+            "__rl": true,
+            "value": "C0AFBQ5UF0E",
+            "mode": "id"
+          },
+          "text": "={{ `*Daily Follow-up: ${$json.company_name}*\\n\\n*Contact:* ${$json.contact_name}\\n*Stage:* ${$json.stage}\\n*Urgency:* ${$json.urgency === 'high' ? '\ud83d\udd34 High' : $json.urgency === 'medium' ? '\ud83d\udfe1 Medium' : '\ud83d\udfe2 Low'}\\n*Channel:* ${$json.channel}\\n\\n*Suggested Message:*\\n>${$json.message.split('\\n').join('\\n>')}\\n\\n_Record: ${$json.record_id}_` }}",
+          "otherOptions": {}
+        },
+        "id": "sp-slack-followup",
+        "name": "Slack \u2014 Follow-up Suggestion",
+        "type": "n8n-nodes-base.slack",
+        "typeVersion": 2.2,
+        "position": [
+          2720,
+          640
+        ],
+        "credentials": {
+          "slackApi": {
+            "id": "5Q37UpOjGx4YsbyC",
+            "name": "Slack account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "generate-proposal",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "id": "sp-webhook-proposal",
+        "name": "Webhook \u2014 Generate Proposal",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 1.1,
+        "position": [
+          320,
+          1080
+        ],
+        "webhookId": "sales-generate-proposal-webhook"
+      },
+      {
+        "parameters": {
+          "jsCode": "// ============================================================\n// Extract and validate proposal request\n// ============================================================\nconst body = $input.first().json.body || $input.first().json;\n\nconst lead_id = (body.lead_id || '').trim();\nconst services = body.services || [];\nconst notes = (body.notes || '').trim();\n\nif (!lead_id) throw new Error('lead_id is required');\nif (!Array.isArray(services) || services.length === 0) {\n  throw new Error('services array is required (e.g. [\"ugc_scripts\", \"ai_creatives\", \"media_buying\"])');\n}\n\nreturn [{ json: { lead_id, services, notes } }];"
+        },
+        "id": "sp-extract-proposal-req",
+        "name": "Extract Proposal Request",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          620,
+          1080
+        ]
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Leads/{{ $json.lead_id }}",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "airtableTokenApi",
+          "options": {}
+        },
+        "id": "sp-fetch-lead-for-proposal",
+        "name": "Fetch Lead Record",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          920,
+          1080
+        ],
+        "credentials": {
+          "airtableTokenApi": {
+            "id": "WelvlJEjoHaI3l9G",
+            "name": "Airtable Personal Access Token account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "// Build URL for similar projects \u2014 with lead fetch error detection\nconst leadRecord = $input.first().json;\nconst reqData = $('Extract Proposal Request').first().json;\n\n// Detect Airtable fetch failure\nif (!leadRecord.id || leadRecord.error || leadRecord.statusCode >= 400) {\n  return [{ json: {\n    _error: true,\n    errorMessage: leadRecord.error || leadRecord.statusMessage || 'Lead not found or Airtable fetch failed',\n    lead_id: reqData.lead_id,\n    services: reqData.services\n  } }];\n}\n\nconst f = leadRecord.fields || {};\nconst industry = f.industry || '';\n\nlet filterUrl = 'https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Projects?pageSize=5&sort%5B0%5D%5Bfield%5D=created_at&sort%5B0%5D%5Bdirection%5D=desc';\nif (industry) {\n  const formula = encodeURIComponent(\"{industry}='\" + industry + \"'\");\n  filterUrl += '&filterByFormula=' + formula;\n}\n\nreturn [{ json: {\n  _error: false,\n  lead_record: leadRecord,\n  lead_fields: f,\n  services: reqData.services,\n  proposal_notes: reqData.notes,\n  projects_url: filterUrl\n} }];"
+        },
+        "id": "sp-prep-projects-fetch",
+        "name": "Prepare Projects Fetch",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1220,
+          1080
+        ]
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "={{ $json.projects_url }}",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "airtableTokenApi",
+          "options": {}
+        },
+        "id": "sp-fetch-similar-projects",
+        "name": "Fetch Similar Projects",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1520,
+          1080
+        ],
+        "credentials": {
+          "airtableTokenApi": {
+            "id": "WelvlJEjoHaI3l9G",
+            "name": "Airtable Personal Access Token account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "// ============================================================\n// Build Gemini prompt for proposal generation\n// ============================================================\nconst prevData = $('Prepare Projects Fetch').first().json;\nif (prevData._error) {\n  return [{ json: { ...prevData } }];\n}\nconst lead = prevData.lead_fields;\nconst services = prevData.services;\nconst proposalNotes = prevData.proposal_notes;\nconst leadRecord = prevData.lead_record;\n\n// Parse similar projects for context\nconst projectRecords = $input.first().json.records || [];\nconst projectContext = projectRecords.map(p => {\n  const pf = p.fields || {};\n  return `- ${pf.brand_name || 'Client'} (${pf.industry || 'N/A'}): ${pf.num_scripts || '?'} scripts, status: ${pf.status || 'N/A'}`;\n}).join('\\n');\n\nconst servicesDesc = services.map(s => {\n  switch(s) {\n    case 'ugc_scripts': return 'UGC Script Writing';\n    case 'ai_creatives': return 'AI Ad Creatives';\n    case 'media_buying': return 'Meta & Google Ads Media Buying';\n    case 'strategy': return 'Content Strategy & Monthly Calendar';\n    case 'competitor_analysis': return 'Competitor Ad Analysis';\n    default: return s;\n  }\n}).join(', ');\n\nconst systemPrompt = `You are the proposal generator for Smashed Agency \u2014 a UGC and AI creatives agency based in India. We work with D2C brands, fintech companies, edtech platforms, and e-commerce businesses. We currently manage ~10 active clients.\n\nOur pricing structure (in INR):\n\nSTARTER TIER (for brands spending < \u20b92L/month on ads):\n- 5 UGC Scripts/month: \u20b915,000 - \u20b925,000\n- Includes: Hook research, script writing, 1 round of revisions\n- Turnaround: 5-7 business days\n\nGROWTH TIER (for brands spending \u20b92L-10L/month):\n- 10 UGC Scripts + AI Creatives: \u20b930,000 - \u20b950,000\n- Includes: Deep competitor analysis, hook research, script writing, AI-generated ad images/videos, 2 rounds of revisions\n- Turnaround: 7-10 business days\n\nFULL-SERVICE TIER (for brands spending \u20b910L+/month):\n- 15+ UGC Scripts + AI Creatives + Media Buying: \u20b975,000+\n- Includes: Everything in Growth + full Meta/Google campaign management, weekly performance reports, monthly strategy calls, unlimited revisions\n- Turnaround: Ongoing monthly retainer\n\nADD-ONS:\n- Competitor Ad Analysis Report: \u20b95,000 one-time\n- Monthly Content Calendar: \u20b98,000/month\n- Additional script batches (5 scripts): \u20b912,000\n\nGenerate a professional, personalized proposal. The proposal should:\n1. Open with a brief understanding of their business and challenges\n2. Recommend the appropriate tier based on their ad spend\n3. Break down the selected services with deliverables and pricing\n4. Include a clear timeline\n5. End with next steps and a soft CTA\n\nFormat the proposal in clean text with clear sections (use ** for bold headers). Include specific numbers and deliverables \u2014 no vague promises. Reference their industry and any available context about their business.\n\nOutput ONLY the proposal text. No JSON wrapping. No markdown code fences.`;\n\nconst userPrompt = `Generate a proposal for this lead:\n\nCompany: ${lead.company_name || 'N/A'}\nContact: ${lead.contact_name || 'N/A'}\nIndustry: ${lead.industry || 'N/A'}\nWebsite: ${lead.website || 'N/A'}\nInstagram: ${lead.instagram || 'N/A'}\nMonthly Ad Spend: ${lead.monthly_ad_spend || 'Not disclosed'}\nCurrent Stage: ${lead.stage || 'N/A'}\nPrevious Notes: ${lead.notes || 'None'}\n\nRequested Services: ${servicesDesc}\nAdditional Notes from Sales: ${proposalNotes || 'None'}\n\n${projectContext ? 'Similar past projects for reference:\\n' + projectContext : 'No similar past projects found.'}`;\n\nconst geminiBody = {\n  systemInstruction: { parts: [{ text: systemPrompt }] },\n  contents: [{ role: 'user', parts: [{ text: userPrompt }] }],\n  generationConfig: { temperature: 0.3, maxOutputTokens: 3000 }\n};\n\nreturn [{ json: {\n  gemini_body: geminiBody,\n  lead_id: leadRecord.id,\n  lead_fields: lead,\n  services: services,\n  services_desc: servicesDesc\n} }];"
+        },
+        "id": "sp-build-proposal-prompt",
+        "name": "Build Proposal Prompt",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1820,
+          1080
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "googlePalmApi",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify($json.gemini_body) }}",
+          "options": {}
+        },
+        "id": "sp-gemini-proposal",
+        "name": "Gemini \u2014 Generate Proposal",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          2120,
+          1080
+        ],
+        "credentials": {
+          "googlePalmApi": {
+            "id": "rIL63TG4xfMQL8uJ",
+            "name": "Cosmisk AI"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "// Parse proposal with Gemini validation\nconst geminiResponse = $input.first().json;\nconst prevData = $('Build Proposal Prompt').first().json;\n\n// Propagate upstream errors\nif (prevData._error) {\n  return [{ json: { _error: true, errorMessage: prevData.errorMessage, lead_id: prevData.lead_id } }];\n}\n\n// Validate Gemini response\nconst hasError = geminiResponse.error || geminiResponse.statusCode >= 400 || !geminiResponse.candidates;\nlet proposalText = '';\n\nif (!hasError) {\n  try {\n    proposalText = geminiResponse.candidates[0].content.parts[0].text || '';\n  } catch (e) {\n    proposalText = '';\n  }\n}\n\nif (!proposalText) {\n  return [{ json: {\n    _error: true,\n    errorMessage: 'Gemini failed to generate proposal: ' + (geminiResponse.error || geminiResponse.statusMessage || 'no content returned'),\n    lead_id: prevData.lead_id,\n    lead_fields: prevData.lead_fields,\n    services_desc: prevData.services_desc\n  } }];\n}\n\n// Clean up code fences\nproposalText = proposalText.trim();\nif (proposalText.startsWith('```')) {\n  proposalText = proposalText.replace(/^```[a-z]*\\s*/, '').replace(/```\\s*$/, '').trim();\n}\n\nreturn [{ json: {\n  _error: false,\n  lead_id: prevData.lead_id,\n  lead_fields: prevData.lead_fields,\n  services: prevData.services,\n  services_desc: prevData.services_desc,\n  proposal_text: proposalText\n} }];"
+        },
+        "id": "sp-parse-proposal",
+        "name": "Parse Proposal",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2420,
+          1080
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict"
+            },
+            "conditions": [
+              {
+                "id": "sp-cond-proposal-ok",
+                "leftValue": "={{ $json._error }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "notEquals",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "sp-if-proposal-ok",
+        "name": "Proposal OK?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          2620,
+          1080
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "// ============================================================\n// Build Airtable PATCH to store proposal and update stage\n// ============================================================\nconst data = $input.first().json;\n\nconst fields = {\n  notes: data.proposal_text,\n  stage: 'Proposal Sent'\n};\n\nreturn [{ json: {\n  update_url: `https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Leads/${data.lead_id}`,\n  update_body: { fields },\n  lead_id: data.lead_id,\n  lead_fields: data.lead_fields,\n  services_desc: data.services_desc,\n  proposal_text: data.proposal_text\n} }];"
+        },
+        "id": "sp-build-proposal-update",
+        "name": "Build Proposal Update",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2920,
+          1000
+        ]
+      },
+      {
+        "parameters": {
+          "method": "PATCH",
+          "url": "={{ $json.update_url }}",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "airtableTokenApi",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify($json.update_body) }}",
+          "options": {}
+        },
+        "id": "sp-update-lead-proposal",
+        "name": "Update Lead \u2014 Proposal Sent",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          3220,
+          1000
+        ],
+        "credentials": {
+          "airtableTokenApi": {
+            "id": "WelvlJEjoHaI3l9G",
+            "name": "Airtable Personal Access Token account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "// ============================================================\n// Prepare Slack notification for proposal\n// ============================================================\nconst prevData = $('Build Proposal Update').first().json;\nconst lead = prevData.lead_fields;\n\n// Truncate proposal for Slack (first 500 chars)\nconst proposalPreview = prevData.proposal_text.length > 500\n  ? prevData.proposal_text.substring(0, 500) + '...'\n  : prevData.proposal_text;\n\nreturn [{ json: {\n  lead_id: prevData.lead_id,\n  company_name: lead.company_name || 'Unknown',\n  contact_name: lead.contact_name || 'Unknown',\n  services_desc: prevData.services_desc,\n  proposal_preview: proposalPreview\n} }];"
+        },
+        "id": "sp-prep-proposal-notify",
+        "name": "Prepare Proposal Notification",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          3520,
+          1000
+        ]
+      },
+      {
+        "parameters": {
+          "select": "channel",
+          "channelId": {
+            "__rl": true,
+            "value": "C0AFBQ5UF0E",
+            "mode": "id"
+          },
+          "text": "={{ `*Proposal Generated: ${$json.company_name}*\\n\\n*Contact:* ${$json.contact_name}\\n*Services:* ${$json.services_desc}\\n*Stage:* Proposal Sent\\n\\n*Proposal Preview:*\\n${$json.proposal_preview}\\n\\n_Full proposal stored in Airtable | Lead: ${$json.lead_id}_` }}",
+          "otherOptions": {}
+        },
+        "id": "sp-slack-proposal",
+        "name": "Slack \u2014 Proposal Generated",
+        "type": "n8n-nodes-base.slack",
+        "typeVersion": 2.2,
+        "position": [
+          3820,
+          1000
+        ],
+        "credentials": {
+          "slackApi": {
+            "id": "5Q37UpOjGx4YsbyC",
+            "name": "Slack account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "respondWith": "text",
+          "responseBody": "={{ JSON.stringify({ status: 'success', action: 'generate_proposal', lead_id: $json.lead_id || $('Prepare Proposal Notification').first().json.lead_id, company_name: $('Prepare Proposal Notification').first().json.company_name, stage: 'Proposal Sent', message: 'Proposal generated, stored in Airtable, and team notified.' }) }}",
+          "options": {
+            "responseHeaders": {
+              "entries": [
+                {
+                  "name": "Content-Type",
+                  "value": "application/json"
+                }
+              ]
+            }
+          }
+        },
+        "id": "sp-respond-proposal",
+        "name": "Respond \u2014 Proposal Generated",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.1,
+        "position": [
+          4120,
+          1000
+        ]
+      },
+      {
+        "parameters": {
+          "respondWith": "text",
+          "responseBody": "={{ JSON.stringify({ status: 'error', action: 'generate_proposal', lead_id: $json.lead_id || '', error: $json.errorMessage || 'Unknown error generating proposal' }) }}",
+          "options": {
+            "responseHeaders": {
+              "entries": [
+                {
+                  "name": "Content-Type",
+                  "value": "application/json"
+                }
+              ]
+            },
+            "responseCode": 500
+          }
+        },
+        "id": "sp-respond-proposal-error",
+        "name": "Respond \u2014 Proposal Error",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.1,
+        "position": [
+          2920,
+          1280
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblGhzSJ5RXWDS8h8",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "airtableTokenApi",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ records: [{ fields: { agent: 'sales_pipeline', event_type: 'system_error', severity: 'high', message: 'Proposal generation failed: ' + ($json.lead_id || 'unknown') + ' \u2014 ' + ($json.errorMessage || 'unknown error'), payload: JSON.stringify({ lead_id: $json.lead_id, error: $json.errorMessage, services: $json.services_desc }), created_at: new Date().toISOString() } }] }) }}",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          2920,
+          1180
+        ],
+        "id": "sp-write-error-event-proposal",
+        "name": "Write Error Event \u2014 Proposal",
+        "credentials": {
+          "airtableTokenApi": {
+            "id": "WelvlJEjoHaI3l9G",
+            "name": "Airtable Personal Access Token account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {},
+        "id": "sp-manual-trigger",
+        "name": "Manual Trigger \u2014 Test",
+        "type": "n8n-nodes-base.manualTrigger",
+        "typeVersion": 1,
+        "position": [
+          320,
+          -140
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "// ============================================================\n// Test data \u2014 switch between add-lead and generate-proposal\n// ============================================================\nconst testMode = 'add-lead'; // Change to 'generate-proposal' or 'follow-ups' for testing\n\nif (testMode === 'add-lead') {\n  return [{ json: { body: {\n    company_name: 'Test D2C Brand',\n    contact_name: 'Rahul Sharma',\n    email: 'rahul@testbrand.com',\n    phone: '+919876543210',\n    instagram: '@testbrand',\n    website: 'https://testbrand.com',\n    industry: 'D2C / E-commerce',\n    monthly_ad_spend: '5L/month',\n    source: 'Instagram DM',\n    notes: 'Interested in UGC scripts for product launch. Currently running static ads only.',\n    estimated_value: '50000'\n  } } }];\n}\n\nif (testMode === 'generate-proposal') {\n  return [{ json: { body: {\n    lead_id: 'recXXXXXXXXXXXXXX',\n    services: ['ugc_scripts', 'ai_creatives'],\n    notes: 'They want to start with 10 scripts for their new skincare line launch in March.'\n  } } }];\n}\n\n// follow-ups test \u2014 just trigger schedule path\nreturn [{ json: { test: 'follow-ups' } }];"
+        },
+        "id": "sp-test-data",
+        "name": "Set Test Data",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          620,
+          -140
+        ]
+      },
+      {
+        "parameters": {
+          "select": "channel",
+          "channelId": {
+            "__rl": true,
+            "value": "C0AFBQ5UF0E",
+            "mode": "id"
+          },
+          "text": "={{ `*No Follow-ups Today*\\n\\nAll leads are up to date. No overdue follow-ups found for ${new Date().toISOString().split('T')[0]}.` }}",
+          "otherOptions": {}
+        },
+        "id": "sp-slack-no-followups",
+        "name": "Slack \u2014 No Follow-ups",
+        "type": "n8n-nodes-base.slack",
+        "typeVersion": 2.2,
+        "position": [
+          1820,
+          760
+        ],
+        "credentials": {
+          "slackApi": {
+            "id": "5Q37UpOjGx4YsbyC",
+            "name": "Slack account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "// ============================================================\n// Update next_follow_up for each lead after posting follow-up\n// Push follow-up 3 days out from today\n// ============================================================\nconst lead = $input.first().json;\nconst nextDate = new Date();\nnextDate.setDate(nextDate.getDate() + 3);\nconst next_follow_up = nextDate.toISOString().split('T')[0];\n\nreturn [{ json: {\n  update_url: `https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Leads/${lead.record_id}`,\n  update_body: { fields: { next_follow_up } },\n  record_id: lead.record_id,\n  company_name: lead.company_name\n} }];"
+        },
+        "id": "sp-build-followup-update",
+        "name": "Build Follow-up Date Update",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          3020,
+          640
+        ]
+      },
+      {
+        "parameters": {
+          "method": "PATCH",
+          "url": "={{ $json.update_url }}",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "airtableTokenApi",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify($json.update_body) }}",
+          "options": {}
+        },
+        "id": "sp-update-followup-date",
+        "name": "Update Follow-up Date",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          3320,
+          640
+        ],
+        "credentials": {
+          "airtableTokenApi": {
+            "id": "WelvlJEjoHaI3l9G",
+            "name": "Airtable Personal Access Token account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblGhzSJ5RXWDS8h8",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "airtableTokenApi",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ records: [{ fields: { agent: \"sales_pipeline\", event_type: \"lead_action\", brand_name: $json.company_name || \"\", client_code: \"\", severity: \"info\", message: \"New lead added: \" + $json.company_name + \" (\" + $json.contact_name + \")\", payload: JSON.stringify({ company_name: $json.company_name, contact_name: $json.contact_name, industry: $json.industry, source: $json.source, estimated_value: $json.estimated_value }), created_at: new Date().toISOString() } }] }) }}",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          2020,
+          80
+        ],
+        "id": "e604ea70-7a31-4719-abf7-831f05574ce1",
+        "name": "Write Event \u2014 Lead Added",
+        "credentials": {
+          "airtableTokenApi": {
+            "id": "WelvlJEjoHaI3l9G",
+            "name": "Airtable Personal Access Token account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblGhzSJ5RXWDS8h8",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "airtableTokenApi",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ records: [{ fields: { agent: \"sales_pipeline\", event_type: \"lead_action\", brand_name: $json.company_name || \"\", client_code: \"\", severity: \"info\", message: \"Proposal sent to \" + $json.company_name, payload: JSON.stringify({ lead_id: $json.lead_id, company_name: $json.company_name, contact_name: $json.contact_name, services: $json.services_desc }), created_at: new Date().toISOString() } }] }) }}",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          3720,
+          1200
+        ],
+        "id": "3634d511-999f-4322-83cb-a99525e9ef12",
+        "name": "Write Event \u2014 Proposal Sent",
+        "credentials": {
+          "airtableTokenApi": {
+            "id": "WelvlJEjoHaI3l9G",
+            "name": "Airtable Personal Access Token account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      }
+    ],
+    "connections": {
+      "Webhook \u2014 Add Lead": {
+        "main": [
+          [
+            {
+              "node": "Parse Lead Data",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Parse Lead Data": {
+        "main": [
+          [
+            {
+              "node": "Build Lead Payload",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build Lead Payload": {
+        "main": [
+          [
+            {
+              "node": "Create Lead in Airtable",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Create Lead in Airtable": {
+        "main": [
+          [
+            {
+              "node": "Prepare Lead Notification",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prepare Lead Notification": {
+        "main": [
+          [
+            {
+              "node": "Lead Created OK?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Lead Created OK?": {
+        "main": [
+          [
+            {
+              "node": "Slack \u2014 New Lead",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Write Event \u2014 Lead Added",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Respond \u2014 Lead Error",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Write Error Event \u2014 Lead",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Slack \u2014 New Lead": {
+        "main": [
+          [
+            {
+              "node": "Respond \u2014 Lead Added",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Schedule \u2014 9AM IST Daily": {
+        "main": [
+          [
+            {
+              "node": "Build Follow-up Filter",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build Follow-up Filter": {
+        "main": [
+          [
+            {
+              "node": "Fetch Overdue Leads",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Fetch Overdue Leads": {
+        "main": [
+          [
+            {
+              "node": "Check Leads Exist",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Check Leads Exist": {
+        "main": [
+          [
+            {
+              "node": "Has Leads?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Has Leads?": {
+        "main": [
+          [
+            {
+              "node": "Build Follow-up Prompt",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Slack \u2014 No Follow-ups",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build Follow-up Prompt": {
+        "main": [
+          [
+            {
+              "node": "Gemini \u2014 Follow-up Messages",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Gemini \u2014 Follow-up Messages": {
+        "main": [
+          [
+            {
+              "node": "Parse Follow-up Messages",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Parse Follow-up Messages": {
+        "main": [
+          [
+            {
+              "node": "Slack \u2014 Follow-up Suggestion",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Slack \u2014 Follow-up Suggestion": {
+        "main": [
+          [
+            {
+              "node": "Build Follow-up Date Update",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build Follow-up Date Update": {
+        "main": [
+          [
+            {
+              "node": "Update Follow-up Date",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Webhook \u2014 Generate Proposal": {
+        "main": [
+          [
+            {
+              "node": "Extract Proposal Request",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Extract Proposal Request": {
+        "main": [
+          [
+            {
+              "node": "Fetch Lead Record",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Fetch Lead Record": {
+        "main": [
+          [
+            {
+              "node": "Prepare Projects Fetch",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prepare Projects Fetch": {
+        "main": [
+          [
+            {
+              "node": "Fetch Similar Projects",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Fetch Similar Projects": {
+        "main": [
+          [
+            {
+              "node": "Build Proposal Prompt",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build Proposal Prompt": {
+        "main": [
+          [
+            {
+              "node": "Gemini \u2014 Generate Proposal",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Gemini \u2014 Generate Proposal": {
+        "main": [
+          [
+            {
+              "node": "Parse Proposal",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Parse Proposal": {
+        "main": [
+          [
+            {
+              "node": "Proposal OK?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Proposal OK?": {
+        "main": [
+          [
+            {
+              "node": "Build Proposal Update",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Respond \u2014 Proposal Error",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Write Error Event \u2014 Proposal",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build Proposal Update": {
+        "main": [
+          [
+            {
+              "node": "Update Lead \u2014 Proposal Sent",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Update Lead \u2014 Proposal Sent": {
+        "main": [
+          [
+            {
+              "node": "Prepare Proposal Notification",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prepare Proposal Notification": {
+        "main": [
+          [
+            {
+              "node": "Slack \u2014 Proposal Generated",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Write Event \u2014 Proposal Sent",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Slack \u2014 Proposal Generated": {
+        "main": [
+          [
+            {
+              "node": "Respond \u2014 Proposal Generated",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Manual Trigger \u2014 Test": {
+        "main": [
+          [
+            {
+              "node": "Set Test Data",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Set Test Data": {
+        "main": [
+          [
+            {
+              "node": "Parse Lead Data",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "SenseInfo Tech",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-02-25T06:26:47.868Z",
+        "id": 472,
+        "workflowId": "KYSdsLXV50H7MHGr",
+        "versionId": "e86413be-c942-4c47-a302-9624e3b878b0",
+        "event": "activated",
+        "userId": "ed50a507-d93d-45c3-9412-d80babb81dd0"
+      },
+      {
+        "createdAt": "2026-02-25T06:26:49.726Z",
+        "id": 473,
+        "workflowId": "KYSdsLXV50H7MHGr",
+        "versionId": "e86413be-c942-4c47-a302-9624e3b878b0",
+        "event": "activated",
+        "userId": "ed50a507-d93d-45c3-9412-d80babb81dd0"
+      }
+    ]
+  }
+}

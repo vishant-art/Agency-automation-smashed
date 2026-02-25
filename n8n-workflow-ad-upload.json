@@ -1,0 +1,515 @@
+{
+  "updatedAt": "2026-02-18T08:09:07.468Z",
+  "createdAt": "2026-02-18T08:09:07.468Z",
+  "id": "o1jrn1jZkM4slGII",
+  "name": "Ad Reference \u2014 Upload & Manage",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Ad Reference Upload\n\nPOST /upload-reference-ad\n```json\n{\n  \"ad_name\": \"Summer Sale UGC\",\n  \"brand_name\": \"Wheelwash\",\n  \"platform\": \"Meta\",\n  \"performance\": \"Top Performer\",\n  \"ad_url\": \"https://...\",\n  \"ad_copy\": \"Full ad script/copy\",\n  \"hook_text\": \"Opening hook line\",\n  \"format\": \"UGC\",\n  \"why_it_works\": \"Analysis\",\n  \"metrics\": \"CTR 3.2%, ROAS 4.5x\",\n  \"industry\": \"Automotive\",\n  \"project_id\": \"recXXX (optional)\",\n  \"notes\": \"Additional context\"\n}\n```\n\nStores in Reference_Ads table.\nPhase 3 auto-fetches matching ads.",
+        "height": 420,
+        "width": 450,
+        "color": 5
+      },
+      "id": "ad-sticky",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -200,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "upload-reference-ad",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "ad-webhook",
+      "name": "Webhook \u2014 Upload Ad",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [
+        280,
+        320
+      ],
+      "webhookId": "upload-reference-ad"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body || $json;\nconst required = ['ad_name', 'brand_name'];\nconst missing = required.filter(f => !body[f]);\nif (missing.length > 0) {\n  return [{ json: { error: true, message: 'Missing required fields: ' + missing.join(', ') } }];\n}\n\nreturn [{ json: {\n  error: false,\n  fields: {\n    ad_name: body.ad_name || '',\n    brand_name: body.brand_name || '',\n    platform: body.platform || '',\n    performance: body.performance || 'Average',\n    ad_url: body.ad_url || '',\n    ad_copy: body.ad_copy || '',\n    hook_text: body.hook_text || '',\n    format: body.format || '',\n    why_it_works: body.why_it_works || '',\n    metrics: body.metrics || '',\n    industry: body.industry || '',\n    project_id: body.project_id || '',\n    uploaded_by: body.uploaded_by || 'API',\n    notes: body.notes || ''\n  }\n} }];"
+      },
+      "id": "ad-validate",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        580,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "check-err",
+              "leftValue": "={{ $json.error }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "ad-if-error",
+      "name": "Has Error?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        880,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ JSON.stringify({ status: 'error', message: $json.message }) }}",
+        "options": {
+          "responseCode": 400,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "ad-error-resp",
+      "name": "Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1180,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tbl6ePpaHIQvCqy8K",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ fields: $json.fields }) }}",
+        "options": {}
+      },
+      "id": "ad-store",
+      "name": "Store in Airtable",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1180,
+        460
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ JSON.stringify({ status: 'success', message: 'Reference ad stored', record_id: $json.id, ad_name: $json.fields?.ad_name || '' }) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "ad-success-resp",
+      "name": "Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1500,
+        460
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook \u2014 Upload Ad": {
+      "main": [
+        [
+          {
+            "node": "Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Input": {
+      "main": [
+        [
+          {
+            "node": "Has Error?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Error?": {
+      "main": [
+        [
+          {
+            "node": "Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Store in Airtable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store in Airtable": {
+      "main": [
+        [
+          {
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null,
+  "versionId": "93e27a94-eff1-4b38-9dab-d31c26b4b35a",
+  "activeVersionId": "93e27a94-eff1-4b38-9dab-d31c26b4b35a",
+  "versionCounter": 3,
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2026-02-18T08:09:07.489Z",
+      "createdAt": "2026-02-18T08:09:07.489Z",
+      "role": "workflow:owner",
+      "workflowId": "o1jrn1jZkM4slGII",
+      "projectId": "AD8mXtbIf5cdYNIV",
+      "project": {
+        "updatedAt": "2026-01-26T04:34:53.263Z",
+        "createdAt": "2026-01-26T04:34:35.063Z",
+        "id": "AD8mXtbIf5cdYNIV",
+        "name": "SenseInfo Tech <senseinfotechno@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "ed50a507-d93d-45c3-9412-d80babb81dd0",
+        "projectRelations": [
+          {
+            "updatedAt": "2026-01-26T04:34:35.063Z",
+            "createdAt": "2026-01-26T04:34:35.063Z",
+            "userId": "ed50a507-d93d-45c3-9412-d80babb81dd0",
+            "projectId": "AD8mXtbIf5cdYNIV",
+            "user": {
+              "updatedAt": "2026-02-17T18:53:18.000Z",
+              "createdAt": "2026-01-26T04:34:34.578Z",
+              "id": "ed50a507-d93d-45c3-9412-d80babb81dd0",
+              "email": "senseinfotechno@gmail.com",
+              "firstName": "SenseInfo",
+              "lastName": "Tech",
+              "personalizationAnswers": {
+                "version": "v4",
+                "personalization_survey_submitted_at": "2026-01-26T04:35:01.423Z",
+                "personalization_survey_n8n_version": "2.4.6",
+                "companySize": "<20",
+                "companyType": "saas",
+                "role": "business-owner",
+                "reportedSource": "google"
+              },
+              "settings": {
+                "userActivated": true,
+                "firstSuccessfulWorkflowId": "T2U_raVAJPmEIai1EY6TF",
+                "userActivatedAt": 1769404953077,
+                "easyAIWorkflowOnboarded": true,
+                "npsSurvey": {
+                  "waitingForResponse": true,
+                  "ignoredCount": 2,
+                  "lastShownAt": 1770721963325
+                }
+              },
+              "disabled": false,
+              "mfaEnabled": false,
+              "lastActiveAt": "2026-02-17",
+              "isPending": false
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-02-18T08:09:07.499Z",
+    "createdAt": "2026-02-18T08:09:07.499Z",
+    "versionId": "93e27a94-eff1-4b38-9dab-d31c26b4b35a",
+    "workflowId": "o1jrn1jZkM4slGII",
+    "nodes": [
+      {
+        "parameters": {
+          "content": "## Ad Reference Upload\n\nPOST /upload-reference-ad\n```json\n{\n  \"ad_name\": \"Summer Sale UGC\",\n  \"brand_name\": \"Wheelwash\",\n  \"platform\": \"Meta\",\n  \"performance\": \"Top Performer\",\n  \"ad_url\": \"https://...\",\n  \"ad_copy\": \"Full ad script/copy\",\n  \"hook_text\": \"Opening hook line\",\n  \"format\": \"UGC\",\n  \"why_it_works\": \"Analysis\",\n  \"metrics\": \"CTR 3.2%, ROAS 4.5x\",\n  \"industry\": \"Automotive\",\n  \"project_id\": \"recXXX (optional)\",\n  \"notes\": \"Additional context\"\n}\n```\n\nStores in Reference_Ads table.\nPhase 3 auto-fetches matching ads.",
+          "height": 420,
+          "width": 450,
+          "color": 5
+        },
+        "id": "ad-sticky",
+        "name": "Sticky Note",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          -200,
+          100
+        ]
+      },
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "upload-reference-ad",
+          "responseMode": "lastNode",
+          "options": {}
+        },
+        "id": "ad-webhook",
+        "name": "Webhook \u2014 Upload Ad",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 1.1,
+        "position": [
+          280,
+          320
+        ],
+        "webhookId": "upload-reference-ad"
+      },
+      {
+        "parameters": {
+          "jsCode": "const body = $json.body || $json;\nconst required = ['ad_name', 'brand_name'];\nconst missing = required.filter(f => !body[f]);\nif (missing.length > 0) {\n  return [{ json: { error: true, message: 'Missing required fields: ' + missing.join(', ') } }];\n}\n\nreturn [{ json: {\n  error: false,\n  fields: {\n    ad_name: body.ad_name || '',\n    brand_name: body.brand_name || '',\n    platform: body.platform || '',\n    performance: body.performance || 'Average',\n    ad_url: body.ad_url || '',\n    ad_copy: body.ad_copy || '',\n    hook_text: body.hook_text || '',\n    format: body.format || '',\n    why_it_works: body.why_it_works || '',\n    metrics: body.metrics || '',\n    industry: body.industry || '',\n    project_id: body.project_id || '',\n    uploaded_by: body.uploaded_by || 'API',\n    notes: body.notes || ''\n  }\n} }];"
+        },
+        "id": "ad-validate",
+        "name": "Validate Input",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          580,
+          320
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "typeValidation": "loose"
+            },
+            "conditions": [
+              {
+                "id": "check-err",
+                "leftValue": "={{ $json.error }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true"
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "ad-if-error",
+        "name": "Has Error?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          880,
+          320
+        ]
+      },
+      {
+        "parameters": {
+          "respondWith": "text",
+          "responseBody": "={{ JSON.stringify({ status: 'error', message: $json.message }) }}",
+          "options": {
+            "responseCode": 400,
+            "responseHeaders": {
+              "entries": [
+                {
+                  "name": "Content-Type",
+                  "value": "application/json"
+                }
+              ]
+            }
+          }
+        },
+        "id": "ad-error-resp",
+        "name": "Error Response",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.1,
+        "position": [
+          1180,
+          180
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tbl6ePpaHIQvCqy8K",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "airtableTokenApi",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ fields: $json.fields }) }}",
+          "options": {}
+        },
+        "id": "ad-store",
+        "name": "Store in Airtable",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1180,
+          460
+        ],
+        "credentials": {
+          "airtableTokenApi": {
+            "id": "WelvlJEjoHaI3l9G",
+            "name": "Airtable Personal Access Token account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "respondWith": "text",
+          "responseBody": "={{ JSON.stringify({ status: 'success', message: 'Reference ad stored', record_id: $json.id, ad_name: $json.fields?.ad_name || '' }) }}",
+          "options": {
+            "responseHeaders": {
+              "entries": [
+                {
+                  "name": "Content-Type",
+                  "value": "application/json"
+                }
+              ]
+            }
+          }
+        },
+        "id": "ad-success-resp",
+        "name": "Success Response",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.1,
+        "position": [
+          1500,
+          460
+        ]
+      }
+    ],
+    "connections": {
+      "Webhook \u2014 Upload Ad": {
+        "main": [
+          [
+            {
+              "node": "Validate Input",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Validate Input": {
+        "main": [
+          [
+            {
+              "node": "Has Error?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Has Error?": {
+        "main": [
+          [
+            {
+              "node": "Error Response",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Store in Airtable",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Store in Airtable": {
+        "main": [
+          [
+            {
+              "node": "Success Response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "SenseInfo Tech",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-02-18T08:09:08.189Z",
+        "id": 135,
+        "workflowId": "o1jrn1jZkM4slGII",
+        "versionId": "93e27a94-eff1-4b38-9dab-d31c26b4b35a",
+        "event": "activated",
+        "userId": "ed50a507-d93d-45c3-9412-d80babb81dd0"
+      }
+    ]
+  }
+}
