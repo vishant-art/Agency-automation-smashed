@@ -99,9 +99,9 @@
       "parameters": {
         "method": "GET",
         "url": "={{ 'https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tbl59nWGcoucE0gjf?filterByFormula=' + encodeURIComponent($json.filterFormula) + '&pageSize=100' }}",
-        "authentication": "predefinedCredentialType",
+        "authentication": "genericCredentialType",
         "options": {},
-        "nodeCredentialType": "airtableTokenApi"
+        "genericAuthType": "httpHeaderAuth"
       },
       "id": "co-fetch-creators",
       "name": "Fetch Target Creators",
@@ -113,9 +113,9 @@
       ],
       "onError": "continueRegularOutput",
       "credentials": {
-        "airtableTokenApi": {
-          "id": "WelvlJEjoHaI3l9G",
-          "name": "Airtable account"
+        "httpHeaderAuth": {
+          "id": "a0TTu3NVsuJUEbct",
+          "name": "Airtable PAT Header"
         }
       }
     },
@@ -249,7 +249,7 @@
       "parameters": {
         "method": "PATCH",
         "url": "={{ 'https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tbl59nWGcoucE0gjf/' + $json.creator_id }}",
-        "authentication": "predefinedCredentialType",
+        "authentication": "genericCredentialType",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ fields: { status: 'Active', notes: 'Outreach email sent on ' + new Date().toISOString().split('T')[0] + ' | Subject: ' + ($json.subject || 'Outreach') } }) }}",
@@ -263,7 +263,7 @@
             }
           ]
         },
-        "nodeCredentialType": "airtableTokenApi"
+        "genericAuthType": "httpHeaderAuth"
       },
       "id": "co-update-status",
       "name": "Update Creator \u2014 Contacted",
@@ -275,9 +275,9 @@
       ],
       "onError": "continueRegularOutput",
       "credentials": {
-        "airtableTokenApi": {
-          "id": "WelvlJEjoHaI3l9G",
-          "name": "Airtable account"
+        "httpHeaderAuth": {
+          "id": "a0TTu3NVsuJUEbct",
+          "name": "Airtable PAT Header"
         }
       }
     },
@@ -349,12 +349,12 @@
       "parameters": {
         "method": "POST",
         "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblGhzSJ5RXWDS8h8",
-        "authentication": "predefinedCredentialType",
+        "authentication": "genericCredentialType",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ records: [{ fields: { agent: 'creator_outreach', event_type: 'creator_outreach_sent', brand_name: '', client_code: '', severity: 'info', message: 'Outreach emails sent to ' + $json.sent + ' creators (' + $json.failed + ' failed)', payload: JSON.stringify({ total: $json.total, sent: $json.sent, failed: $json.failed }), created_at: new Date().toISOString() } }] }) }}",
         "options": {},
-        "nodeCredentialType": "airtableTokenApi"
+        "genericAuthType": "httpHeaderAuth"
       },
       "id": "co-write-event",
       "name": "Write Event \u2014 Outreach Sent",
@@ -366,9 +366,9 @@
       ],
       "onError": "continueRegularOutput",
       "credentials": {
-        "airtableTokenApi": {
-          "id": "WelvlJEjoHaI3l9G",
-          "name": "Airtable account"
+        "httpHeaderAuth": {
+          "id": "a0TTu3NVsuJUEbct",
+          "name": "Airtable PAT Header"
         }
       }
     },
@@ -420,9 +420,9 @@
       "parameters": {
         "method": "GET",
         "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tbl59nWGcoucE0gjf?filterByFormula={{ encodeURIComponent(\"AND(FIND('Outreach email sent', notes), email!='')\" ) }}&pageSize=100",
-        "authentication": "predefinedCredentialType",
+        "authentication": "genericCredentialType",
         "options": {},
-        "nodeCredentialType": "airtableTokenApi"
+        "genericAuthType": "httpHeaderAuth"
       },
       "id": "co-fetch-contacted",
       "name": "Fetch Contacted Creators",
@@ -434,9 +434,9 @@
       ],
       "onError": "continueRegularOutput",
       "credentials": {
-        "airtableTokenApi": {
-          "id": "WelvlJEjoHaI3l9G",
-          "name": "Airtable account"
+        "httpHeaderAuth": {
+          "id": "a0TTu3NVsuJUEbct",
+          "name": "Airtable PAT Header"
         }
       }
     },
@@ -570,7 +570,7 @@
       "parameters": {
         "method": "PATCH",
         "url": "={{ 'https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tbl59nWGcoucE0gjf/' + $json.creator_id }}",
-        "authentication": "predefinedCredentialType",
+        "authentication": "genericCredentialType",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ fields: { notes: 'Outreach email sent on ' + ($json.sent_date || 'unknown') + ' | Follow-up sent on ' + new Date().toISOString().split('T')[0] } }) }}",
@@ -584,7 +584,7 @@
             }
           ]
         },
-        "nodeCredentialType": "airtableTokenApi"
+        "genericAuthType": "httpHeaderAuth"
       },
       "id": "co-update-followup",
       "name": "Update Creator \u2014 Follow-up",
@@ -596,9 +596,9 @@
       ],
       "onError": "continueRegularOutput",
       "credentials": {
-        "airtableTokenApi": {
-          "id": "WelvlJEjoHaI3l9G",
-          "name": "Airtable account"
+        "httpHeaderAuth": {
+          "id": "a0TTu3NVsuJUEbct",
+          "name": "Airtable PAT Header"
         }
       }
     },
@@ -721,7 +721,7 @@
       "parameters": {
         "method": "PATCH",
         "url": "={{ 'https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tbl59nWGcoucE0gjf/' + $json.creator_id }}",
-        "authentication": "predefinedCredentialType",
+        "authentication": "genericCredentialType",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify($json.update_body) }}",
@@ -735,7 +735,7 @@
             }
           ]
         },
-        "nodeCredentialType": "airtableTokenApi"
+        "genericAuthType": "httpHeaderAuth"
       },
       "id": "co-update-reply",
       "name": "Update Creator \u2014 Replied",
@@ -747,9 +747,9 @@
       ],
       "onError": "continueRegularOutput",
       "credentials": {
-        "airtableTokenApi": {
-          "id": "WelvlJEjoHaI3l9G",
-          "name": "Airtable account"
+        "httpHeaderAuth": {
+          "id": "a0TTu3NVsuJUEbct",
+          "name": "Airtable PAT Header"
         }
       }
     },
@@ -832,12 +832,12 @@
       "parameters": {
         "method": "POST",
         "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblGhzSJ5RXWDS8h8",
-        "authentication": "predefinedCredentialType",
+        "authentication": "genericCredentialType",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ records: [{ fields: { agent: 'creator_outreach', event_type: 'creator_reply_received', brand_name: '', client_code: '', severity: 'info', message: 'Creator ' + (($json.fields || {}).name || 'Unknown') + ' replied' + ($('Parse Reply').first().json.portfolio_url ? ' with portfolio' : ''), payload: JSON.stringify({ creator_id: $json.id, reply: ($('Parse Reply').first().json.reply_text || '').substring(0, 200) }), created_at: new Date().toISOString() } }] }) }}",
         "options": {},
-        "nodeCredentialType": "airtableTokenApi"
+        "genericAuthType": "httpHeaderAuth"
       },
       "id": "co-write-event-reply",
       "name": "Write Event \u2014 Creator Reply",
@@ -849,9 +849,9 @@
       ],
       "onError": "continueRegularOutput",
       "credentials": {
-        "airtableTokenApi": {
-          "id": "WelvlJEjoHaI3l9G",
-          "name": "Airtable account"
+        "httpHeaderAuth": {
+          "id": "a0TTu3NVsuJUEbct",
+          "name": "Airtable PAT Header"
         }
       }
     },

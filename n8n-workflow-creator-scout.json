@@ -57,7 +57,7 @@
         {
             "parameters": {
                 "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tbl59nWGcoucE0gjf",
-                "authentication": "predefinedCredentialType",
+                "authentication": "genericCredentialType",
                 "sendQuery": true,
                 "queryParameters": {
                     "parameters": [
@@ -72,7 +72,7 @@
                     ]
                 },
                 "options": {},
-                "nodeCredentialType": "airtableTokenApi"
+                "genericAuthType": "httpHeaderAuth"
             },
             "id": "cs-fetch-creators",
             "name": "Fetch Available Creators",
@@ -84,9 +84,9 @@
             ],
             "onError": "continueRegularOutput",
             "credentials": {
-                "airtableTokenApi": {
-                    "id": "WelvlJEjoHaI3l9G",
-                    "name": "Airtable account"
+                "httpHeaderAuth": {
+                    "id": "a0TTu3NVsuJUEbct",
+                    "name": "Airtable PAT Header"
                 }
             }
         },
@@ -209,13 +209,13 @@
         {
             "parameters": {
                 "method": "POST",
-                "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Creators",
-                "authentication": "predefinedCredentialType",
+                "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tbl59nWGcoucE0gjf",
+                "authentication": "genericCredentialType",
                 "sendBody": true,
                 "specifyBody": "json",
                 "jsonBody": "={{ JSON.stringify($json.airtable_body) }}",
                 "options": {},
-                "nodeCredentialType": "airtableTokenApi"
+                "genericAuthType": "httpHeaderAuth"
             },
             "id": "cs-create-creator",
             "name": "Create Creator in Airtable",
@@ -227,9 +227,9 @@
             ],
             "onError": "continueRegularOutput",
             "credentials": {
-                "airtableTokenApi": {
-                    "id": "WelvlJEjoHaI3l9G",
-                    "name": "Airtable account"
+                "httpHeaderAuth": {
+                    "id": "a0TTu3NVsuJUEbct",
+                    "name": "Airtable PAT Header"
                 }
             }
         },
@@ -261,12 +261,12 @@
             "parameters": {
                 "method": "POST",
                 "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblGhzSJ5RXWDS8h8",
-                "authentication": "predefinedCredentialType",
+                "authentication": "genericCredentialType",
                 "sendBody": true,
                 "specifyBody": "json",
                 "jsonBody": "={{ JSON.stringify({ records: [{ fields: { agent: \"creator_scout\", event_type: \"creator_matched\", project_id: ($json.requirements && $json.requirements.project_id) || \"\", brand_name: ($json.requirements && $json.requirements.brand_name) || \"\", client_code: \"\", severity: \"info\", message: \"Found \" + $json.total + \" creators matching requirements\", payload: JSON.stringify({ total_available: $json.total, requirements: $json.requirements }), created_at: new Date().toISOString() } }] }) }}",
                 "options": {},
-                "nodeCredentialType": "airtableTokenApi"
+                "genericAuthType": "httpHeaderAuth"
             },
             "type": "n8n-nodes-base.httpRequest",
             "typeVersion": 4.2,
@@ -278,9 +278,9 @@
             "name": "Write Event \u2014 Creators Matched",
             "onError": "continueRegularOutput",
             "credentials": {
-                "airtableTokenApi": {
-                    "id": "WelvlJEjoHaI3l9G",
-                    "name": "Airtable account"
+                "httpHeaderAuth": {
+                    "id": "a0TTu3NVsuJUEbct",
+                    "name": "Airtable PAT Header"
                 }
             }
         },
@@ -361,7 +361,7 @@
         },
         {
             "parameters": {
-                "jsCode": "const results = $input.all().map(item => item.json);\nconst brief = $('Build Search Queries').first().json;\n\nconst allProfiles = [];\nconst seen = new Set();\n\nfor (const result of results) {\n  const organic = result.organic_results || [];\n  for (const r of organic) {\n    const url = r.link || '';\n    const title = r.title || '';\n    const snippet = r.snippet || '';\n    \n    // Match Instagram profile URLs\n    const igMatch = url.match(/instagram\\.com\\/([a-zA-Z0-9._]+)/);\n    if (!igMatch) continue;\n    \n    const handle = igMatch[1].toLowerCase();\n    \n    // Skip common non-creator accounts\n    const skipList = ['explore', 'p', 'reel', 'stories', 'accounts', 'tags', 'locations', 'reels', 'about', 'directory', 'developer', 'legal', 'help'];\n    if (skipList.includes(handle)) continue;\n    if (seen.has(handle)) continue;\n    seen.add(handle);\n    \n    allProfiles.push({\n      instagram_handle: '@' + handle,\n      profile_url: `https://instagram.com/${handle}`,\n      name: title.replace(/\\(.*?\\)/g, '').replace(/@\\w+/g, '').replace(/\\u2022\\s*Instagram.*$/i, '').replace(/\\|.*$/i, '').trim().split(' - ')[0].trim(),\n      bio_snippet: snippet,\n      source_url: url\n    });\n  }\n}\n\n// Dedup against existing creators in Airtable\n// Fetch current handles from the DB\nlet existingHandles = new Set();\ntry {\n  const resp = await this.helpers.httpRequest({\n    method: 'GET',\n    url: 'https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tbl59nWGcoucE0gjf?fields%5B%5D=instagram_handle&pageSize=100',\n    headers: {\n      'Authorization': 'Bearer ' + $credentials.airtableTokenApi.token\n    },\n    json: true\n  });\n  const records = resp.records || [];\n  for (const r of records) {\n    const h = (r.fields.instagram_handle || '').replace('@', '').toLowerCase();\n    if (h) existingHandles.add(h);\n  }\n  // Handle pagination\n  let offset = resp.offset;\n  while (offset) {\n    const nextResp = await this.helpers.httpRequest({\n      method: 'GET',\n      url: 'https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tbl59nWGcoucE0gjf?fields%5B%5D=instagram_handle&pageSize=100&offset=' + offset,\n      headers: {\n        'Authorization': 'Bearer ' + $credentials.airtableTokenApi.token\n      },\n      json: true\n    });\n    for (const r of (nextResp.records || [])) {\n      const h = (r.fields.instagram_handle || '').replace('@', '').toLowerCase();\n      if (h) existingHandles.add(h);\n    }\n    offset = nextResp.offset;\n  }\n} catch (e) {\n  // If dedup fetch fails, continue without dedup\n}\n\n// Filter out existing creators\nconst newProfiles = allProfiles.filter(p => {\n  const h = p.instagram_handle.replace('@', '').toLowerCase();\n  return !existingHandles.has(h);\n});\n\nconst dedupedCount = allProfiles.length - newProfiles.length;\n\nreturn [{ json: { \n  profiles: newProfiles,\n  total_found: allProfiles.length,\n  deduped: dedupedCount,\n  new_count: newProfiles.length,\n  brief\n}}];"
+                "jsCode": "const results = $input.all().map(item => item.json);\nconst brief = $('Build Search Queries').first().json;\n\nconst allProfiles = [];\nconst seen = new Set();\n\nfor (const result of results) {\n  const organic = result.organic_results || [];\n  for (const r of organic) {\n    const url = r.link || '';\n    const title = r.title || '';\n    const snippet = r.snippet || '';\n    \n    // Match Instagram profile URLs\n    const igMatch = url.match(/instagram\\.com\\/([a-zA-Z0-9._]+)/);\n    if (!igMatch) continue;\n    \n    const handle = igMatch[1].toLowerCase();\n    \n    // Skip common non-creator accounts\n    const skipList = ['explore', 'p', 'reel', 'stories', 'accounts', 'tags', 'locations', 'reels', 'about', 'directory', 'developer', 'legal', 'help'];\n    if (skipList.includes(handle)) continue;\n    if (seen.has(handle)) continue;\n    seen.add(handle);\n    \n    allProfiles.push({\n      instagram_handle: '@' + handle,\n      profile_url: `https://instagram.com/${handle}`,\n      name: title.replace(/\\(.*?\\)/g, '').replace(/@\\w+/g, '').replace(/\\u2022\\s*Instagram.*$/i, '').replace(/\\|.*$/i, '').trim().split(' - ')[0].trim(),\n      bio_snippet: snippet,\n      source_url: url\n    });\n  }\n}\n\n// Dedup against existing creators in Airtable\n// Fetch current handles from the DB\nlet existingHandles = new Set();\ntry {\n  const resp = await this.helpers.httpRequest({\n    method: 'GET',\n    url: 'https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tbl59nWGcoucE0gjf?fields%5B%5D=instagram_handle&pageSize=100',\n    headers: {\n      'Authorization': 'Bearer ' + 'AIRTABLE_PAT_INJECTED_AT_DEPLOY'\n    },\n    json: true\n  });\n  const records = resp.records || [];\n  for (const r of records) {\n    const h = (r.fields.instagram_handle || '').replace('@', '').toLowerCase();\n    if (h) existingHandles.add(h);\n  }\n  // Handle pagination\n  let offset = resp.offset;\n  while (offset) {\n    const nextResp = await this.helpers.httpRequest({\n      method: 'GET',\n      url: 'https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tbl59nWGcoucE0gjf?fields%5B%5D=instagram_handle&pageSize=100&offset=' + offset,\n      headers: {\n        'Authorization': 'Bearer ' + 'AIRTABLE_PAT_INJECTED_AT_DEPLOY'\n      },\n      json: true\n    });\n    for (const r of (nextResp.records || [])) {\n      const h = (r.fields.instagram_handle || '').replace('@', '').toLowerCase();\n      if (h) existingHandles.add(h);\n    }\n    offset = nextResp.offset;\n  }\n} catch (e) {\n  // If dedup fetch fails, continue without dedup\n}\n\n// Filter out existing creators\nconst newProfiles = allProfiles.filter(p => {\n  const h = p.instagram_handle.replace('@', '').toLowerCase();\n  return !existingHandles.has(h);\n});\n\nconst dedupedCount = allProfiles.length - newProfiles.length;\n\nreturn [{ json: { \n  profiles: newProfiles,\n  total_found: allProfiles.length,\n  deduped: dedupedCount,\n  new_count: newProfiles.length,\n  brief\n}}];"
             },
             "id": "cs-merge-results",
             "name": "Merge Search Results",
@@ -428,13 +428,13 @@
         {
             "parameters": {
                 "method": "POST",
-                "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Creators",
-                "authentication": "predefinedCredentialType",
+                "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tbl59nWGcoucE0gjf",
+                "authentication": "genericCredentialType",
                 "sendBody": true,
                 "specifyBody": "json",
                 "jsonBody": "={{ $json.airtable_body }}",
                 "options": {},
-                "nodeCredentialType": "airtableTokenApi"
+                "genericAuthType": "httpHeaderAuth"
             },
             "id": "cs-create-airtable",
             "name": "Create in Airtable",
@@ -446,9 +446,9 @@
             ],
             "onError": "continueRegularOutput",
             "credentials": {
-                "airtableTokenApi": {
-                    "id": "WelvlJEjoHaI3l9G",
-                    "name": "Airtable account"
+                "httpHeaderAuth": {
+                    "id": "a0TTu3NVsuJUEbct",
+                    "name": "Airtable PAT Header"
                 }
             }
         },
@@ -520,12 +520,12 @@
             "parameters": {
                 "method": "POST",
                 "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblGhzSJ5RXWDS8h8",
-                "authentication": "predefinedCredentialType",
+                "authentication": "genericCredentialType",
                 "sendBody": true,
                 "specifyBody": "json",
                 "jsonBody": "={{ JSON.stringify({ records: [{ fields: { agent: 'creator_scout', event_type: 'creator_sourced', project_id: '', brand_name: $json.brief?.brand || '', client_code: '', severity: 'info', message: 'Sourced ' + ($json.creators || []).length + ' creators for ' + ($json.brief?.niche || 'campaign') + ' via SerpAPI + Gemini', payload: JSON.stringify({ total_sourced: ($json.creators || []).length, stored: $json.storedCount || 0, niche: $json.brief?.niche, budget: $json.brief?.budget }), created_at: new Date().toISOString() } }] }) }}",
                 "options": {},
-                "nodeCredentialType": "airtableTokenApi"
+                "genericAuthType": "httpHeaderAuth"
             },
             "id": "cs-event-sourced",
             "name": "Write Event \u2014 Creators Sourced",
@@ -537,9 +537,9 @@
             ],
             "onError": "continueRegularOutput",
             "credentials": {
-                "airtableTokenApi": {
-                    "id": "WelvlJEjoHaI3l9G",
-                    "name": "Airtable account"
+                "httpHeaderAuth": {
+                    "id": "a0TTu3NVsuJUEbct",
+                    "name": "Airtable PAT Header"
                 }
             }
         }
@@ -923,9 +923,9 @@
             {
                 "parameters": {
                     "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Creators?filterByFormula=AND(%7Bstatus%7D%3D'Active'%2C%7Bavailability%7D%3D'Available')&pageSize=100",
-                    "authentication": "predefinedCredentialType",
+                    "authentication": "genericCredentialType",
                     "options": {},
-                    "nodeCredentialType": "airtableTokenApi"
+                    "genericAuthType": "httpHeaderAuth"
                 },
                 "id": "cs-fetch-creators",
                 "name": "Fetch Available Creators",
@@ -938,7 +938,7 @@
                 "credentials": {
                     "airtableTokenApi": {
                         "id": "WelvlJEjoHaI3l9G",
-                        "name": "Airtable account"
+                        "name": "Airtable Personal Access Token account"
                     }
                 }
             },
@@ -959,7 +959,7 @@
                 "parameters": {
                     "method": "POST",
                     "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
-                    "authentication": "predefinedCredentialType",
+                    "authentication": "genericCredentialType",
                     "nodeCredentialType": "googlePalmApi",
                     "sendBody": true,
                     "specifyBody": "json",
@@ -1061,13 +1061,13 @@
             {
                 "parameters": {
                     "method": "POST",
-                    "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Creators",
-                    "authentication": "predefinedCredentialType",
+                    "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tbl59nWGcoucE0gjf",
+                    "authentication": "genericCredentialType",
                     "sendBody": true,
                     "specifyBody": "json",
                     "jsonBody": "={{ JSON.stringify($json.airtable_body) }}",
                     "options": {},
-                    "nodeCredentialType": "airtableTokenApi"
+                    "genericAuthType": "httpHeaderAuth"
                 },
                 "id": "cs-create-creator",
                 "name": "Create Creator in Airtable",
@@ -1081,7 +1081,7 @@
                 "credentials": {
                     "airtableTokenApi": {
                         "id": "WelvlJEjoHaI3l9G",
-                        "name": "Airtable account"
+                        "name": "Airtable Personal Access Token account"
                     }
                 }
             },
@@ -1113,12 +1113,12 @@
                 "parameters": {
                     "method": "POST",
                     "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblGhzSJ5RXWDS8h8",
-                    "authentication": "predefinedCredentialType",
+                    "authentication": "genericCredentialType",
                     "sendBody": true,
                     "specifyBody": "json",
                     "jsonBody": "={{ JSON.stringify({ records: [{ fields: { agent: \"creator_scout\", event_type: \"creator_matched\", project_id: ($json.requirements && $json.requirements.project_id) || \"\", brand_name: ($json.requirements && $json.requirements.brand_name) || \"\", client_code: \"\", severity: \"info\", message: \"Found \" + $json.total + \" creators matching requirements\", payload: JSON.stringify({ total_available: $json.total, requirements: $json.requirements }), created_at: new Date().toISOString() } }] }) }}",
                     "options": {},
-                    "nodeCredentialType": "airtableTokenApi"
+                    "genericAuthType": "httpHeaderAuth"
                 },
                 "type": "n8n-nodes-base.httpRequest",
                 "typeVersion": 4.2,
@@ -1132,7 +1132,7 @@
                 "credentials": {
                     "airtableTokenApi": {
                         "id": "WelvlJEjoHaI3l9G",
-                        "name": "Airtable account"
+                        "name": "Airtable Personal Access Token account"
                     }
                 }
             },
@@ -1228,7 +1228,7 @@
                 "parameters": {
                     "method": "POST",
                     "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
-                    "authentication": "predefinedCredentialType",
+                    "authentication": "genericCredentialType",
                     "nodeCredentialType": "googlePalmApi",
                     "sendBody": true,
                     "specifyBody": "json",
@@ -1280,13 +1280,13 @@
             {
                 "parameters": {
                     "method": "POST",
-                    "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Creators",
-                    "authentication": "predefinedCredentialType",
+                    "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tbl59nWGcoucE0gjf",
+                    "authentication": "genericCredentialType",
                     "sendBody": true,
                     "specifyBody": "json",
                     "jsonBody": "={{ $json.airtable_body }}",
                     "options": {},
-                    "nodeCredentialType": "airtableTokenApi"
+                    "genericAuthType": "httpHeaderAuth"
                 },
                 "id": "cs-create-airtable",
                 "name": "Create in Airtable",
@@ -1300,7 +1300,7 @@
                 "credentials": {
                     "airtableTokenApi": {
                         "id": "WelvlJEjoHaI3l9G",
-                        "name": "Airtable account"
+                        "name": "Airtable Personal Access Token account"
                     }
                 }
             },
@@ -1372,12 +1372,12 @@
                 "parameters": {
                     "method": "POST",
                     "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblGhzSJ5RXWDS8h8",
-                    "authentication": "predefinedCredentialType",
+                    "authentication": "genericCredentialType",
                     "sendBody": true,
                     "specifyBody": "json",
                     "jsonBody": "={{ JSON.stringify({ records: [{ fields: { agent: 'creator_scout', event_type: 'creator_sourced', project_id: '', brand_name: $json.brief?.brand || '', client_code: '', severity: 'info', message: 'Sourced ' + ($json.creators || []).length + ' creators for ' + ($json.brief?.niche || 'campaign') + ' via SerpAPI + Gemini', payload: JSON.stringify({ total_sourced: ($json.creators || []).length, stored: $json.storedCount || 0, niche: $json.brief?.niche, budget: $json.brief?.budget }), created_at: new Date().toISOString() } }] }) }}",
                     "options": {},
-                    "nodeCredentialType": "airtableTokenApi"
+                    "genericAuthType": "httpHeaderAuth"
                 },
                 "id": "cs-event-sourced",
                 "name": "Write Event \u2014 Creators Sourced",
@@ -1391,7 +1391,7 @@
                 "credentials": {
                     "airtableTokenApi": {
                         "id": "WelvlJEjoHaI3l9G",
-                        "name": "Airtable account"
+                        "name": "Airtable Personal Access Token account"
                     }
                 }
             }
