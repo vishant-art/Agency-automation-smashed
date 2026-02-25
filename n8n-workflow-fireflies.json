@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-02-18T08:02:40.038Z",
+  "updatedAt": "2026-02-25T07:49:06.697Z",
   "createdAt": "2026-02-18T07:28:45.939Z",
   "id": "dSDcu6zAFYpNf5m8",
   "name": "Fireflies \u2014 Process Client Call",
@@ -176,12 +176,24 @@
       "parameters": {
         "method": "PATCH",
         "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Projects/{{ $json.project_id }}",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "airtableTokenApi",
+        "authentication": "none",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ fields: { call_context: $json.call_context_json } }) }}",
-        "options": {}
+        "options": {},
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer AIRTABLE_PAT_PLACEHOLDER"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        }
       },
       "id": "d1a1b1c1-0008-4000-a008-000000000008",
       "name": "Store Call Context in Airtable",
@@ -191,12 +203,8 @@
         1600,
         300
       ],
-      "credentials": {
-        "airtableTokenApi": {
-          "id": "WelvlJEjoHaI3l9G",
-          "name": "Airtable Personal Access Token account"
-        }
-      }
+      "credentials": {},
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -219,7 +227,7 @@
       "typeVersion": 1.1,
       "position": [
         1860,
-        300
+        200
       ]
     },
     {
@@ -249,8 +257,8 @@
     },
     {
       "parameters": {
-        "content": "## Fireflies \u2014 Process Client Call\n\nPOST /process-client-call\n```json\n{\n  \"client_name\": \"Brand Name\",\n  \"client_email\": \"client@example.com\",\n  \"project_id\": \"recXXXXX\"\n}\n```\n\n1. Searches Fireflies for matching transcripts\n2. Picks best match by email/name/recency\n3. Fetches AI summary + full transcript\n4. Extracts structured call_context JSON\n5. Stores in Airtable Projects.call_context\n6. Returns enriched context for script pipeline",
-        "height": 380,
+        "content": "## Fireflies \u2014 Process Client Call\n\nPOST /process-client-call\n```json\n{\n  \"client_name\": \"Brand Name\",\n  \"client_email\": \"client@example.com\",\n  \"project_id\": \"recXXXXX\"\n}\n```\n\n1. Searches Fireflies for matching transcripts\n2. Picks best match by email/name/recency\n3. Fetches AI summary + full transcript\n4. Extracts structured call_context JSON\n5. Stores in Airtable Projects.call_context\n6. Returns enriched context for script pipeline\n7. **Auto-scouts creators** via Gemini analysis + /find-creators webhook",
+        "height": 400,
         "width": 450,
         "color": 7
       },
@@ -265,8 +273,8 @@
     },
     {
       "parameters": {
-        "content": "## Credential Setup\n\n**Fireflies API Key:**\nUpdate credential \"Fireflies API Key\" (ID: kO0scVej8oM6mV6P)\nwith your actual Fireflies Bearer token.\n\nGet it from: https://app.fireflies.ai/integrations\n\n**Airtable:**\nUsing existing token credential.\nProjects table needs a `call_context` field (Long text).",
-        "height": 280,
+        "content": "## Credential Setup\n\n**Fireflies API Key:**\nUpdate credential \"Fireflies API Key\" (ID: kO0scVej8oM6mV6P)\nwith your actual Fireflies Bearer token.\n\nGet it from: https://app.fireflies.ai/integrations\n\n**Airtable:**\nUsing manual Bearer token header (API-created workflow credential fix).\nProjects table needs a `call_context` field (Long text).\n\n**Gemini:**\nUsing googlePalmApi credential rIL63TG4xfMQL8uJ for creator requirement extraction.",
+        "height": 320,
         "width": 400,
         "color": 4
       },
@@ -276,8 +284,72 @@
       "typeVersion": 1,
       "position": [
         -200,
-        480
+        500
       ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ (() => { const ctx = $('Extract Client Context').first().json; const callCtx = ctx.call_context; const prompt = `Analyze this client onboarding call context and extract creator requirements.\\n\\nCALL OVERVIEW: ${callCtx.overview}\\n\\nKEYWORDS: ${(callCtx.keywords || []).join(', ')}\\n\\nCONTENT PREFERENCES (what client said about content/creators):\\n${callCtx.content_preferences}\\n\\nBUDGET CONTEXT (what client said about budget):\\n${callCtx.budget_context}\\n\\nCOMPETITIVE CONTEXT:\\n${callCtx.competitive_context}\\n\\nCLIENT NAME: ${ctx.client_name}\\n\\nExtract the following and return ONLY valid JSON (no markdown):\\n{\\n  \"industry\": \"the brand's industry (e.g. skincare, fintech, fashion, food, wellness)\",\\n  \"niches\": [\"array of matching creator niches from: Fashion, Beauty, Fitness, Tech, Food, Finance, Health, Lifestyle, Education, Gaming, Travel, Auto\"],\\n  \"budget_per_video\": estimated budget per video in INR (number, default 5000 if unclear),\\n  \"num_creators_needed\": estimated number of creators needed (number, default 5 if unclear),\\n  \"creator_preferences\": {\\n    \"gender\": \"preferred gender or 'any'\",\\n    \"age_range\": \"preferred age range or 'any'\",\\n    \"style\": \"content style preferences\",\\n    \"location\": \"preferred location or 'India'\"\\n  },\\n  \"languages\": [\"preferred languages, default English, Hindi\"],\\n  \"brief_summary\": \"1-2 sentence summary of what kind of creators this client needs\"\\n}`; return JSON.stringify({ systemInstruction: { parts: [{ text: 'You are a talent scout AI. Analyze client calls to understand creator requirements. Return only valid JSON.' }] }, contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { temperature: 0.2, maxOutputTokens: 2000 } }); })() }}",
+        "options": {}
+      },
+      "id": "ff-gemini-reqs",
+      "name": "Gemini \u2014 Extract Creator Requirements",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1860,
+        500
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "rIL63TG4xfMQL8uJ",
+          "name": "Cosmisk AI"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst ctx = $('Extract Client Context').first().json;\n\nlet requirements = {\n  niches: ['UGC'],\n  budget_max: 5000,\n  count: 5,\n  brand_name: ctx.client_name || '',\n  location: 'India',\n  languages: ['English', 'Hindi'],\n  source: 'fireflies_auto_scout',\n  project_id: ctx.project_id || ''\n};\n\ntry {\n  let text = response.candidates?.[0]?.content?.parts?.[0]?.text || '{}';\n  text = text.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim();\n  const parsed = JSON.parse(text);\n  \n  if (parsed.niches && parsed.niches.length > 0) requirements.niches = parsed.niches;\n  if (parsed.budget_per_video) requirements.budget_max = parsed.budget_per_video;\n  if (parsed.num_creators_needed) requirements.count = parsed.num_creators_needed;\n  if (parsed.creator_preferences?.location) requirements.location = parsed.creator_preferences.location;\n  if (parsed.languages) requirements.languages = parsed.languages;\n  requirements.brief_summary = parsed.brief_summary || '';\n  requirements.creator_preferences = parsed.creator_preferences || {};\n  requirements.industry = parsed.industry || '';\n} catch (e) {\n  // Use defaults \u2014 still scout with generic params\n  requirements.brief_summary = 'Could not parse call context, using default parameters';\n}\n\nreturn [{ json: { scout_request: requirements } }];"
+      },
+      "id": "ff-parse-reqs",
+      "name": "Parse Creator Requirements",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2140,
+        500
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://n8n-jeet.duckdns.org:5678/webhook/find-creators",
+        "authentication": "none",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.scout_request) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "ff-auto-scout",
+      "name": "Auto Scout Creators",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2420,
+        500
+      ],
+      "credentials": {},
+      "onError": "continueRegularOutput"
     }
   ],
   "connections": {
@@ -372,6 +444,33 @@
             "node": "Respond \u2014 Success",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "Gemini \u2014 Extract Creator Requirements",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini \u2014 Extract Creator Requirements": {
+      "main": [
+        [
+          {
+            "node": "Parse Creator Requirements",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Creator Requirements": {
+      "main": [
+        [
+          {
+            "node": "Auto Scout Creators",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
@@ -385,9 +484,9 @@
   "staticData": null,
   "meta": null,
   "pinData": null,
-  "versionId": "c1e4c111-9ed8-431c-8f37-d98d7ee8b8c8",
-  "activeVersionId": "c1e4c111-9ed8-431c-8f37-d98d7ee8b8c8",
-  "versionCounter": 43,
+  "versionId": "81756492-6438-4c29-9332-29e8be8f91e4",
+  "activeVersionId": "81756492-6438-4c29-9332-29e8be8f91e4",
+  "versionCounter": 50,
   "triggerCount": 1,
   "shared": [
     {
@@ -412,7 +511,7 @@
             "userId": "ed50a507-d93d-45c3-9412-d80babb81dd0",
             "projectId": "AD8mXtbIf5cdYNIV",
             "user": {
-              "updatedAt": "2026-02-17T18:53:18.000Z",
+              "updatedAt": "2026-02-24T18:32:01.000Z",
               "createdAt": "2026-01-26T04:34:34.578Z",
               "id": "ed50a507-d93d-45c3-9412-d80babb81dd0",
               "email": "senseinfotechno@gmail.com",
@@ -433,14 +532,13 @@
                 "userActivatedAt": 1769404953077,
                 "easyAIWorkflowOnboarded": true,
                 "npsSurvey": {
-                  "waitingForResponse": true,
-                  "ignoredCount": 2,
-                  "lastShownAt": 1770721963325
+                  "responded": true,
+                  "lastShownAt": 1771407918931
                 }
               },
               "disabled": false,
               "mfaEnabled": false,
-              "lastActiveAt": "2026-02-17",
+              "lastActiveAt": "2026-02-24",
               "isPending": false
             }
           }
@@ -450,9 +548,9 @@
   ],
   "tags": [],
   "activeVersion": {
-    "updatedAt": "2026-02-18T08:02:40.040Z",
-    "createdAt": "2026-02-18T08:02:40.040Z",
-    "versionId": "c1e4c111-9ed8-431c-8f37-d98d7ee8b8c8",
+    "updatedAt": "2026-02-25T07:49:06.698Z",
+    "createdAt": "2026-02-25T07:49:06.698Z",
+    "versionId": "81756492-6438-4c29-9332-29e8be8f91e4",
     "workflowId": "dSDcu6zAFYpNf5m8",
     "nodes": [
       {
@@ -624,12 +722,24 @@
         "parameters": {
           "method": "PATCH",
           "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Projects/{{ $json.project_id }}",
-          "authentication": "predefinedCredentialType",
-          "nodeCredentialType": "airtableTokenApi",
+          "authentication": "none",
           "sendBody": true,
           "specifyBody": "json",
           "jsonBody": "={{ JSON.stringify({ fields: { call_context: $json.call_context_json } }) }}",
-          "options": {}
+          "options": {},
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Authorization",
+                "value": "Bearer AIRTABLE_PAT_PLACEHOLDER"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
         },
         "id": "d1a1b1c1-0008-4000-a008-000000000008",
         "name": "Store Call Context in Airtable",
@@ -639,12 +749,8 @@
           1600,
           300
         ],
-        "credentials": {
-          "airtableTokenApi": {
-            "id": "WelvlJEjoHaI3l9G",
-            "name": "Airtable Personal Access Token account"
-          }
-        }
+        "credentials": {},
+        "onError": "continueRegularOutput"
       },
       {
         "parameters": {
@@ -667,7 +773,7 @@
         "typeVersion": 1.1,
         "position": [
           1860,
-          300
+          200
         ]
       },
       {
@@ -697,8 +803,8 @@
       },
       {
         "parameters": {
-          "content": "## Fireflies \u2014 Process Client Call\n\nPOST /process-client-call\n```json\n{\n  \"client_name\": \"Brand Name\",\n  \"client_email\": \"client@example.com\",\n  \"project_id\": \"recXXXXX\"\n}\n```\n\n1. Searches Fireflies for matching transcripts\n2. Picks best match by email/name/recency\n3. Fetches AI summary + full transcript\n4. Extracts structured call_context JSON\n5. Stores in Airtable Projects.call_context\n6. Returns enriched context for script pipeline",
-          "height": 380,
+          "content": "## Fireflies \u2014 Process Client Call\n\nPOST /process-client-call\n```json\n{\n  \"client_name\": \"Brand Name\",\n  \"client_email\": \"client@example.com\",\n  \"project_id\": \"recXXXXX\"\n}\n```\n\n1. Searches Fireflies for matching transcripts\n2. Picks best match by email/name/recency\n3. Fetches AI summary + full transcript\n4. Extracts structured call_context JSON\n5. Stores in Airtable Projects.call_context\n6. Returns enriched context for script pipeline\n7. **Auto-scouts creators** via Gemini analysis + /find-creators webhook",
+          "height": 400,
           "width": 450,
           "color": 7
         },
@@ -713,8 +819,8 @@
       },
       {
         "parameters": {
-          "content": "## Credential Setup\n\n**Fireflies API Key:**\nUpdate credential \"Fireflies API Key\" (ID: kO0scVej8oM6mV6P)\nwith your actual Fireflies Bearer token.\n\nGet it from: https://app.fireflies.ai/integrations\n\n**Airtable:**\nUsing existing token credential.\nProjects table needs a `call_context` field (Long text).",
-          "height": 280,
+          "content": "## Credential Setup\n\n**Fireflies API Key:**\nUpdate credential \"Fireflies API Key\" (ID: kO0scVej8oM6mV6P)\nwith your actual Fireflies Bearer token.\n\nGet it from: https://app.fireflies.ai/integrations\n\n**Airtable:**\nUsing manual Bearer token header (API-created workflow credential fix).\nProjects table needs a `call_context` field (Long text).\n\n**Gemini:**\nUsing googlePalmApi credential rIL63TG4xfMQL8uJ for creator requirement extraction.",
+          "height": 320,
           "width": 400,
           "color": 4
         },
@@ -724,8 +830,72 @@
         "typeVersion": 1,
         "position": [
           -200,
-          480
+          500
         ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "googlePalmApi",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ (() => { const ctx = $('Extract Client Context').first().json; const callCtx = ctx.call_context; const prompt = `Analyze this client onboarding call context and extract creator requirements.\\n\\nCALL OVERVIEW: ${callCtx.overview}\\n\\nKEYWORDS: ${(callCtx.keywords || []).join(', ')}\\n\\nCONTENT PREFERENCES (what client said about content/creators):\\n${callCtx.content_preferences}\\n\\nBUDGET CONTEXT (what client said about budget):\\n${callCtx.budget_context}\\n\\nCOMPETITIVE CONTEXT:\\n${callCtx.competitive_context}\\n\\nCLIENT NAME: ${ctx.client_name}\\n\\nExtract the following and return ONLY valid JSON (no markdown):\\n{\\n  \"industry\": \"the brand's industry (e.g. skincare, fintech, fashion, food, wellness)\",\\n  \"niches\": [\"array of matching creator niches from: Fashion, Beauty, Fitness, Tech, Food, Finance, Health, Lifestyle, Education, Gaming, Travel, Auto\"],\\n  \"budget_per_video\": estimated budget per video in INR (number, default 5000 if unclear),\\n  \"num_creators_needed\": estimated number of creators needed (number, default 5 if unclear),\\n  \"creator_preferences\": {\\n    \"gender\": \"preferred gender or 'any'\",\\n    \"age_range\": \"preferred age range or 'any'\",\\n    \"style\": \"content style preferences\",\\n    \"location\": \"preferred location or 'India'\"\\n  },\\n  \"languages\": [\"preferred languages, default English, Hindi\"],\\n  \"brief_summary\": \"1-2 sentence summary of what kind of creators this client needs\"\\n}`; return JSON.stringify({ systemInstruction: { parts: [{ text: 'You are a talent scout AI. Analyze client calls to understand creator requirements. Return only valid JSON.' }] }, contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { temperature: 0.2, maxOutputTokens: 2000 } }); })() }}",
+          "options": {}
+        },
+        "id": "ff-gemini-reqs",
+        "name": "Gemini \u2014 Extract Creator Requirements",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1860,
+          500
+        ],
+        "credentials": {
+          "googlePalmApi": {
+            "id": "rIL63TG4xfMQL8uJ",
+            "name": "Cosmisk AI"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "const response = $input.first().json;\nconst ctx = $('Extract Client Context').first().json;\n\nlet requirements = {\n  niches: ['UGC'],\n  budget_max: 5000,\n  count: 5,\n  brand_name: ctx.client_name || '',\n  location: 'India',\n  languages: ['English', 'Hindi'],\n  source: 'fireflies_auto_scout',\n  project_id: ctx.project_id || ''\n};\n\ntry {\n  let text = response.candidates?.[0]?.content?.parts?.[0]?.text || '{}';\n  text = text.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim();\n  const parsed = JSON.parse(text);\n  \n  if (parsed.niches && parsed.niches.length > 0) requirements.niches = parsed.niches;\n  if (parsed.budget_per_video) requirements.budget_max = parsed.budget_per_video;\n  if (parsed.num_creators_needed) requirements.count = parsed.num_creators_needed;\n  if (parsed.creator_preferences?.location) requirements.location = parsed.creator_preferences.location;\n  if (parsed.languages) requirements.languages = parsed.languages;\n  requirements.brief_summary = parsed.brief_summary || '';\n  requirements.creator_preferences = parsed.creator_preferences || {};\n  requirements.industry = parsed.industry || '';\n} catch (e) {\n  // Use defaults \u2014 still scout with generic params\n  requirements.brief_summary = 'Could not parse call context, using default parameters';\n}\n\nreturn [{ json: { scout_request: requirements } }];"
+        },
+        "id": "ff-parse-reqs",
+        "name": "Parse Creator Requirements",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2140,
+          500
+        ],
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "http://n8n-jeet.duckdns.org:5678/webhook/find-creators",
+          "authentication": "none",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify($json.scout_request) }}",
+          "options": {
+            "timeout": 30000
+          }
+        },
+        "id": "ff-auto-scout",
+        "name": "Auto Scout Creators",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          2420,
+          500
+        ],
+        "credentials": {},
+        "onError": "continueRegularOutput"
       }
     ],
     "connections": {
@@ -820,6 +990,33 @@
               "node": "Respond \u2014 Success",
               "type": "main",
               "index": 0
+            },
+            {
+              "node": "Gemini \u2014 Extract Creator Requirements",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Gemini \u2014 Extract Creator Requirements": {
+        "main": [
+          [
+            {
+              "node": "Parse Creator Requirements",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Parse Creator Requirements": {
+        "main": [
+          [
+            {
+              "node": "Auto Scout Creators",
+              "type": "main",
+              "index": 0
             }
           ]
         ]
@@ -831,19 +1028,27 @@
     "autosaved": false,
     "workflowPublishHistory": [
       {
-        "createdAt": "2026-02-18T08:02:40.135Z",
-        "id": 127,
+        "createdAt": "2026-02-25T07:49:06.786Z",
+        "id": 489,
         "workflowId": "dSDcu6zAFYpNf5m8",
-        "versionId": "c1e4c111-9ed8-431c-8f37-d98d7ee8b8c8",
+        "versionId": "81756492-6438-4c29-9332-29e8be8f91e4",
         "event": "activated",
         "userId": "ed50a507-d93d-45c3-9412-d80babb81dd0"
       },
       {
-        "createdAt": "2026-02-18T08:02:41.170Z",
-        "id": 128,
+        "createdAt": "2026-02-25T07:49:55.373Z",
+        "id": 491,
         "workflowId": "dSDcu6zAFYpNf5m8",
-        "versionId": "c1e4c111-9ed8-431c-8f37-d98d7ee8b8c8",
+        "versionId": "81756492-6438-4c29-9332-29e8be8f91e4",
         "event": "activated",
+        "userId": "ed50a507-d93d-45c3-9412-d80babb81dd0"
+      },
+      {
+        "createdAt": "2026-02-25T07:49:19.863Z",
+        "id": 490,
+        "workflowId": "dSDcu6zAFYpNf5m8",
+        "versionId": "81756492-6438-4c29-9332-29e8be8f91e4",
+        "event": "deactivated",
         "userId": "ed50a507-d93d-45c3-9412-d80babb81dd0"
       }
     ]
