@@ -1,0 +1,78 @@
+{
+  "name": "Setup — Performance Fields (delete after run)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "setup-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [100, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const BASE_ID = 'appvFxwZc9yU8o8pK';\nconst BRANDS_TABLE = 'tblEkb2WGoh407zEn';\nconst SCRIPTS_TABLE = 'tbl2D9mapezLKMPg7';\n\nconst fields = [\n  { table: BRANDS_TABLE, tableName: 'Brands', body: { name: 'ad_account_id', type: 'singleLineText', description: 'Meta ad account ID (e.g. act_921159353090591)' } },\n  { table: SCRIPTS_TABLE, tableName: 'Scripts', body: { name: 'meta_ad_name', type: 'singleLineText', description: 'Matched Meta ad name' } },\n  { table: SCRIPTS_TABLE, tableName: 'Scripts', body: { name: 'meta_ad_id', type: 'singleLineText', description: 'Meta ad ID for direct lookup' } },\n  { table: SCRIPTS_TABLE, tableName: 'Scripts', body: { name: 'ad_spend', type: 'number', options: { precision: 2 }, description: 'Total spend on this scripts ad' } },\n  { table: SCRIPTS_TABLE, tableName: 'Scripts', body: { name: 'ad_ctr', type: 'number', options: { precision: 2 }, description: 'Click-through rate percent' } },\n  { table: SCRIPTS_TABLE, tableName: 'Scripts', body: { name: 'ad_roas', type: 'number', options: { precision: 2 }, description: 'Return on ad spend' } },\n  { table: SCRIPTS_TABLE, tableName: 'Scripts', body: { name: 'ad_impressions', type: 'number', options: { precision: 0 }, description: 'Total impressions' } },\n  { table: SCRIPTS_TABLE, tableName: 'Scripts', body: { name: 'performance_tier', type: 'singleSelect', options: { choices: [{ name: 'Top Performer', color: 'greenBright' }, { name: 'Good', color: 'cyanBright' }, { name: 'Average', color: 'yellowBright' }, { name: 'Underperformer', color: 'redBright' }] }, description: 'Performance tier based on ROAS and CTR' } }\n];\n\nreturn fields.map(f => ({ json: { url: `https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables/${f.table}/fields`, bodyJson: JSON.stringify(f.body), tableName: f.tableName, fieldName: f.body.name } }));"
+      },
+      "id": "setup-prep",
+      "name": "Prepare Field Definitions",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [340, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.url }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.bodyJson }}",
+        "options": {
+          "timeout": 15000,
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 500
+            }
+          }
+        }
+      },
+      "id": "setup-create",
+      "name": "Create Fields",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [600, 300],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst prep = $('Prepare Field Definitions').all();\nconst results = items.map((item, i) => {\n  const meta = prep[i]?.json || {};\n  const resp = item.json;\n  if (resp.id) return { table: meta.tableName, field: meta.fieldName, status: 'created', fieldId: resp.id };\n  if (resp.error) {\n    const msg = JSON.stringify(resp.error);\n    if (msg.includes('DUPLICATE') || msg.includes('already exists') || msg.includes('duplicate')) return { table: meta.tableName, field: meta.fieldName, status: 'already_exists' };\n    return { table: meta.tableName, field: meta.fieldName, status: 'error', error: msg };\n  }\n  return { table: meta.tableName, field: meta.fieldName, status: 'unknown', raw: JSON.stringify(resp).substring(0, 200) };\n});\nreturn [{ json: { results, summary: { created: results.filter(r => r.status === 'created').length, existing: results.filter(r => r.status === 'already_exists').length, errors: results.filter(r => r.status === 'error').length } } }];"
+      },
+      "id": "setup-summary",
+      "name": "Summarize Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [860, 300]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [[{ "node": "Prepare Field Definitions", "type": "main", "index": 0 }]]
+    },
+    "Prepare Field Definitions": {
+      "main": [[{ "node": "Create Fields", "type": "main", "index": 0 }]]
+    },
+    "Create Fields": {
+      "main": [[{ "node": "Summarize Results", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "staticData": null
+}

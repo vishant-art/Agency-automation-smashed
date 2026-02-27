@@ -65,9 +65,9 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Users?filterByFormula=%7Bemail%7D%3D'{{ $json.email }}'",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "airtableTokenApi",
+        "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblP2TPWErU0s6M4w?filterByFormula=%7Bemail%7D%3D'{{ $json.email }}'",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
@@ -76,15 +76,15 @@
       "id": "api-login-fetch-user",
       "name": "Fetch User from Airtable",
       "credentials": {
-        "airtableTokenApi": {
-          "id": "WelvlJEjoHaI3l9G",
-          "name": "Airtable Personal Access Token account"
+        "httpHeaderAuth": {
+          "id": "a0TTu3NVsuJUEbct",
+          "name": "Airtable PAT Header"
         }
       }
     },
     {
       "parameters": {
-        "jsCode": "const response = $input.first().json;\nconst records = response.records || [];\n\nif (records.length === 0) {\n  return [{ json: { _auth_error: true, message: 'Invalid email or password' } }];\n}\n\nconst user = records[0];\nconst fields = user.fields || {};\n\n// MVP: plaintext password comparison\nconst storedPassword = fields.password || fields.password_hash || '';\nconst inputPassword = $('Extract Credentials').first().json.password;\n\nif (storedPassword !== inputPassword) {\n  return [{ json: { _auth_error: true, message: 'Invalid email or password' } }];\n}\n\n// Generate base64 JWT token (MVP)\nconst tokenPayload = {\n  userId: user.id,\n  email: fields.email,\n  role: fields.role || 'client',\n  exp: Date.now() + (24 * 60 * 60 * 1000) // 24 hours\n};\nconst token = Buffer.from(JSON.stringify(tokenPayload)).toString('base64');\n\nreturn [{\n  json: {\n    _auth_error: false,\n    token,\n    user: {\n      id: user.id,\n      name: fields.name || fields.full_name || '',\n      email: fields.email,\n      role: fields.role || 'client',\n      onboardingComplete: true,\n      plan: fields.plan || 'starter',\n      createdAt: fields.created_at || user.createdTime\n    }\n  }\n}];"
+        "jsCode": "const crypto = require('crypto');\n\nconst response = $input.first().json;\nconst records = response.records || [];\n\nif (records.length === 0) {\n  return [{ json: { _auth_error: true, message: 'Invalid email or password' } }];\n}\n\nconst user = records[0];\nconst fields = user.fields || {};\n\n// Get stored password value — support both field names\nconst storedValue = fields.password_hash || fields.password || '';\nconst inputPassword = $('Extract Credentials').first().json.password;\n\n// Verify password\nlet passwordValid = false;\nif (storedValue.includes(':')) {\n  // New format: salt:hash (SHA-256)\n  const [salt, hash] = storedValue.split(':');\n  const inputHash = crypto.createHash('sha256').update(salt + inputPassword).digest('hex');\n  passwordValid = (inputHash === hash);\n} else {\n  // Legacy plaintext — compare directly but flag for migration\n  passwordValid = (storedValue === inputPassword);\n  // TODO: Could auto-migrate here by hashing and updating the record\n}\n\nif (!passwordValid) {\n  return [{ json: { _auth_error: true, message: 'Invalid email or password' } }];\n}\n\n// Generate HMAC-SHA256 JWT token\nconst JWT_SECRET = 'cosmisk-jwt-secret-2026-v1';\n\nconst header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');\nconst payload = Buffer.from(JSON.stringify({\n  sub: user.id,\n  email: fields.email,\n  role: fields.role || 'client',\n  name: fields.name || fields.full_name || '',\n  iat: Math.floor(Date.now() / 1000),\n  exp: Math.floor(Date.now() / 1000) + (24 * 60 * 60)\n})).toString('base64url');\n\nconst signature = crypto.createHmac('sha256', JWT_SECRET).update(header + '.' + payload).digest('base64url');\nconst token = header + '.' + payload + '.' + signature;\n\nreturn [{\n  json: {\n    _auth_error: false,\n    token,\n    user: {\n      id: user.id,\n      name: fields.name || fields.full_name || '',\n      email: fields.email,\n      role: fields.role || 'client',\n      onboardingComplete: true,\n      plan: fields.plan || 'starter',\n      createdAt: fields.created_at || user.createdTime\n    }\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,

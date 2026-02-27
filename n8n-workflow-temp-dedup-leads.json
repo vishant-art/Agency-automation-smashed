@@ -1,0 +1,250 @@
+{
+  "name": "TEMP \u2014 Deduplicate Leads + Fix Sources",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## TEMP WORKFLOW: Dedup Leads + Fix Sources\n\n**One-time use** \u2014 delete after running.\n\n**Branch 1 (top):** Find duplicate company_name records, delete older ones.\nTarget: rapidbox, osso, gooat, mydesignation, basil\n\n**Branch 2 (bottom):** Fix source='unknown' on all existing leads.\nReads notes field to determine if prospect_finder or ad_library_scanner.\n\nTrigger: Manual execution only.",
+        "height": 320,
+        "width": 480,
+        "color": 5
+      },
+      "id": "dedup-note",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-280, -140]
+    },
+    {
+      "parameters": {},
+      "id": "dedup-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [300, 400]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tbl6qih4ODd7qKFZ1?fields%5B%5D=company_name&fields%5B%5D=notes&fields%5B%5D=source&fields%5B%5D=created_at&pageSize=100",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "options": {}
+      },
+      "id": "dedup-fetch-all",
+      "name": "Fetch All Leads",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [560, 400],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// BRANCH 1: Find duplicate records by company_name\n// Output one item per record to delete, each with a deleteUrl\n// ============================================================\nconst response = $input.first().json;\nconst records = response.records || [];\n\nconst groups = {};\nfor (const rec of records) {\n  const name = (rec.fields.company_name || '').toLowerCase().trim();\n  if (!name) continue;\n  if (!groups[name]) groups[name] = [];\n  groups[name].push({\n    id: rec.id,\n    company_name: rec.fields.company_name,\n    createdTime: rec.createdTime || ''\n  });\n}\n\nconst toDelete = [];\nfor (const [name, recs] of Object.entries(groups)) {\n  if (recs.length <= 1) continue;\n  // Sort by createdTime descending (newest first)\n  recs.sort((a, b) => (b.createdTime || '').localeCompare(a.createdTime || ''));\n  // Keep newest, delete the rest\n  for (let i = 1; i < recs.length; i++) {\n    toDelete.push({\n      json: {\n        recordId: recs[i].id,\n        company_name: recs[i].company_name,\n        kept_id: recs[0].id,\n        deleteUrl: `https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tbl6qih4ODd7qKFZ1/${recs[i].id}`\n      }\n    });\n  }\n}\n\nif (toDelete.length === 0) {\n  return [{ json: { _noDuplicates: true, message: 'No duplicates found' } }];\n}\n\nreturn toDelete;"
+      },
+      "id": "dedup-find-dupes",
+      "name": "Find Duplicates",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [840, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "dedup-has-id",
+              "leftValue": "={{ $json.recordId }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "dedup-filter-valid",
+      "name": "Has Record to Delete?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1100, 300]
+    },
+    {
+      "parameters": {
+        "method": "DELETE",
+        "url": "={{ $json.deleteUrl }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "options": {}
+      },
+      "id": "dedup-delete-http",
+      "name": "Delete Duplicate Record",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1360, 200],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "executeOnce": false
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// BRANCH 2: Build batch update payload to fix source field\n// Read notes to determine the correct source value\n// Output batch PATCH body for Airtable\n// ============================================================\nconst response = $input.first().json;\nconst records = response.records || [];\n\nconst updates = [];\nfor (const rec of records) {\n  const currentSource = (rec.fields.source || '').toLowerCase().trim();\n  // Only fix records that have 'unknown' or empty source\n  if (currentSource && currentSource !== 'unknown') continue;\n\n  const notes = (rec.fields.notes || '').toLowerCase();\n  let newSource = '';\n\n  if (notes.includes('prospect finder') || (notes.includes('auto-discovered') && notes.includes('ugc score'))) {\n    newSource = 'prospect_finder';\n  } else if (notes.includes('ad library scanner') || notes.includes('meta ads without ugc')) {\n    newSource = 'ad_library_scanner';\n  } else if (notes.includes('discovery signal') || notes.includes('best service')) {\n    newSource = 'prospect_finder';\n  }\n\n  if (newSource) {\n    updates.push({ id: rec.id, fields: { source: newSource } });\n  }\n}\n\nif (updates.length === 0) {\n  return [{ json: { _noUpdates: true, message: 'No source fields to fix' } }];\n}\n\n// Split into batches of 10 (Airtable max per PATCH request)\nconst batches = [];\nfor (let i = 0; i < updates.length; i += 10) {\n  batches.push({\n    json: {\n      batchBody: JSON.stringify({ records: updates.slice(i, i + 10) }),\n      batchIndex: Math.floor(i / 10) + 1,\n      batchCount: updates.slice(i, i + 10).length\n    }\n  });\n}\n\nreturn batches;"
+      },
+      "id": "dedup-build-source-fix",
+      "name": "Build Source Fix Batches",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [840, 540]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "fix-has-batch",
+              "leftValue": "={{ $json.batchBody }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "dedup-filter-fix-valid",
+      "name": "Has Batch to Update?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1100, 540]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tbl6qih4ODd7qKFZ1",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.batchBody }}",
+        "options": {}
+      },
+      "id": "dedup-patch-sources",
+      "name": "Patch Source Fields",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1360, 440],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "executeOnce": false
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch All Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch All Leads": {
+      "main": [
+        [
+          {
+            "node": "Find Duplicates",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Build Source Fix Batches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Duplicates": {
+      "main": [
+        [
+          {
+            "node": "Has Record to Delete?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Record to Delete?": {
+      "main": [
+        [
+          {
+            "node": "Delete Duplicate Record",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Build Source Fix Batches": {
+      "main": [
+        [
+          {
+            "node": "Has Batch to Update?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Batch to Update?": {
+      "main": [
+        [
+          {
+            "node": "Patch Source Fields",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null
+}

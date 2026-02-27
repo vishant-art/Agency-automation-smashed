@@ -1,0 +1,477 @@
+{
+  "name": "Vibe5 Prospecting",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 6 * * *"
+            }
+          ]
+        }
+      },
+      "id": "v5p-schedule-01",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "vibe5-prospect",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "v5p-webhook-02",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 300],
+      "webhookId": "vibe5-prospect"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst isWebhook = !!input.headers;\nconst body = isWebhook ? (input.body || {}) : {};\n\nconst defaults = {\n  source: isWebhook ? 'webhook' : 'schedule',\n  industries: body.industry || ['consumer goods', 'food and beverage manufacturing', 'health and human services', 'personal care product manufacturing', 'cosmetics', 'retail apparel and fashion', 'wellness and fitness services'],\n  countries: body.country || ['us', 'gb', 'ca', 'au', 'in'],\n  company_sizes: body.company_size || ['11-50', '51-200', '201-500'],\n  max_businesses: body.size || 30\n};\n\nreturn [{ json: defaults }];"
+      },
+      "id": "v5p-defaults-03",
+      "name": "Set Defaults",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [260, 150]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tbl6qih4ODd7qKFZ1",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "fields[]",
+              "value": "company_name"
+            },
+            {
+              "name": "fields[]",
+              "value": "website"
+            },
+            {
+              "name": "maxRecords",
+              "value": "500"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "v5p-fetchleads-04",
+      "name": "Fetch Existing Leads",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [520, 150],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "a0TTu3NVsuJUEbct",
+          "name": "Airtable PAT Header"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const defaults = $('Set Defaults').first().json;\nconst existingLeads = $('Fetch Existing Leads').first().json;\n\nconst API_KEY = 'YOUR_EXPLORIUM_API_KEY_HERE';\n\n// Build existing company set for dedup\nconst existingNames = new Set();\nconst existingDomains = new Set();\nfor (const r of (existingLeads.records || [])) {\n  if (r.fields.company_name) existingNames.add(r.fields.company_name.toLowerCase().trim());\n  if (r.fields.website) {\n    const domain = r.fields.website.replace(/^https?:\\/\\//, '').replace(/^www\\./, '').replace(/\\/.*$/, '').toLowerCase();\n    existingDomains.add(domain);\n  }\n}\n\nlet businesses = [];\ntry {\n  const resp = await this.helpers.httpRequest({\n    method: 'POST',\n    url: 'https://api.explorium.ai/v1/businesses',\n    headers: { 'API_KEY': API_KEY, 'Content-Type': 'application/json' },\n    body: {\n      mode: 'full',\n      size: defaults.max_businesses,\n      page_size: Math.min(defaults.max_businesses, 100),\n      page: 1,\n      filters: {\n        country_code: { values: defaults.countries },\n        company_size: { values: defaults.company_sizes },\n        has_website: { value: true },\n        linkedin_category: { values: defaults.industries }\n      }\n    },\n    json: true\n  });\n\n  const allBiz = resp.data || [];\n\n  // Dedup against existing leads\n  businesses = allBiz.filter(b => {\n    const name = (b.name || '').toLowerCase().trim();\n    const domain = (b.domain || '').toLowerCase().trim();\n    if (existingNames.has(name)) return false;\n    if (domain && existingDomains.has(domain)) return false;\n    return true;\n  });\n} catch (err) {\n  return [{ json: { businesses: [], error: err.message, total: 0 } }];\n}\n\nreturn [{ json: { businesses: businesses.slice(0, 20), total: businesses.length } }];"
+      },
+      "id": "v5p-searchbiz-05",
+      "name": "Search Businesses",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [780, 150]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst businesses = data.businesses || [];\n\nif (businesses.length === 0) {\n  return [{ json: { prospects: [], businesses: [], count: 0 } }];\n}\n\nconst API_KEY = 'YOUR_EXPLORIUM_API_KEY_HERE';\nconst prospects = [];\n\nfor (const biz of businesses) {\n  try {\n    const resp = await this.helpers.httpRequest({\n      method: 'POST',\n      url: 'https://api.explorium.ai/v1/prospects',\n      headers: { 'API_KEY': API_KEY, 'Content-Type': 'application/json' },\n      body: {\n        mode: 'full',\n        size: 3,\n        page_size: 3,\n        page: 1,\n        filters: {\n          business_id: { values: [biz.business_id] },\n          job_level: { values: ['founder', 'c-suite', 'cxo', 'vp', 'director', 'owner', 'president'] },\n          job_department: { values: ['marketing', 'c-suite', 'sales'] },\n          has_email: { value: true }\n        }\n      },\n      json: true\n    });\n\n    const found = resp.data || [];\n    if (found.length > 0) {\n      const best = found[0];\n      prospects.push({\n        business_id: biz.business_id,\n        company_name: biz.name,\n        domain: biz.domain,\n        website: biz.website || ('https://' + (biz.domain || '')),\n        company_description: biz.business_description || '',\n        country: biz.country_name || '',\n        employees: biz.number_of_employees_range || '',\n        revenue: biz.yearly_revenue_range || '',\n        prospect_id: best.prospect_id,\n        contact_name: best.full_name || (best.first_name + ' ' + best.last_name),\n        job_title: best.job_title || '',\n        linkedin: best.linkedin || (best.linkedin_url_array || [])[0] || '',\n        department: best.job_department_main || '',\n        seniority: (best.job_level_main || '').replace(/_/g, ' ')\n      });\n    }\n  } catch (err) {\n    // Skip this business on error\n  }\n}\n\nreturn [{ json: { prospects, count: prospects.length } }];"
+      },
+      "id": "v5p-prospects-06",
+      "name": "Find Prospects",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1040, 150]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "v5p-cond-hasprospects",
+              "leftValue": "={{ $json.count }}",
+              "rightValue": "0",
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "v5p-ifprospects-07",
+      "name": "Has Prospects?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1300, 150]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst prospects = data.prospects || [];\nconst defaults = $('Set Defaults').first().json;\n\nconst records = prospects.map(p => ({\n  fields: {\n    company_name: p.company_name,\n    source: 'vibe5_explorium',\n    contact_name: p.contact_name + (p.job_title ? ' (' + p.job_title + ')' : ''),\n    email: 'enrichment_pending',\n    stage: 'New',\n    website: p.website,\n    notes: 'Source: Vibe5/Explorium (auto-discovered)\\n' +\n      'Contact: ' + p.contact_name + '\\n' +\n      'Title: ' + p.job_title + '\\n' +\n      'LinkedIn: ' + p.linkedin + '\\n' +\n      'Department: ' + p.department + '\\n' +\n      'Seniority: ' + p.seniority + '\\n' +\n      'Country: ' + p.country + '\\n' +\n      'Employees: ' + p.employees + '\\n' +\n      'Revenue: ' + p.revenue + '\\n' +\n      'Description: ' + (p.company_description || '').substring(0, 300)\n  }\n}));\n\n// Batch into groups of 10 (Airtable limit)\nconst batches = [];\nfor (let i = 0; i < records.length; i += 10) {\n  batches.push(records.slice(i, i + 10));\n}\nconst batchBody = { records: batches[0] || [] };\n\n// Build Slack message\nlet slackMsg = '*:telescope: Vibe5 Prospecting \\u2014 ' + prospects.length + ' New Leads Found*\\n\\n';\nslackMsg += 'Source: Explorium API | Industries: ' + defaults.industries.slice(0, 3).join(', ') + '\\n';\nslackMsg += 'Countries: ' + defaults.countries.join(', ') + ' | Company Size: ' + defaults.company_sizes.join(', ') + '\\n\\n';\n\nprospects.slice(0, 10).forEach((p, i) => {\n  slackMsg += '*' + (i+1) + '. ' + p.company_name + '*';\n  if (p.website) slackMsg += ' \\u2014 ' + p.website;\n  slackMsg += '\\n';\n  slackMsg += '   Contact: ' + p.contact_name + ' (' + p.job_title + ')\\n';\n  if (p.linkedin) slackMsg += '   LinkedIn: ' + p.linkedin + '\\n';\n  slackMsg += '   ' + p.country + ' | ' + p.employees + ' employees | ' + p.revenue + '\\n\\n';\n});\n\nif (prospects.length > 10) {\n  slackMsg += '...and ' + (prospects.length - 10) + ' more\\n';\n}\n\nreturn [{\n  json: {\n    batchBody,\n    slack_message: slackMsg,\n    count: prospects.length,\n    prospects\n  }\n}];"
+      },
+      "id": "v5p-buildleads-08",
+      "name": "Build Leads + Slack",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 150]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tbl6qih4ODd7qKFZ1",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "string",
+        "body": "={{ JSON.stringify($json.batchBody) }}",
+        "options": {}
+      },
+      "id": "v5p-createleads-09",
+      "name": "Create Leads in Airtable",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1820, 150],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "a0TTu3NVsuJUEbct",
+          "name": "Airtable PAT Header"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0AHQU1BUU8",
+          "mode": "id"
+        },
+        "text": "={{ $('Build Leads + Slack').first().json.slack_message }}",
+        "otherOptions": {}
+      },
+      "id": "v5p-slack-10",
+      "name": "Slack — Prospect Report",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [2080, 0],
+      "credentials": {
+        "slackApi": {
+          "id": "5Q37UpOjGx4YsbyC",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblGhzSJ5RXWDS8h8",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "string",
+        "body": "={{ JSON.stringify({ records: [{ fields: { agent: 'vibe5_prospecting', event_type: 'leads_discovered', details: 'Found ' + $('Build Leads + Slack').first().json.count + ' new leads via Explorium API', created_at: new Date().toISOString() } }] }) }}",
+        "options": {}
+      },
+      "id": "v5p-event-11",
+      "name": "Write Event",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2080, 150],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "a0TTu3NVsuJUEbct",
+          "name": "Airtable PAT Header"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const createResponse = $input.first().json;\nconst records = createResponse.records || [];\n\nif (records.length === 0) {\n  return [{ json: { _skip: true, leads: [], count: 0 } }];\n}\n\nconst leads = records.map(r => ({\n  record_id: r.id,\n  company_name: r.fields.company_name || '',\n  website: r.fields.website || '',\n  industry: '',\n  email: r.fields.email || '',\n  notes: (r.fields.notes || '').substring(0, 500),\n  source: 'vibe5_explorium'\n}));\n\nreturn [{ json: { leads, count: leads.length, _skip: false } }];"
+      },
+      "id": "v5p-prepoutreach-12",
+      "name": "Prep Outreach Trigger",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2080, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "v5p-cond-hasnewleads",
+              "leftValue": "={{ $json.count }}",
+              "rightValue": "0",
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "v5p-ifnewleads-13",
+      "name": "Has New Leads?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2340, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://n8n-jeet.duckdns.org:5678/webhook/enrich-leads",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "string",
+        "body": "={{ JSON.stringify({ leads: $json.leads }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "v5p-outreach-14",
+      "name": "Trigger Outreach Enrichment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2600, 300],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const createResponse = $('Create Leads in Airtable').first().json;\nconst records = createResponse.records || [];\n\nfor (const record of records) {\n  const fields = record.fields || {};\n  try {\n    this.helpers.httpRequest({\n      method: 'POST',\n      url: 'http://n8n-jeet.duckdns.org:5678/webhook/creative-teardown',\n      body: {\n        lead_id: record.id,\n        company_name: fields.company_name || '',\n        website: fields.website || '',\n        industry: ''\n      },\n      json: true\n    }).catch(() => {});\n  } catch(e) {}\n}\n\nreturn [{ json: { triggered: records.length } }];"
+      },
+      "id": "v5p-teardown-15",
+      "name": "Trigger Tear-Down",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2080, 450]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ JSON.stringify({ success: true, count: $('Build Leads + Slack').first().json.count, prospects: ($('Build Leads + Slack').first().json.prospects || []).map(p => ({ company: p.company_name, contact: p.contact_name, title: p.job_title, website: p.website })) }) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "v5p-respond-16",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2080, 600]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Set Defaults",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Set Defaults",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Defaults": {
+      "main": [
+        [
+          {
+            "node": "Fetch Existing Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Existing Leads": {
+      "main": [
+        [
+          {
+            "node": "Search Businesses",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Businesses": {
+      "main": [
+        [
+          {
+            "node": "Find Prospects",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Prospects": {
+      "main": [
+        [
+          {
+            "node": "Has Prospects?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Prospects?": {
+      "main": [
+        [
+          {
+            "node": "Build Leads + Slack",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Build Leads + Slack": {
+      "main": [
+        [
+          {
+            "node": "Create Leads in Airtable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Leads in Airtable": {
+      "main": [
+        [
+          {
+            "node": "Slack — Prospect Report",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Write Event",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prep Outreach Trigger",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Trigger Tear-Down",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep Outreach Trigger": {
+      "main": [
+        [
+          {
+            "node": "Has New Leads?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has New Leads?": {
+      "main": [
+        [
+          {
+            "node": "Trigger Outreach Enrichment",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null
+}

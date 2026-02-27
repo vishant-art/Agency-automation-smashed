@@ -1,0 +1,279 @@
+{
+  "name": "Cosmisk API — Auth Signup",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "auth/signup",
+        "httpMethod": "POST",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [380, 300],
+      "id": "api-signup-webhook",
+      "name": "Webhook",
+      "webhookId": "cosmisk-auth-signup"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || $input.first().json;\nconst name = (body.name || '').trim();\nconst email = (body.email || '').trim().toLowerCase();\nconst password = (body.password || '').trim();\n\n// Validate name\nif (!name || name.length < 2 || name.length > 100) {\n  return [{ json: { _error: true, message: 'Name is required (2-100 characters)' } }];\n}\n\n// Validate email\nif (!email || !email.includes('@')) {\n  return [{ json: { _error: true, message: 'A valid email address is required' } }];\n}\n\n// Validate password\nif (!password || password.length < 8) {\n  return [{ json: { _error: true, message: 'Password must be at least 8 characters' } }];\n}\n\nreturn [{ json: { name, email, password } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [600, 300],
+      "id": "api-signup-extract",
+      "name": "Extract Input"
+    },
+    {
+      "parameters": {
+        "dataType": "string",
+        "value1": "={{ $json._error ? 'error' : 'ok' }}",
+        "rules": {
+          "rules": [
+            { "value2": "error", "output": 0 },
+            { "value2": "ok", "output": 1 }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 2,
+      "position": [820, 300],
+      "id": "api-signup-check-input",
+      "name": "Check Input"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ JSON.stringify({ success: false, error: $json.message || 'Invalid input' }) }}",
+        "options": {
+          "responseCode": 400,
+          "responseHeaders": {
+            "entries": [
+              { "name": "Content-Type", "value": "application/json" },
+              { "name": "Access-Control-Allow-Origin", "value": "*" }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1060, 180],
+      "id": "api-signup-respond-input-err",
+      "name": "Respond Input Error"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblP2TPWErU0s6M4w?filterByFormula=%7Bemail%7D%3D'{{ $json.email }}'",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1060, 400],
+      "id": "api-signup-check-existing",
+      "name": "Check Existing User",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "a0TTu3NVsuJUEbct",
+          "name": "Airtable PAT Header"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst records = response.records || [];\n\nif (records.length > 0) {\n  return [{ json: { _dup: true } }];\n}\n\nreturn [{ json: { _dup: false } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1280, 400],
+      "id": "api-signup-check-dup",
+      "name": "Check Duplicate"
+    },
+    {
+      "parameters": {
+        "dataType": "string",
+        "value1": "={{ $json._dup ? 'dup' : 'new' }}",
+        "rules": {
+          "rules": [
+            { "value2": "dup", "output": 0 },
+            { "value2": "new", "output": 1 }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 2,
+      "position": [1500, 400],
+      "id": "api-signup-route-dup",
+      "name": "Route Duplicate"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ JSON.stringify({ success: false, error: 'An account with this email already exists' }) }}",
+        "options": {
+          "responseCode": 409,
+          "responseHeaders": {
+            "entries": [
+              { "name": "Content-Type", "value": "application/json" },
+              { "name": "Access-Control-Allow-Origin", "value": "*" }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1720, 280],
+      "id": "api-signup-respond-dup",
+      "name": "Respond Duplicate"
+    },
+    {
+      "parameters": {
+        "jsCode": "const crypto = require('crypto');\nconst input = $('Extract Input').first().json;\n\n// Generate salt and hash\nconst salt = crypto.randomBytes(16).toString('hex');\nconst hash = crypto.createHash('sha256').update(salt + input.password).digest('hex');\nconst passwordHash = salt + ':' + hash;\n\n// Build Airtable create body\nconst airtableBody = JSON.stringify({\n  records: [{\n    fields: {\n      name: input.name,\n      email: input.email,\n      password_hash: passwordHash,\n      role: 'client',\n      plan: 'starter',\n      created_at: new Date().toISOString()\n    }\n  }]\n});\n\nreturn [{ json: { airtableBody, name: input.name, email: input.email } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1720, 500],
+      "id": "api-signup-hash-create",
+      "name": "Hash & Create User"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblP2TPWErU0s6M4w",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "string",
+        "body": "={{ $json.airtableBody }}",
+        "options": {
+          "redirect": {
+            "redirect": {}
+          }
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1940, 500],
+      "id": "api-signup-create-user",
+      "name": "Create User in Airtable",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "a0TTu3NVsuJUEbct",
+          "name": "Airtable PAT Header"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const crypto = require('crypto');\nconst created = $input.first().json;\nconst record = (created.records || [])[0] || {};\nconst input = $('Hash & Create User').first().json;\n\nconst JWT_SECRET = 'cosmisk-jwt-secret-2026-v1';\n\nconst header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');\nconst payload = Buffer.from(JSON.stringify({\n  sub: record.id,\n  email: input.email,\n  role: 'client',\n  name: input.name,\n  iat: Math.floor(Date.now() / 1000),\n  exp: Math.floor(Date.now() / 1000) + (24 * 60 * 60)\n})).toString('base64url');\n\nconst signature = crypto.createHmac('sha256', JWT_SECRET).update(header + '.' + payload).digest('base64url');\nconst token = header + '.' + payload + '.' + signature;\n\nreturn [{ json: {\n  success: true,\n  token,\n  user: {\n    id: record.id,\n    name: input.name,\n    email: input.email,\n    role: 'client',\n    onboardingComplete: false,\n    plan: 'starter',\n    createdAt: record.createdTime || new Date().toISOString()\n  }\n}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2160, 500],
+      "id": "api-signup-build-response",
+      "name": "Build Response"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ JSON.stringify({ success: $json.success, token: $json.token, user: $json.user }) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              { "name": "Content-Type", "value": "application/json" },
+              { "name": "Access-Control-Allow-Origin", "value": "*" }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2380, 500],
+      "id": "api-signup-respond-ok",
+      "name": "Respond Success"
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          { "node": "Extract Input", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Extract Input": {
+      "main": [
+        [
+          { "node": "Check Input", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Check Input": {
+      "main": [
+        [
+          { "node": "Respond Input Error", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "Check Existing User", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Check Existing User": {
+      "main": [
+        [
+          { "node": "Check Duplicate", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Check Duplicate": {
+      "main": [
+        [
+          { "node": "Route Duplicate", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Route Duplicate": {
+      "main": [
+        [
+          { "node": "Respond Duplicate", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "Hash & Create User", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Hash & Create User": {
+      "main": [
+        [
+          { "node": "Create User in Airtable", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Create User in Airtable": {
+      "main": [
+        [
+          { "node": "Build Response", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Build Response": {
+      "main": [
+        [
+          { "node": "Respond Success", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

@@ -1,11 +1,5 @@
 {
-  "updatedAt": "2026-02-17T13:40:16.483Z",
-  "createdAt": "2026-02-13T18:13:10.858Z",
-  "id": "RLi-u9gL1aQ7Bl37TSidA",
   "name": "UGC Phase 1 — Research + Concepts + Airtable Storage",
-  "description": null,
-  "active": true,
-  "isArchived": false,
   "nodes": [
     {
       "parameters": {
@@ -27,7 +21,7 @@
       "parameters": {
         "httpMethod": "POST",
         "path": "ugc-phase1",
-        "responseMode": "lastNode",
+        "responseMode": "responseNode",
         "options": {}
       },
       "id": "cbd4786e-8a84-4445-b5fd-119efc6f9634",
@@ -267,27 +261,14 @@
     },
     {
       "parameters": {
-        "jsCode": "// ============================================================\n// Build Strategy Agent prompt with brief + research output\n// Groups reference videos by platform for easy browsing\n// ============================================================\n\nconst data = $('Merge Store Results').first().json;\nconst brief = data.brief;\nconst researchOutput = data.research_output;\nconst project_id = data.project_id;\nconst refRecords = data.reference_records || [];\n\n// Regeneration mode support\nconst regenData = $('Extract Client Code').first().json;\nconst isRegeneration = regenData.regenerate || false;\nconst numNeeded = regenData.num_needed || 0;\nconst excludeNames = regenData.exclude_concepts || [];\nconst rejectionNotes = regenData.rejection_notes || '';\n\nlet numConcepts = Math.ceil(brief.num_scripts * 1.5);\nif (isRegeneration && numNeeded > 0) {\n  numConcepts = Math.ceil(numNeeded * 1.5);\n}\n\n// Group references by platform\nconst validRefs = refRecords.filter(r => r.url && r.url.length > 10);\nconst grouped = {};\nfor (const r of validRefs) {\n  const plat = r.platform || 'Other';\n  if (!grouped[plat]) grouped[plat] = [];\n  grouped[plat].push(r);\n}\n\n// Build platform-grouped reference list\nlet refVideoList = '';\nlet idx = 1;\nconst platformOrder = ['YouTube Shorts', 'Facebook', 'TikTok', 'Instagram Reels', 'Multi-platform', 'Other'];\nfor (const plat of platformOrder) {\n  if (!grouped[plat] || grouped[plat].length === 0) continue;\n  const label = plat === 'Facebook' ? 'Meta Ad Library' : plat;\n  refVideoList += '\\n--- ' + label + ' ---\\n';\n  for (const r of grouped[plat]) {\n    const isBrowse = r.url.includes('ads/library') || r.url.includes('creativecenter') || r.url.includes('ads.tiktok.com');\n    const browseTag = isBrowse ? ' (Browse link)' : '';\n    refVideoList += '[' + idx + '] ' + r.url + ' | Platform: ' + r.platform + ' | Format: ' + (r.format || 'N/A') + ' | Hook: \"' + (r.hook || '').slice(0, 80) + '\"' + browseTag + '\\n';\n    idx++;\n  }\n}\n\nconst prompt = `You have deep research from our Research Analyst. Now develop the creative strategy.\n\n== CLIENT BRIEF ==\nBrand: ${brief.brand_name}\nProduct: ${brief.product_feature}\nDifferentiator: ${brief.differentiator}\nTarget: ${brief.target_user}\nProblem: ${brief.biggest_problem}\nHesitation: ${brief.main_hesitation}\nTransformation: ${brief.transformation}\nPersonality: ${brief.brand_personality}\nSocial Proof: ${brief.social_proof}\nCredibility: ${brief.credibility_point}\nBest Concepts: ${brief.best_concepts || 'Not specified'}\nCompliance: ${brief.compliance || 'None'}\nDo NOT Say: ${brief.do_not_say || 'None'}\nScripts Ordered: ${brief.num_scripts}\nConcepts to Present: ${numConcepts}\n\n== RESEARCH REPORT ==\n${researchOutput}\n\n== AVAILABLE REFERENCE VIDEOS & AD LIBRARY LINKS ==\nThese are REAL, verified reference videos and ad library links from the research phase.\n${refVideoList || 'No reference videos available.'}\n\n== YOUR TASK ==\nDevelop ${numConcepts} UNIQUE creative concepts.\n\nCRITICAL RULES:\n1. Output ONLY valid JSON with a \"concepts\" array.\n2. For reference_video_url, you MUST use a URL from the AVAILABLE REFERENCE VIDEOS list above. Do NOT make up or hallucinate URLs. Each concept should use the reference video that best matches its creative direction.\n3. If there are fewer reference videos than concepts, you may reuse URLs, but try to spread them across different concepts.\n\nJSON format:\n\\`\\`\\`json\n{\n  \"concepts\": [\n    {\n      \"concept_name\": \"The Skeptic Convert\",\n      \"reference_video_url\": \"exact URL from reference list above\",\n      \"reference_platform\": \"TikTok\",\n      \"framework\": \"PAS\",\n      \"hook_type\": \"controversy\",\n      \"hook_text\": \"Stop buying vitamin C serums. Here's why.\",\n      \"format\": \"Talking Head\",\n      \"funnel_stage\": \"TOF\",\n      \"virality_score\": 8,\n      \"concept_pitch\": \"One-line pitch for the client\",\n      \"emotional_journey\": \"frustration > curiosity > relief > desire\",\n      \"target_objection\": \"They all oxidize and turn orange\",\n      \"platform\": \"TikTok\",\n      \"ab_test_pair\": \"Name of paired concept or null\"\n    }\n  ]\n}\n\\`\\`\\`\n\nFor EACH concept provide ALL fields listed above.\n\nDIVERSITY RULES:\n- Each concept MUST use a DIFFERENT framework + hook type combination\n- At least 4 different UGC video formats\n- Mix funnel stages: at least 2 TOF, 1-2 MOF, 1-2 BOF\n- Mix platforms\n- At least one concept under 20 seconds\n- Include at least 1 A/B test pair\n\nOutput ONLY valid JSON.`;\n\n// Add regeneration context if in regeneration mode\nlet finalPrompt = prompt;\nif (isRegeneration && excludeNames.length > 0) {\n  finalPrompt += `\\n\\n== REGENERATION MODE ==\\nPreviously approved concepts (DO NOT duplicate these themes):\\n${excludeNames.map((n, i) => (i+1) + '. ' + n).join('\\n')}\\n\\nPM feedback on rejected concepts: \"${rejectionNotes}\"\\n\\nGenerate ${numConcepts} NEW concepts that address this feedback.\\nEnsure they are thematically different from the approved ones above.`;\n}\n\nreturn [{ json: { prompt: finalPrompt, brief, project_id } }];"
-      },
-      "id": "eb3fbfbd-1c8d-4ed8-8a5f-7ee069e6fae2",
-      "name": "Build Strategy Prompt",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        9184,
-        96
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "// ============================================================\n// Parse Strategy Agent output into concept records for Airtable\n// Handles: code fences, thinking tags, truncated JSON\n// Full select field normalization\n// ============================================================\n\nconst rawOutput = $input.first().json.output || $input.first().json.text || JSON.stringify($input.first().json);\nconst project_id = $('Build Strategy Prompt').first().json.project_id;\nconst brief = $('Build Strategy Prompt').first().json.brief;\n\n// Strip Gemini artifacts\nlet cleanOutput = rawOutput\n  .replace(/<thinking>[\\s\\S]*?<\\/thinking>/gi, '')\n  .replace(/```json\\s*/gi, '')\n  .replace(/```\\s*/g, '')\n  .trim();\n\nlet concepts = [];\n\n// Method 1: Direct parse\ntry {\n  const parsed = JSON.parse(cleanOutput);\n  concepts = parsed.concepts || [parsed];\n} catch(e1) {\n  // Method 2: Find concepts block\n  const match = cleanOutput.match(/\\{\\s*\"concepts\"\\s*:\\s*\\[[\\s\\S]*\\]\\s*\\}/);\n  if (match) {\n    try {\n      concepts = JSON.parse(match[0]).concepts || [];\n    } catch(e2) { /* fall through */ }\n  }\n  \n  // Method 3: Repair truncated JSON — extract individual complete objects\n  if (concepts.length === 0) {\n    const arrStart = cleanOutput.indexOf('\"concepts\"');\n    if (arrStart > -1) {\n      const bracketStart = cleanOutput.indexOf('[', arrStart);\n      if (bracketStart > -1) {\n        let fragment = cleanOutput.substring(bracketStart);\n        let depth = 0;\n        let objStart = -1;\n        for (let i = 0; i < fragment.length; i++) {\n          const ch = fragment[i];\n          if (ch === '[' && depth === 0) { depth = 1; continue; }\n          if (depth < 1) continue;\n          if (ch === '{') { if (depth === 1) objStart = i; depth++; }\n          else if (ch === '}') {\n            depth--;\n            if (depth === 1 && objStart >= 0) {\n              try { concepts.push(JSON.parse(fragment.substring(objStart, i + 1))); } catch(e) {}\n              objStart = -1;\n            }\n          }\n        }\n      }\n    }\n  }\n}\n\n// Fallback\nif (concepts.length === 0) {\n  concepts = [{\n    concept_name: 'Concept from Strategy', framework: 'PAS',\n    hook_type: 'Curiosity Gap', hook_text: 'Strategy output could not be parsed.',\n    format: 'Talking Head', funnel_stage: 'TOF', virality_score: 5,\n    concept_pitch: 'Strategy output could not be parsed into structured concepts.',\n    emotional_journey: 'N/A', target_objection: 'N/A',\n    platform: 'TikTok', ab_test_pair: null, reference_video_url: '', reference_platform: 'TikTok'\n  }];\n}\n\n// ---- Normalization helpers ----\nconst hookTypeMap = { 'controversy': 'Controversy', 'controversial': 'Controversy', 'pov': 'POV', 'calling-out': 'Calling-Out', 'calling out': 'Calling-Out', 'callout': 'Calling-Out', 'negative': 'Negative', 'authority': 'Authority', 'expert': 'Authority', 'social-proof': 'Social Proof', 'social proof': 'Social Proof', 'curiosity-gap': 'Curiosity Gap', 'curiosity gap': 'Curiosity Gap', 'curiosity': 'Curiosity Gap', 'story': 'Story', 'storytelling': 'Story', 'narrative': 'Story', 'fear/urgency': 'Fear/Urgency', 'fear-urgency': 'Fear/Urgency', 'fear': 'Fear/Urgency', 'urgency': 'Fear/Urgency', 'fomo': 'Fear/Urgency', 'hot-take': 'Hot Take', 'hot take': 'Hot Take', 'whisper': 'Whisper/ASMR', 'whisper/asmr': 'Whisper/ASMR', 'asmr': 'Whisper/ASMR', 'text-first': 'Text-First', 'text first': 'Text-First', 'text': 'Text-First' };\n\n// Format: extract keyword from description, map to valid Airtable select\nfunction normalizeFormat(raw) {\n  if (!raw) return 'Talking Head';\n  const s = raw.toLowerCase().trim();\n  // Direct matches first\n  const directMap = {\n    'talking head': 'Talking Head', 'grwm': 'GRWM', 'before-after': 'Before-After',\n    'before/after': 'Before-After', 'unboxing': 'Unboxing', 'pov': 'POV',\n    'storytime': 'Storytime', 'routine': 'Routine', 'transformation': 'Transformation',\n    'comparison': 'Comparison', 'green screen': 'Green Screen',\n    'testimonial ad': 'Testimonial Ad', 'product demo': 'Product Demo',\n    'stitch/duet': 'Stitch/Duet'\n  };\n  if (directMap[s]) return directMap[s];\n  // Keyword extraction for long descriptions\n  if (s.includes('comparison') || s.includes('side-by-side') || s.includes('vs.') || s.includes('versus')) return 'Comparison';\n  if (s.includes('before') && s.includes('after')) return 'Before-After';\n  if (s.includes('pov') || s.includes('point of view')) return 'POV';\n  if (s.includes('demo') || s.includes('demonstration') || s.includes('tutorial') || s.includes('how-to') || s.includes('how to')) return 'Product Demo';\n  if (s.includes('unbox')) return 'Unboxing';\n  if (s.includes('story') || s.includes('micro-story') || s.includes('narrative')) return 'Storytime';\n  if (s.includes('testimonial') || s.includes('review')) return 'Testimonial Ad';\n  if (s.includes('transform') || s.includes('challenge')) return 'Transformation';\n  if (s.includes('talking head') || s.includes('reaction')) return 'Talking Head';\n  if (s.includes('routine') || s.includes('grwm') || s.includes('get ready')) return 'GRWM';\n  if (s.includes('green screen')) return 'Green Screen';\n  return 'Product Demo';\n}\n\n// Platform: pick first valid platform from comma-separated list\nfunction normalizePlatform(raw) {\n  if (!raw) return 'TikTok';\n  const platformMap = {\n    'tiktok': 'TikTok', 'instagram reels': 'Instagram Reels', 'instagram': 'Instagram Reels',\n    'facebook': 'Facebook', 'youtube shorts': 'YouTube Shorts', 'youtube': 'YouTube Shorts',\n    'multi-platform': 'Multi-platform'\n  };\n  // If it's a simple value, direct map\n  const simple = raw.toLowerCase().trim();\n  if (platformMap[simple]) return platformMap[simple];\n  // If comma-separated, pick the first valid one\n  const parts = raw.split(',').map(p => p.trim().toLowerCase());\n  for (const p of parts) {\n    if (platformMap[p]) return platformMap[p];\n  }\n  return 'TikTok';\n}\n\nconst norm = (val, map) => {\n  if (!val) return null;\n  const key = val.toLowerCase().trim();\n  if (map[key]) return map[key];\n  // Keyword fallback: check if any map key is contained in the value\n  for (const [k, v] of Object.entries(map)) {\n    if (key.includes(k) || k.includes(key)) return v;\n  }\n  return val;\n};\n\nconst conceptRecords = concepts.map(c => ({\n  project_id: [project_id],\n  concept_name: c.concept_name || 'Unnamed Concept',\n  reference_video_url: c.reference_video_url || '',\n  reference_platform: c.reference_platform || 'TikTok',\n  framework: (c.framework || 'PAS').toUpperCase() === c.framework ? c.framework : (c.framework || 'PAS'),\n  hook_type: norm(c.hook_type || 'Curiosity Gap', hookTypeMap),\n  hook_text: c.hook_text || '',\n  format: normalizeFormat(c.format),\n  funnel_stage: (c.funnel_stage || 'TOF').toUpperCase(),\n  virality_score: parseInt(c.virality_score) || 5,\n  concept_pitch: c.concept_pitch || '',\n  emotional_journey: c.emotional_journey || '',\n  target_objection: c.target_objection || '',\n  platform: normalizePlatform(c.platform),\n  ab_test_pair: c.ab_test_pair || '',\n  pm_status: 'Pending',\n  client_status: 'Pending',\n  overall_status: 'PM Review'\n}));\n\nreturn [{ json: { project_id, brief, concept_records: conceptRecords, concept_count: conceptRecords.length, strategy_output: rawOutput } }];"
+        "jsCode": "// ============================================================\n// Parse Strategy Agent output into concept records for Airtable\n// Handles: code fences, thinking tags, truncated JSON\n// Full select field normalization\n// ============================================================\n\nconst rawOutput = $input.first().json.output || $input.first().json.text || JSON.stringify($input.first().json);\nconst project_id = $('Build Multi-Strategy Prompt').first().json.project_id;\nconst brief = $('Build Multi-Strategy Prompt').first().json.brief;\n\n// Strip Gemini artifacts\nlet cleanOutput = rawOutput\n  .replace(/<thinking>[\\s\\S]*?<\\/thinking>/gi, '')\n  .replace(/```json\\s*/gi, '')\n  .replace(/```\\s*/g, '')\n  .trim();\n\nlet concepts = [];\n\n// Method 1: Direct parse\ntry {\n  const parsed = JSON.parse(cleanOutput);\n  concepts = parsed.concepts || [parsed];\n} catch(e1) {\n  // Method 2: Find concepts block\n  const match = cleanOutput.match(/\\{\\s*\"concepts\"\\s*:\\s*\\[[\\s\\S]*\\]\\s*\\}/);\n  if (match) {\n    try {\n      concepts = JSON.parse(match[0]).concepts || [];\n    } catch(e2) { /* fall through */ }\n  }\n  \n  // Method 3: Repair truncated JSON — extract individual complete objects\n  if (concepts.length === 0) {\n    const arrStart = cleanOutput.indexOf('\"concepts\"');\n    if (arrStart > -1) {\n      const bracketStart = cleanOutput.indexOf('[', arrStart);\n      if (bracketStart > -1) {\n        let fragment = cleanOutput.substring(bracketStart);\n        let depth = 0;\n        let objStart = -1;\n        for (let i = 0; i < fragment.length; i++) {\n          const ch = fragment[i];\n          if (ch === '[' && depth === 0) { depth = 1; continue; }\n          if (depth < 1) continue;\n          if (ch === '{') { if (depth === 1) objStart = i; depth++; }\n          else if (ch === '}') {\n            depth--;\n            if (depth === 1 && objStart >= 0) {\n              try { concepts.push(JSON.parse(fragment.substring(objStart, i + 1))); } catch(e) {}\n              objStart = -1;\n            }\n          }\n        }\n      }\n    }\n  }\n}\n\n// Fallback\nif (concepts.length === 0) {\n  concepts = [{\n    concept_name: 'Concept from Strategy', framework: 'PAS',\n    hook_type: 'Curiosity Gap', hook_text: 'Strategy output could not be parsed.',\n    format: 'Talking Head', funnel_stage: 'TOF', virality_score: 5,\n    concept_pitch: 'Strategy output could not be parsed into structured concepts.',\n    emotional_journey: 'N/A', target_objection: 'N/A',\n    platform: 'TikTok', ab_test_pair: null, reference_video_url: '', reference_platform: 'TikTok'\n  }];\n}\n\n// ---- Normalization helpers ----\nconst hookTypeMap = { 'controversy': 'Controversy', 'controversial': 'Controversy', 'pov': 'POV', 'calling-out': 'Calling-Out', 'calling out': 'Calling-Out', 'callout': 'Calling-Out', 'negative': 'Negative', 'authority': 'Authority', 'expert': 'Authority', 'social-proof': 'Social Proof', 'social proof': 'Social Proof', 'curiosity-gap': 'Curiosity Gap', 'curiosity gap': 'Curiosity Gap', 'curiosity': 'Curiosity Gap', 'story': 'Story', 'storytelling': 'Story', 'narrative': 'Story', 'fear/urgency': 'Fear/Urgency', 'fear-urgency': 'Fear/Urgency', 'fear': 'Fear/Urgency', 'urgency': 'Fear/Urgency', 'fomo': 'Fear/Urgency', 'hot-take': 'Hot Take', 'hot take': 'Hot Take', 'whisper': 'Whisper/ASMR', 'whisper/asmr': 'Whisper/ASMR', 'asmr': 'Whisper/ASMR', 'text-first': 'Text-First', 'text first': 'Text-First', 'text': 'Text-First' };\n\n// Format: extract keyword from description, map to valid Airtable select\nfunction normalizeFormat(raw) {\n  if (!raw) return 'Talking Head';\n  const s = raw.toLowerCase().trim();\n  // Direct matches first\n  const directMap = {\n    'talking head': 'Talking Head', 'grwm': 'GRWM', 'before-after': 'Before-After',\n    'before/after': 'Before-After', 'unboxing': 'Unboxing', 'pov': 'POV',\n    'storytime': 'Storytime', 'routine': 'Routine', 'transformation': 'Transformation',\n    'comparison': 'Comparison', 'green screen': 'Green Screen',\n    'testimonial ad': 'Testimonial Ad', 'product demo': 'Product Demo',\n    'stitch/duet': 'Stitch/Duet'\n  };\n  if (directMap[s]) return directMap[s];\n  // Keyword extraction for long descriptions\n  if (s.includes('comparison') || s.includes('side-by-side') || s.includes('vs.') || s.includes('versus')) return 'Comparison';\n  if (s.includes('before') && s.includes('after')) return 'Before-After';\n  if (s.includes('pov') || s.includes('point of view')) return 'POV';\n  if (s.includes('demo') || s.includes('demonstration') || s.includes('tutorial') || s.includes('how-to') || s.includes('how to')) return 'Product Demo';\n  if (s.includes('unbox')) return 'Unboxing';\n  if (s.includes('story') || s.includes('micro-story') || s.includes('narrative')) return 'Storytime';\n  if (s.includes('testimonial') || s.includes('review')) return 'Testimonial Ad';\n  if (s.includes('transform') || s.includes('challenge')) return 'Transformation';\n  if (s.includes('talking head') || s.includes('reaction')) return 'Talking Head';\n  if (s.includes('routine') || s.includes('grwm') || s.includes('get ready')) return 'GRWM';\n  if (s.includes('green screen')) return 'Green Screen';\n  return 'Product Demo';\n}\n\n// Platform: pick first valid platform from comma-separated list\nfunction normalizePlatform(raw) {\n  if (!raw) return 'TikTok';\n  const platformMap = {\n    'tiktok': 'TikTok', 'instagram reels': 'Instagram Reels', 'instagram': 'Instagram Reels',\n    'facebook': 'Facebook', 'youtube shorts': 'YouTube Shorts', 'youtube': 'YouTube Shorts',\n    'multi-platform': 'Multi-platform'\n  };\n  // If it's a simple value, direct map\n  const simple = raw.toLowerCase().trim();\n  if (platformMap[simple]) return platformMap[simple];\n  // If comma-separated, pick the first valid one\n  const parts = raw.split(',').map(p => p.trim().toLowerCase());\n  for (const p of parts) {\n    if (platformMap[p]) return platformMap[p];\n  }\n  return 'TikTok';\n}\n\nconst norm = (val, map) => {\n  if (!val) return null;\n  const key = val.toLowerCase().trim();\n  if (map[key]) return map[key];\n  // Keyword fallback: check if any map key is contained in the value\n  for (const [k, v] of Object.entries(map)) {\n    if (key.includes(k) || k.includes(key)) return v;\n  }\n  return val;\n};\n\nconst conceptRecords = concepts.map(c => ({\n  project_id: [project_id],\n  concept_name: c.concept_name || 'Unnamed Concept',\n  reference_video_url: c.reference_video_url || '',\n  reference_platform: c.reference_platform || 'TikTok',\n  framework: (c.framework || 'PAS').toUpperCase() === c.framework ? c.framework : (c.framework || 'PAS'),\n  hook_type: norm(c.hook_type || 'Curiosity Gap', hookTypeMap),\n  hook_text: c.hook_text || '',\n  format: normalizeFormat(c.format),\n  funnel_stage: (c.funnel_stage || 'TOF').toUpperCase(),\n  virality_score: parseInt(c.virality_score) || 5,\n  concept_pitch: c.concept_pitch || '',\n  emotional_journey: c.emotional_journey || '',\n  target_objection: c.target_objection || '',\n  platform: normalizePlatform(c.platform),\n  ab_test_pair: c.ab_test_pair || '',\n  pm_status: 'Pending',\n  client_status: 'Pending',\n  overall_status: 'PM Review'\n}));\n\nreturn [{ json: { project_id, brief, concept_records: conceptRecords, concept_count: conceptRecords.length, strategy_output: rawOutput } }];"
       },
       "id": "02a7cc9a-e817-414a-ac94-fc10288f68db",
       "name": "Parse Concepts Output",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        9760,
+        11424,
         96
       ]
     },
@@ -300,7 +281,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        9984,
+        11648,
         96
       ]
     },
@@ -320,7 +301,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        10208,
+        11872,
         96
       ],
       "credentials": {
@@ -347,7 +328,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        10432,
+        12096,
         96
       ],
       "credentials": {
@@ -366,7 +347,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        10656,
+        12320,
         96
       ]
     },
@@ -375,7 +356,7 @@
         "select": "channel",
         "channelId": {
           "__rl": true,
-          "value": "C0AFBQ5UF0E",
+          "value": "C0AGF6SJNMD",
           "mode": "id"
         },
         "text": "={{ $json.slack_text }}",
@@ -386,7 +367,7 @@
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.2,
       "position": [
-        10880,
+        12544,
         96
       ],
       "webhookId": "c6e79774-7b07-42c1-9345-bb7800c0bbfd",
@@ -409,7 +390,7 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        11104,
+        12768,
         96
       ]
     },
@@ -472,60 +453,6 @@
       ]
     },
     {
-      "parameters": {
-        "jsCode": "// Build Gemini API request for Strategy Agent\nconst prompt = $json.prompt;\n\nconst systemMessage = \"You are a UGC Creative Director who has driven 8-figure ad spend. You don't guess \\u2014 you choose frameworks strategically based on the brand, audience, and funnel position.\\n\\nYOUR CORE PRINCIPLE: CONCEPT OVERDELIVERY\\nWhen a client orders N scripts, you ALWAYS present 1.5x concepts. Each concept must be inspired by a REAL reference from the research.\\n\\nVIRALITY SCORING MATRIX:\\n- Hook Strength (0-3): 0=generic, 1=decent, 2=strong pattern interrupt, 3=impossible to scroll past\\n- Format Trend (0-3): 0=outdated, 1=standard, 2=trending, 3=peaking now\\n- Audience Match (0-2): 0=wrong audience, 1=broad match, 2=bullseye\\n- Uniqueness (0-2): 0=everyone runs this, 1=with a twist, 2=white space\\nTotal = /10.\\n\\nFRAMEWORKS: PAS, AIDA, BAB, FAB, PASTOR, 4Ps, Star-Story-Solution, Feel-Felt-Found, SLAP, Curiosity Gap, Contrast Frame, Micro-Story.\\n\\nHOOK TYPES: controversy, POV, calling-out, negative, authority, social-proof, curiosity-gap, story, fear/urgency, hot-take, whisper, text-first.\\n\\nREFERENCE VIDEO RULE: For each concept's reference_video_url, you MUST use an exact URL from the AVAILABLE REFERENCE VIDEOS list in the prompt. NEVER invent or hallucinate URLs. Pick the reference video whose format, hook style, or theme best matches your concept's creative direction.\\n\\nCRITICAL: Output ONLY valid JSON with a \\\"concepts\\\" array. Each concept must have ALL required fields: concept_name, reference_video_url, reference_platform, framework, hook_type, hook_text, format, funnel_stage, virality_score, concept_pitch, emotional_journey, target_objection, platform, ab_test_pair.\\n\\nSort by virality_score (highest first).\";\n\nconst requestBody = {\n  systemInstruction: {\n    parts: [{ text: systemMessage }]\n  },\n  contents: [{\n    role: \"user\",\n    parts: [{ text: prompt }]\n  }],\n  generationConfig: {\n    temperature: 0.85,\n    maxOutputTokens: 32768\n  }\n};\n\nreturn [{ json: { requestBody, prompt, brief: $json.brief, project_id: $json.project_id } }];"
-      },
-      "id": "w1-build-strategy-req",
-      "name": "Build Strategy Request",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        9208,
-        96
-      ]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "googlePalmApi",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($json.requestBody) }}",
-        "options": {
-          "timeout": 120000
-        }
-      },
-      "id": "w1-gemini-strategy",
-      "name": "Gemini Strategy API",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        9408,
-        96
-      ],
-      "credentials": {
-        "googlePalmApi": {
-          "id": "rIL63TG4xfMQL8uJ",
-          "name": "Cosmisk AI"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "jsCode": "// Extract Gemini Strategy output\nconst response = $json;\nlet output = '';\ntry {\n  output = response.candidates[0].content.parts[0].text;\n} catch(e) {\n  output = JSON.stringify(response);\n}\n\n// Pass through context\nconst prev = $('Build Strategy Request').first().json;\nreturn [{ json: { output, text: output, brief: prev.brief, project_id: prev.project_id } }];"
-      },
-      "id": "w1-extract-strategy",
-      "name": "Extract Strategy Output",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        9608,
-        96
-      ]
-    },
-    {
       "id": "279703e0-exec-all-searches-node",
       "name": "Execute All Searches",
       "type": "n8n-nodes-base.code",
@@ -545,12 +472,12 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        7952,
+        7960,
         96
       ],
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "const { allResults, brief, project_id } = $input.first().json;\n\nconst systemMessage = `You are a senior performance marketing research analyst at a UGC agency. You analyze real search data and extract structured intelligence for creative teams. You have been given actual search results from Google, YouTube, and Google Videos searches. Your job is to analyze these results and produce structured output.`;\n\nconst prompt = `RESEARCH ANALYSIS for ${brief.brand_name} — ${brief.product_feature}\n\n== SEARCH RESULTS DATA ==\n${JSON.stringify(allResults, null, 2)}\n\n== CLIENT BRIEF ==\nBrand: ${brief.brand_name}\nProduct: ${brief.product_feature}\nDifferentiator: ${brief.differentiator}\nSelling Proposition: ${brief.selling_proposition}\nWebsite: ${brief.website_url}\nCompetitors: ${brief.competitors}\nTarget User: ${brief.target_user}\nBiggest Problem: ${brief.biggest_problem}\nMain Hesitation: ${brief.main_hesitation}\nTransformation: ${brief.transformation}\nBrand Personality: ${brief.brand_personality}\nCredibility: ${brief.credibility_point}\nSocial Proof: ${brief.social_proof}\n\n== YOUR TASK ==\nAnalyze the search results above and produce:\n\n1. VOC QUOTES: Extract real customer language from reviews, Reddit discussions, and comments found in the search results. If results contain review snippets or user comments, quote them directly. Also generate realistic VOC quotes based on the pain points, objections, and desires evident from the data.\n\n2. INSIGHTS: Analyze competitor ads, market trends, and audience psychology from the data.\n\n3. REFERENCE VIDEOS: From the YouTube, video, and Meta Ad Library search results, identify the best UGC-style reference videos. Use the ACTUAL URLs from the search results — do NOT make up URLs. Categorize each video by platform, type, format, and extract the hook/concept.\n\n4. META AD LIBRARY: If meta_ad_library data is present in the search results, treat those entries as high-priority reference videos with platform Facebook and type Paid Ad. These are real ads currently running on Meta platforms. Use their ad_snapshot_url as the reference URL. Also note ad_library_links for competitor Ad Library search pages.\n\n== REQUIRED OUTPUT FORMAT ==\n\n=== VOC_QUOTES_START ===\nVOC|<category: Pain/Desire/Proof/Objection/Language>|<source: Amazon/Reddit/Forum/Google/YouTube/TikTok/Instagram>|<relevance: High/Medium/Low>|<the actual quote or realistic customer language>\n=== VOC_QUOTES_END ===\n\n=== INSIGHTS_START ===\nINSIGHT|<type: Competitor Intel/Market Trend/Audience Insight/Script Ammunition>|<source>|<category>|<relevance: High/Medium/Low>|<the insight>\n=== INSIGHTS_END ===\n\n=== REFERENCE_VIDEOS_START ===\nREF|<url from search results>|<platform: YouTube/TikTok/Instagram Reels/YouTube Shorts/Facebook>|<type: Organic Viral/Paid Ad/UGC Ad/Creator Content/Product Review>|<format: Talking Head/Before-After/Unboxing/POV/Product Demo/Review/Comparison/Tutorial>|<hook text>|<why it works>|<adaptation idea for ${brief.brand_name}>|<engagement info>\nIMPORTANT: Only use URLs that appear in the search results data above. Never invent URLs.\n=== REFERENCE_VIDEOS_END ===\n\nAfter the structured sections, include a narrative analysis covering: Brand Analysis, VOC Goldmine, Competitor Landscape, Audience Psychology, Script Ammunition, and Format Trend Map.`;\n\nconst requestBody = {\n  systemInstruction: { parts: [{ text: systemMessage }] },\n  contents: [{ role: \"user\", parts: [{ text: prompt }] }],\n  generationConfig: { temperature: 0.7, maxOutputTokens: 16384 }\n};\n\nreturn [{ json: { requestBody, project_id, brief } }];"
+        "jsCode": "// System learnings integration\nlet systemLearningsText = '';\ntry {\n  const learningRecords = $('Fetch System Learnings').first().json.records || [];\n  if (learningRecords.length > 0) {\n    systemLearningsText = '\\n== SYSTEM LEARNINGS (Cross-Agent Intelligence) ==\\n';\n    systemLearningsText += learningRecords.map((r, i) => {\n      const f = r.fields;\n      return `[${i+1}] (${f.category || 'general'}) ${f.learning || f.content || ''}`;\n    }).join('\\n');\n    systemLearningsText += '\\n';\n  }\n} catch (e) { systemLearningsText = ''; }\n\n// Brand voice + ad performance now come from upstream serial nodes\nconst brandVoiceDna = $('Fetch Brand Voice').first().json.records?.[0]?.fields?.brand_voice || '';\n\nlet ownAdPerformance = '';\ntry {\n  const adRecords = $('Fetch Own Ad Performance').first().json.records || [];\n  if (adRecords.length > 0) {\n    ownAdPerformance = adRecords.map((r, i) => {\n      const f = r.fields;\n      return `[${i+1}] ${f.ad_name || 'Unnamed'}\n  Performance: ${f.performance || 'Unknown'} | Format: ${f.format || 'N/A'} | Platform: ${f.platform || 'N/A'}\n  Metrics: ${f.metrics || 'N/A'}\n  Hook: \"${f.hook_text || 'N/A'}\"\n  Why it works: ${f.why_it_works || 'N/A'}\n  Key notes: ${(f.notes || '').substring(0, 300)}`;\n    }).join('\\n\\n');\n  }\n} catch (e) {\n  ownAdPerformance = '';\n}\n// allResults/brief/project_id come from Parse Meta Ads (not direct input, since Fetch nodes are now in between)\nconst { allResults, brief, project_id } = $('Parse Meta Ads').first().json;\n\nconst systemMessage = `You are a senior performance marketing research analyst at a UGC agency. You analyze real search data and extract structured intelligence for creative teams. You have been given actual search results from Google, YouTube, and Google Videos searches. Your job is to analyze these results and produce structured output.`;\n\nconst prompt = `RESEARCH ANALYSIS for ${brief.brand_name} — ${brief.product_feature}\n\n== SEARCH RESULTS DATA ==\n${JSON.stringify(allResults, null, 2)}\n\n== CLIENT BRIEF ==\nBrand: ${brief.brand_name}\nProduct: ${brief.product_feature}\nDifferentiator: ${brief.differentiator}\nSelling Proposition: ${brief.selling_proposition}\nWebsite: ${brief.website_url}\nCompetitors: ${brief.competitors}\nTarget User: ${brief.target_user}\nBiggest Problem: ${brief.biggest_problem}\nMain Hesitation: ${brief.main_hesitation}\nTransformation: ${brief.transformation}\nBrand Personality: ${brief.brand_personality}\nCredibility: ${brief.credibility_point}\nSocial Proof: ${brief.social_proof}\n\n\n== BRAND VOICE DNA ==\n\\${brandVoiceDna || 'No brand voice data available yet.'}\n\nUse this voice DNA to filter your research: prioritize VOC quotes that use language compatible with the brand voice, surface insights about the brand\\'s specific positioning, and note references that match the brand\\'s visual aesthetic and tone.\n\n== YOUR OWN AD PERFORMANCE DATA ==\n${ownAdPerformance || 'No previous ad performance data available for this brand. Skip this section.'}\n\n${ownAdPerformance ? `IMPORTANT: This is data from the client's OWN ad account — ads they are currently running or have run. Analyze what's working (Top Performers), what patterns emerge in their successful hooks and copy, and identify gaps or opportunities they're missing. This is MORE valuable than competitor data because it's proven to work for THIS specific brand and audience.` : ''}\n\n${systemLearningsText}\n\n== YOUR TASK ==\nAnalyze the search results above and produce:\n\n1. VOC QUOTES: Extract real customer language from reviews, Reddit discussions, and comments found in the search results. If results contain review snippets or user comments, quote them directly. Also generate realistic VOC quotes based on the pain points, objections, and desires evident from the data.\n\n2. INSIGHTS: Analyze competitor ads, market trends, and audience psychology from the data.\n\n3. REFERENCE VIDEOS: From the YouTube, video, and Meta Ad Library search results, identify the best UGC-style reference videos. Use the ACTUAL URLs from the search results — do NOT make up URLs. Categorize each video by platform, type, format, and extract the hook/concept.\n\n4. META AD LIBRARY: If meta_ad_library data is present in the search results, treat those entries as high-priority reference videos with platform Facebook and type Paid Ad. These are real ads currently running on Meta platforms. Use their ad_snapshot_url as the reference URL. Also note ad_library_links for competitor Ad Library search pages.\n\n== REQUIRED OUTPUT FORMAT ==\n\n=== VOC_QUOTES_START ===\nVOC|<category: Pain/Desire/Proof/Objection/Language>|<source: Amazon/Reddit/Forum/Google/YouTube/TikTok/Instagram>|<relevance: High/Medium/Low>|<the actual quote or realistic customer language>\n=== VOC_QUOTES_END ===\n\n=== INSIGHTS_START ===\nINSIGHT|<type: Competitor Intel/Market Trend/Audience Insight/Script Ammunition>|<source>|<category>|<relevance: High/Medium/Low>|<the insight>\n=== INSIGHTS_END ===\n\n=== REFERENCE_VIDEOS_START ===\nREF|<url from search results>|<platform: YouTube/TikTok/Instagram Reels/YouTube Shorts/Facebook>|<type: Organic Viral/Paid Ad/UGC Ad/Creator Content/Product Review>|<format: Talking Head/Before-After/Unboxing/POV/Product Demo/Review/Comparison/Tutorial>|<hook text>|<why it works>|<adaptation idea for ${brief.brand_name}>|<engagement info>\nIMPORTANT: Only use URLs that appear in the search results data above. Never invent URLs.\n=== REFERENCE_VIDEOS_END ===\n\nAfter the structured sections, include a narrative analysis covering: Brand Analysis, VOC Goldmine, Competitor Landscape, Audience Psychology, Script Ammunition, and Format Trend Map.`;\n\nconst requestBody = {\n  systemInstruction: { parts: [{ text: systemMessage }] },\n  contents: [{ role: \"user\", parts: [{ text: prompt }] }],\n  generationConfig: { temperature: 0.7, maxOutputTokens: 16384 }\n};\n\nreturn [{ json: { requestBody, project_id, brief } }];"
       }
     },
     {
@@ -635,7 +562,7 @@
       "credentials": {
         "airtableTokenApi": {
           "id": "WelvlJEjoHaI3l9G",
-          "name": "Airtable"
+          "name": "Airtable Personal Access Token account"
         }
       }
     },
@@ -736,7 +663,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        10856,
+        12520,
         -104
       ],
       "id": "4a7a01fb-c9dc-42de-a31d-f9f5ba4e36d8",
@@ -744,10 +671,327 @@
       "credentials": {
         "airtableTokenApi": {
           "id": "WelvlJEjoHaI3l9G",
-          "name": "Airtable account"
+          "name": "Airtable Personal Access Token account"
         }
       },
       "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblEkb2WGoh407zEn",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "filterByFormula",
+              "value": "={{ '{brand_name}=\\'' + $('Validate Brief').first().json.brief.brand_name + '\\'' }}"
+            },
+            {
+              "name": "fields[]",
+              "value": "brand_voice"
+            },
+            {
+              "name": "maxRecords",
+              "value": "1"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fetch-bv-p1",
+      "name": "Fetch Brand Voice",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        7616,
+        96
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tbl6ePpaHIQvCqy8K?filterByFormula=%7Bbrand_name%7D%3D'{{ $('Validate Brief').first().json.brief.brand_name }}'&sort%5B0%5D%5Bfield%5D=performance&maxRecords=10&fields%5B%5D=ad_name&fields%5B%5D=hook_text&fields%5B%5D=ad_copy&fields%5B%5D=why_it_works&fields%5B%5D=metrics&fields%5B%5D=notes&fields%5B%5D=performance&fields%5B%5D=format&fields%5B%5D=platform",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "options": {}
+      },
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "name": "Fetch Own Ad Performance",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        7784,
+        96
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblAfe1LYh8kHPVbP",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "filterByFormula",
+              "value": "AND({active}=TRUE(),OR({category}='script_quality',{category}='hook_patterns',{category}='audience_insight',{category}='ad_performance',{category}='brand_strategy'))"
+            },
+            {
+              "name": "sort[0][field]",
+              "value": "confidence"
+            },
+            {
+              "name": "sort[0][direction]",
+              "value": "desc"
+            },
+            {
+              "name": "maxRecords",
+              "value": "15"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "p1-fetch-system-learnings",
+      "name": "Fetch System Learnings",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        7616,
+        -96
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "a0TTu3NVsuJUEbct",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Build Multi-Strategy Prompt — asks Gemini for 3 distinct strategies\n// Each with full concept sets. Integrates brand voice, ad perf, learnings.\n// ============================================================\n\nconst brandVoiceDna = $('Fetch Brand Voice').first().json.records?.[0]?.fields?.brand_voice || '';\n\n// System learnings integration\nlet systemLearningsText = '';\ntry {\n  const learningRecords = $('Fetch System Learnings').first().json.records || [];\n  if (learningRecords.length > 0) {\n    systemLearningsText = '\\n== SYSTEM LEARNINGS (Cross-Agent Intelligence) ==\\nThese are proven insights from our agency\\'s performance data across all clients:\\n\\n';\n    systemLearningsText += learningRecords.map((r, i) => {\n      const f = r.fields;\n      return `[${i+1}] (${f.category || 'general'}, confidence: ${f.confidence || 'N/A'}) ${f.learning || f.content || ''}`;\n    }).join('\\n');\n    systemLearningsText += '\\n\\nUse these learnings to inform your strategy. Prioritize concepts that align with proven patterns.\\n';\n  }\n} catch (e) {\n  systemLearningsText = '';\n}\n\n// Own ad performance data\nlet ownAdInsights = '';\ntry {\n  const adRecords = $('Fetch Own Ad Performance').first().json.records || [];\n  const topPerformers = adRecords.filter(r => r.fields.performance === 'Top Performer' || r.fields.performance === 'Good');\n  if (topPerformers.length > 0) {\n    ownAdInsights = '\\n== CLIENT\\'S OWN TOP-PERFORMING ADS ==\\nThese are REAL ads from this client\\'s account that are PROVEN to work:\\n\\n';\n    ownAdInsights += topPerformers.map((r, i) => {\n      const f = r.fields;\n      return `[${i+1}] \"${f.hook_text || 'N/A'}\" (${f.performance})\\n  Format: ${f.format} | Metrics: ${f.metrics}\\n  Why it works: ${f.why_it_works}`;\n    }).join('\\n\\n');\n    ownAdInsights += '\\n\\nCRITICAL: At least 2 concepts per strategy MUST iterate on these proven performers.\\n';\n  }\n  const underperformers = adRecords.filter(r => r.fields.performance === 'Underperformer');\n  if (underperformers.length > 0) {\n    ownAdInsights += '\\n== WHAT\\'S NOT WORKING (AVOID) ==\\n';\n    ownAdInsights += underperformers.map(r => {\n      const f = r.fields;\n      return `- \"${f.hook_text || f.ad_name}\" (${f.metrics}) — ${f.why_it_works || 'No analysis'}`;\n    }).join('\\n');\n    ownAdInsights += '\\n';\n  }\n} catch (e) { ownAdInsights = ''; }\n\nconst data = $('Merge Store Results').first().json;\nconst brief = data.brief;\nconst researchOutput = data.research_output;\nconst project_id = data.project_id;\nconst refRecords = data.reference_records || [];\n\n// Regeneration mode\nconst regenData = $('Extract Client Code').first().json;\nconst isRegeneration = regenData.regenerate || false;\nconst numNeeded = regenData.num_needed || 0;\nconst excludeNames = regenData.exclude_concepts || [];\nconst rejectionNotes = regenData.rejection_notes || '';\n\nlet numConcepts = Math.ceil(brief.num_scripts * 1.5);\nif (isRegeneration && numNeeded > 0) {\n  numConcepts = Math.ceil(numNeeded * 1.5);\n}\n\n// Group references by platform\nconst validRefs = refRecords.filter(r => r.url && r.url.length > 10);\nconst grouped = {};\nfor (const r of validRefs) {\n  const plat = r.platform || 'Other';\n  if (!grouped[plat]) grouped[plat] = [];\n  grouped[plat].push(r);\n}\nlet refVideoList = '';\nlet idx = 1;\nconst platformOrder = ['YouTube Shorts', 'Facebook', 'TikTok', 'Instagram Reels', 'Multi-platform', 'Other'];\nfor (const plat of platformOrder) {\n  if (!grouped[plat] || grouped[plat].length === 0) continue;\n  const label = plat === 'Facebook' ? 'Meta Ad Library' : plat;\n  refVideoList += '\\n--- ' + label + ' ---\\n';\n  for (const r of grouped[plat]) {\n    const isBrowse = r.url.includes('ads/library') || r.url.includes('creativecenter') || r.url.includes('ads.tiktok.com');\n    const browseTag = isBrowse ? ' (Browse link)' : '';\n    refVideoList += '[' + idx + '] ' + r.url + ' | Platform: ' + r.platform + ' | Format: ' + (r.format || 'N/A') + ' | Hook: \"' + (r.hook || '').slice(0, 80) + '\"' + browseTag + '\\n';\n    idx++;\n  }\n}\n\nconst prompt = `You are generating 3 COMPLETELY DIFFERENT creative strategies for ${brief.brand_name}. Each strategy takes a fundamentally different philosophical approach to the same brief.\n\n== CLIENT BRIEF ==\nBrand: ${brief.brand_name}\nProduct: ${brief.product_feature}\nDifferentiator: ${brief.differentiator}\nTarget: ${brief.target_user}\nProblem: ${brief.biggest_problem}\nHesitation: ${brief.main_hesitation}\nTransformation: ${brief.transformation}\nPersonality: ${brief.brand_personality}\nSocial Proof: ${brief.social_proof}\nCredibility: ${brief.credibility_point}\nBest Concepts: ${brief.best_concepts || 'Not specified'}\nCompliance: ${brief.compliance || 'None'}\nDo NOT Say: ${brief.do_not_say || 'None'}\nScripts Ordered: ${brief.num_scripts}\nConcepts per strategy: ${numConcepts}\n\n== RESEARCH REPORT ==\n${researchOutput}\n\n== AVAILABLE REFERENCE VIDEOS & AD LIBRARY LINKS ==\n${refVideoList || 'No reference videos available.'}\n\n== BRAND VOICE DNA ==\n${brandVoiceDna || 'No brand voice data available yet.'}\n\nCRITICAL: All hook_text, concept_pitch, and emotional_journey MUST align with this brand's voice DNA.\n\n${ownAdInsights}\n\n${systemLearningsText}\n\n== ANTI-GENERIC CONCEPT RULES ==\nBANNED concept names (do NOT use anything like these):\n- \"The Transformation Story\", \"Before & After Journey\", \"Social Proof Showcase\"\n- \"The Problem-Solution\", \"Customer Testimonial\", \"Product Demo\"\n- \"The Unboxing Experience\", \"Day In My Life\", \"Get Ready With Me\"\n- Any name that could apply to ANY brand in ANY industry\n\nREQUIRED: Each concept name must be so specific it could ONLY work for ${brief.brand_name}.\nBAD: \"The Morning Routine\" | GOOD: \"The 6AM Glow-Up Protocol\" (for a skincare brand)\nBAD: \"Trust Builder\" | GOOD: \"My Mechanic Called BS Until He Saw This\" (for a car product)\nBAD: \"The Review Roundup\" | GOOD: \"I Tracked My Skin pH for 30 Days\" (for a skincare brand)\n\nHOOKS must be under 8 words. Examples:\nBAD (too long): \"I never thought I would find a product that actually works for my skin\"\nGOOD: \"My dermatologist banned this ingredient.\"\nGOOD: \"POV: your car wash takes 4 minutes.\"\n\nEach concept MUST reference a specific real trend, format, or cultural moment. Examples:\n- \"Inspired by the 'delusion is the solution' TikTok trend\"\n- \"Uses the viral 'whisper tutorial' format from Q1 2026\"\n- \"Builds on the growing 'science-tok' micro-community\"\n\n== YOUR TASK ==\nGenerate 3 DISTINCT strategies, each with ${numConcepts} concepts:\n\n**STRATEGY A: PERFORMANCE-FOCUSED**\nData-driven, conversion-optimized. Heavy on objection-handling, social proof, urgency. BOF-weighted.\nPrioritize frameworks: PAS, FAB, SLAP, Feel-Felt-Found.\n\n**STRATEGY B: TREND-FOCUSED**\nViral formats, cultural moments, platform-native trends. TOF-weighted.\nPrioritize frameworks: Curiosity Gap, Contrast Frame, Micro-Story, Star-Story-Solution.\n\n**STRATEGY C: INSIGHT-FOCUSED**\nDeep audience pain points, emotional triggers, contrarian takes. MOF-weighted.\nPrioritize frameworks: PASTOR, BAB, AIDA, 4Ps.\n\nOutput ONLY valid JSON:\n\\`\\`\\`json\n{\n  \"strategies\": [\n    {\n      \"strategy_name\": \"A\",\n      \"strategy_approach\": \"Performance-Focused\",\n      \"rationale\": \"One sentence on why this approach fits\",\n      \"concepts\": [\n        {\n          \"concept_name\": \"unique name specific to this brand\",\n          \"reference_video_url\": \"exact URL from reference list\",\n          \"reference_platform\": \"TikTok\",\n          \"framework\": \"PAS\",\n          \"hook_type\": \"controversy\",\n          \"hook_text\": \"Under 8 words hook\",\n          \"format\": \"Talking Head\",\n          \"funnel_stage\": \"TOF\",\n          \"virality_score\": 8,\n          \"concept_pitch\": \"One-line pitch\",\n          \"emotional_journey\": \"frustration > curiosity > relief > desire\",\n          \"target_objection\": \"Specific objection addressed\",\n          \"platform\": \"TikTok\",\n          \"ab_test_pair\": \"Name of paired concept or null\",\n          \"trend_reference\": \"Specific trend/format/cultural moment this references\"\n        }\n      ]\n    }\n  ]\n}\n\\`\\`\\`\n\nDIVERSITY per strategy:\n- Each concept MUST use a DIFFERENT framework + hook type combination\n- At least 3 different UGC video formats per strategy\n- Mix funnel stages within each strategy\n- At least 1 A/B test pair per strategy\n- reference_video_url MUST be from the AVAILABLE REFERENCE VIDEOS list\n\n${isRegeneration && excludeNames.length > 0 ? `\\n== REGENERATION MODE ==\\nPreviously approved (DO NOT duplicate):\\n${excludeNames.map((n, i) => (i+1) + '. ' + n).join('\\n')}\\n\\nPM feedback: \"${rejectionNotes}\"\\n\\nGenerate ${numConcepts} NEW concepts per strategy that address this feedback.` : ''}\n\nOutput ONLY valid JSON.`;\n\nreturn [{ json: { prompt, brief, project_id, numConcepts, refVideoList, brandVoiceDna, systemLearningsText } }];\n"
+      },
+      "id": "p1-build-multi-strategy",
+      "name": "Build Multi-Strategy Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        9184,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ systemInstruction: { parts: [{ text: \"You are a UGC Creative Director who has driven 8-figure ad spend. You generate 3 DISTINCT creative strategies per brief — each taking a fundamentally different philosophical approach. You never produce generic concept names. Every concept must be so specific it could only work for THIS brand.\\n\\nVIRALITY SCORING MATRIX:\\n- Hook Strength (0-3): 0=generic, 1=decent, 2=strong pattern interrupt, 3=impossible to scroll past\\n- Format Trend (0-3): 0=outdated, 1=standard, 2=trending, 3=peaking now\\n- Audience Match (0-2): 0=wrong audience, 1=broad match, 2=bullseye\\n- Uniqueness (0-2): 0=everyone runs this, 1=with a twist, 2=white space\\nTotal = /10.\\n\\nFRAMEWORKS: PAS, AIDA, BAB, FAB, PASTOR, 4Ps, Star-Story-Solution, Feel-Felt-Found, SLAP, Curiosity Gap, Contrast Frame, Micro-Story.\\n\\nHOOK TYPES: controversy, POV, calling-out, negative, authority, social-proof, curiosity-gap, story, fear/urgency, hot-take, whisper, text-first.\\n\\nREFERENCE VIDEO RULE: MUST use exact URLs from the provided list. NEVER invent URLs.\\n\\nOutput ONLY valid JSON. Sort concepts by virality_score (highest first) within each strategy.\" }] }, contents: [{ role: \"user\", parts: [{ text: $json.prompt }] }], generationConfig: { temperature: 0.8, maxOutputTokens: 16384 } }) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "p1-gemini-3strategies",
+      "name": "Gemini — Generate 3 Strategies",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        9408,
+        96
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "rIL63TG4xfMQL8uJ",
+          "name": "Cosmisk AI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Parse 3 Strategies from Gemini output\n// Handles: code fences, thinking tags, truncated JSON\n// ============================================================\n\nconst response = $input.first().json;\nlet rawText = '';\ntry {\n  rawText = response.candidates[0].content.parts[0].text;\n} catch(e) {\n  rawText = JSON.stringify(response);\n}\n\n// Strip Gemini artifacts\nlet clean = rawText\n  .replace(/<thinking>[\\s\\S]*?<\\/thinking>/gi, '')\n  .replace(/^```json\\s*/i, '')\n  .replace(/^```\\s*/m, '')\n  .replace(/\\s*```\\s*$/m, '')\n  .trim();\n\nlet strategies = [];\n\n// Method 1: Direct parse\ntry {\n  const parsed = JSON.parse(clean);\n  strategies = parsed.strategies || [parsed];\n} catch(e1) {\n  // Method 2: Find strategies block\n  const match = clean.match(/\\{\\s*\"strategies\"\\s*:\\s*\\[[\\s\\S]*\\]\\s*\\}/);\n  if (match) {\n    try {\n      strategies = JSON.parse(match[0]).strategies || [];\n    } catch(e2) { /* fall through */ }\n  }\n\n  // Method 3: Extract individual strategy objects\n  if (strategies.length === 0) {\n    const stratRegex = /\\{\\s*\"strategy_name\"\\s*:\\s*\"[^\"]+\"\\s*,[\\s\\S]*?\"concepts\"\\s*:\\s*\\[[\\s\\S]*?\\]\\s*\\}/g;\n    let m;\n    while ((m = stratRegex.exec(clean)) !== null) {\n      try { strategies.push(JSON.parse(m[0])); } catch(e) {}\n    }\n  }\n\n  // Method 4: Regex extraction of individual concept objects if all else fails\n  if (strategies.length === 0) {\n    const conceptRegex = /\\{[^{}]*\"concept_name\"\\s*:\\s*\"[^\"]+\"[^{}]*\\}/g;\n    const concepts = [];\n    let cm;\n    while ((cm = conceptRegex.exec(clean)) !== null) {\n      try { concepts.push(JSON.parse(cm[0])); } catch(e) {}\n    }\n    if (concepts.length > 0) {\n      // Split into 3 roughly equal groups\n      const third = Math.ceil(concepts.length / 3);\n      strategies = [\n        { strategy_name: 'A', strategy_approach: 'Performance-Focused', rationale: 'Recovered from parse', concepts: concepts.slice(0, third) },\n        { strategy_name: 'B', strategy_approach: 'Trend-Focused', rationale: 'Recovered from parse', concepts: concepts.slice(third, third*2) },\n        { strategy_name: 'C', strategy_approach: 'Insight-Focused', rationale: 'Recovered from parse', concepts: concepts.slice(third*2) }\n      ];\n    }\n  }\n}\n\n// Fallback: single strategy with minimal concept\nif (strategies.length === 0) {\n  strategies = [{\n    strategy_name: 'A', strategy_approach: 'Fallback', rationale: 'Parse failed',\n    concepts: [{\n      concept_name: 'Strategy Parse Failed', framework: 'PAS', hook_type: 'curiosity-gap',\n      hook_text: 'Gemini output could not be parsed.', format: 'Talking Head',\n      funnel_stage: 'TOF', virality_score: 1, concept_pitch: 'Parse error — retry needed.',\n      emotional_journey: 'N/A', target_objection: 'N/A', platform: 'TikTok',\n      ab_test_pair: null, reference_video_url: '', reference_platform: 'TikTok', trend_reference: 'N/A'\n    }]\n  }];\n}\n\nconst prev = $('Build Multi-Strategy Prompt').first().json;\n\nreturn [{ json: {\n  strategies,\n  strategy_count: strategies.length,\n  total_concepts: strategies.reduce((sum, s) => sum + (s.concepts || []).length, 0),\n  raw_output: rawText,\n  brief: prev.brief,\n  project_id: prev.project_id,\n  numConcepts: prev.numConcepts,\n  refVideoList: prev.refVideoList,\n  brandVoiceDna: prev.brandVoiceDna,\n  systemLearningsText: prev.systemLearningsText\n} }];\n"
+      },
+      "id": "p1-parse-3strategies",
+      "name": "Parse 3 Strategies",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        9632,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Build Evaluation Prompt — scores each strategy on 5 criteria (1-10)\n// ============================================================\n\nconst data = $input.first().json;\nconst strategies = data.strategies;\nconst brief = data.brief;\n\nconst strategySummaries = strategies.map((s, i) => {\n  const concepts = s.concepts || [];\n  return `=== STRATEGY ${s.strategy_name || String.fromCharCode(65+i)}: ${s.strategy_approach || 'Unknown'} ===\nRationale: ${s.rationale || 'N/A'}\nConcepts (${concepts.length}):\n${concepts.map((c, j) => `  ${j+1}. \"${c.concept_name}\" (${c.framework}/${c.hook_type}) — Hook: \"${c.hook_text}\" — Format: ${c.format} — Funnel: ${c.funnel_stage} — Virality: ${c.virality_score}/10 — Trend: ${c.trend_reference || 'N/A'}`).join('\\n')}`;\n}).join('\\n\\n');\n\nconst evalPrompt = `You are a senior Creative Director evaluating 3 strategy proposals for ${brief.brand_name}.\n\n== CLIENT CONTEXT ==\nBrand: ${brief.brand_name}\nProduct: ${brief.product_feature}\nTarget: ${brief.target_user}\nProblem: ${brief.biggest_problem}\nDifferentiator: ${brief.differentiator}\nBrand Personality: ${brief.brand_personality}\nCompliance: ${brief.compliance || 'None'}\nDo NOT Say: ${brief.do_not_say || 'None'}\n\n== STRATEGIES TO EVALUATE ==\n${strategySummaries}\n\n== EVALUATION CRITERIA (score each 1-10) ==\n1. concept_uniqueness — How different are these from typical generic UGC concepts? Are the names brand-specific? Could these names ONLY work for ${brief.brand_name}?\n2. brief_alignment — How well do concepts match the client brief, brand voice, compliance rules, and \"do not say\" list?\n3. audience_resonance — Will the target audience (${brief.target_user}) actually care? Are the pain points and hooks relevant to THEM?\n4. production_feasibility — Can a single UGC creator film all these concepts with minimal props/setup? Are the formats realistic?\n5. hook_potential — Do the hooks grab attention in under 2 seconds? Are they under 8 words? Do they create an irresistible curiosity gap?\n\nFor each criterion, also note specific weaknesses found (to guide a potential retry).\n\nOutput ONLY valid JSON:\n\\`\\`\\`json\n{\n  \"evaluations\": [\n    {\n      \"strategy_name\": \"A\",\n      \"scores\": {\n        \"concept_uniqueness\": 7,\n        \"brief_alignment\": 8,\n        \"audience_resonance\": 6,\n        \"production_feasibility\": 9,\n        \"hook_potential\": 7\n      },\n      \"total\": 37,\n      \"strengths\": \"What's great about this strategy\",\n      \"weaknesses\": \"Specific issues to fix\",\n      \"best_concepts\": [\"name1\", \"name2\"]\n    }\n  ],\n  \"winner\": \"A\",\n  \"overall_feedback\": \"Summary of what the winning strategy does well and what could still improve\"\n}\n\\`\\`\\`\n\nBe HARSH on generic concept names. If a concept name could apply to any brand, score concept_uniqueness below 5.\nBe STRICT on hooks over 8 words — score hook_potential below 4 for strategies with multiple long hooks.\n\nOutput ONLY valid JSON.`;\n\nconst requestBody = {\n  systemInstruction: { parts: [{ text: \"You are a brutally honest Creative Director who evaluates UGC strategy proposals. You score harshly but fairly. Generic concept names get destroyed. Long hooks get penalized. You care about what ACTUALLY converts, not what sounds clever in a deck.\" }] },\n  contents: [{ role: \"user\", parts: [{ text: evalPrompt }] }],\n  generationConfig: { temperature: 0.2, maxOutputTokens: 4096 }\n};\n\nreturn [{ json: { requestBody, strategies, brief: data.brief, project_id: data.project_id, numConcepts: data.numConcepts, refVideoList: data.refVideoList, brandVoiceDna: data.brandVoiceDna, systemLearningsText: data.systemLearningsText, raw_output: data.raw_output } }];\n"
+      },
+      "id": "p1-build-eval-prompt",
+      "name": "Build Evaluation Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        9856,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.requestBody) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "p1-gemini-evaluate",
+      "name": "Gemini — Evaluate Strategies",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        10080,
+        96
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "rIL63TG4xfMQL8uJ",
+          "name": "Cosmisk AI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Select Best Strategy — pick highest score, apply quality gate\n// Threshold: 35/50 (70%). If below, set needs_retry = true\n// ============================================================\n\nconst response = $input.first().json;\nlet evalText = '';\ntry {\n  evalText = response.candidates[0].content.parts[0].text;\n} catch(e) {\n  evalText = JSON.stringify(response);\n}\n\n// Strip code fences\nevalText = evalText\n  .replace(/<thinking>[\\s\\S]*?<\\/thinking>/gi, '')\n  .replace(/^```json\\s*/i, '')\n  .replace(/^```\\s*/m, '')\n  .replace(/\\s*```\\s*$/m, '')\n  .trim();\n\nlet evalResult = {};\ntry {\n  evalResult = JSON.parse(evalText);\n} catch(e) {\n  const match = evalText.match(/\\{[\\s\\S]*\"evaluations\"[\\s\\S]*\\}/);\n  if (match) {\n    try { evalResult = JSON.parse(match[0]); } catch(e2) {}\n  }\n}\n\nconst evaluations = evalResult.evaluations || [];\nconst prev = $('Build Evaluation Prompt').first().json;\nconst strategies = prev.strategies;\n\n// Find winner\nlet bestIdx = 0;\nlet bestScore = 0;\nfor (let i = 0; i < evaluations.length; i++) {\n  const total = evaluations[i].total || Object.values(evaluations[i].scores || {}).reduce((a,b) => a+b, 0);\n  evaluations[i].total = total;\n  if (total > bestScore) {\n    bestScore = total;\n    bestIdx = i;\n  }\n}\n\nconst winnerName = evaluations[bestIdx]?.strategy_name || evalResult.winner || 'A';\nconst winnerStrat = strategies.find(s => s.strategy_name === winnerName) || strategies[0];\nconst winnerEval = evaluations[bestIdx] || {};\n\nconst THRESHOLD = 35;\nconst needs_retry = bestScore < THRESHOLD;\n\n// Build the concepts output (winning strategy's concepts)\nconst concepts = winnerStrat.concepts || [];\n\nreturn [{ json: {\n  winner_name: winnerName,\n  winner_score: bestScore,\n  winner_approach: winnerStrat.strategy_approach || 'Unknown',\n  needs_retry: needs_retry,\n  weaknesses: winnerEval.weaknesses || '',\n  overall_feedback: evalResult.overall_feedback || '',\n  evaluation_raw: evalText,\n  concepts,\n  brief: prev.brief,\n  project_id: prev.project_id,\n  numConcepts: prev.numConcepts,\n  refVideoList: prev.refVideoList,\n  brandVoiceDna: prev.brandVoiceDna,\n  systemLearningsText: prev.systemLearningsText,\n  strategies_raw: prev.raw_output\n} }];\n"
+      },
+      "id": "p1-select-best-strategy",
+      "name": "Select Best Strategy",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        10304,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "needs-retry-condition",
+              "leftValue": "={{ $json.needs_retry }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "p1-needs-retry",
+      "name": "Needs Retry?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        10528,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Build Retry Prompt with weakness feedback from evaluation\n// ============================================================\n\nconst data = $input.first().json;\nconst brief = data.brief;\n\nconst retryPrompt = `RETRY: Your previous strategy scored ${data.winner_score}/50 (below our 35/50 quality threshold).\n\n== WEAKNESSES IDENTIFIED ==\n${data.weaknesses || 'No specific weaknesses identified.'}\n\n== OVERALL FEEDBACK ==\n${data.overall_feedback || 'Needs improvement across the board.'}\n\n== ANTI-GENERIC RULES (STRICTLY ENFORCED) ==\n- EVERY concept name must be unique to ${brief.brand_name} — no generic names allowed\n- ALL hooks must be 8 words or fewer\n- Each concept MUST reference a specific trend, format, or cultural moment\n- BAD: \"The Transformation Story\" | GOOD: \"My Mechanic's Face When He Saw This\"\n- BAD: \"Social Proof Showcase\" | GOOD: \"432 One-Star Reviews Changed My Mind\"\n\n== CLIENT BRIEF REMINDER ==\nBrand: ${brief.brand_name}\nProduct: ${brief.product_feature}\nDifferentiator: ${brief.differentiator}\nTarget: ${brief.target_user}\nProblem: ${brief.biggest_problem}\n\n== AVAILABLE REFERENCE VIDEOS ==\n${data.refVideoList || 'No reference videos available.'}\n\n== BRAND VOICE DNA ==\n${data.brandVoiceDna || 'No brand voice data.'}\n\n${data.systemLearningsText || ''}\n\nGenerate ${data.numConcepts} IMPROVED concepts addressing ALL the weaknesses above.\nFocus on the areas that scored lowest.\n\nOutput ONLY valid JSON with a \"concepts\" array. Same format as before:\nEach concept needs: concept_name, reference_video_url, reference_platform, framework, hook_type, hook_text, format, funnel_stage, virality_score, concept_pitch, emotional_journey, target_objection, platform, ab_test_pair, trend_reference\n\nDIVERSITY: Different framework+hook_type combos, 4+ formats, mixed funnel stages, 1+ A/B pair.\nOutput ONLY valid JSON.`;\n\nconst requestBody = {\n  systemInstruction: { parts: [{ text: \"You are a UGC Creative Director on your SECOND attempt. Your first batch was rejected for quality issues. This time you MUST fix every weakness identified. Be more creative, more specific, more brand-aligned. No generic concepts allowed. Hooks under 8 words ONLY. Output ONLY valid JSON with a 'concepts' array.\" }] },\n  contents: [{ role: \"user\", parts: [{ text: retryPrompt }] }],\n  generationConfig: { temperature: 0.9, maxOutputTokens: 16384 }\n};\n\nreturn [{ json: { requestBody, brief: data.brief, project_id: data.project_id } }];\n"
+      },
+      "id": "p1-build-retry-prompt",
+      "name": "Build Retry Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        10752,
+        -96
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.requestBody) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "p1-gemini-retry",
+      "name": "Gemini — Retry Strategy",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        10976,
+        -96
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "rIL63TG4xfMQL8uJ",
+          "name": "Cosmisk AI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Format Output A — extract concepts from retry Gemini response\n// ============================================================\n\nconst response = $input.first().json;\nlet rawText = '';\ntry {\n  rawText = response.candidates[0].content.parts[0].text;\n} catch(e) {\n  rawText = JSON.stringify(response);\n}\n\nconst prev = $('Build Retry Prompt').first().json;\n\nreturn [{ json: { output: rawText, text: rawText, brief: prev.brief, project_id: prev.project_id } }];\n"
+      },
+      "id": "p1-format-output-a",
+      "name": "Format Output A",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        11200,
+        -96
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Format Output B — pass winning strategy concepts as output\n// ============================================================\n\nconst data = $input.first().json;\nconst concepts = data.concepts || [];\n\n// Build a JSON string that looks like Gemini's normal output\nconst output = JSON.stringify({ concepts });\n\nreturn [{ json: { output, text: output, brief: data.brief, project_id: data.project_id } }];\n"
+      },
+      "id": "p1-format-output-b",
+      "name": "Format Output B",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        10752,
+        288
+      ]
     }
   ],
   "connections": {
@@ -943,18 +1187,7 @@
       "main": [
         [
           {
-            "node": "Build Strategy Prompt",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Build Strategy Prompt": {
-      "main": [
-        [
-          {
-            "node": "Build Strategy Request",
+            "node": "Build Multi-Strategy Prompt",
             "type": "main",
             "index": 0
           }
@@ -1054,39 +1287,6 @@
         ]
       ]
     },
-    "Build Strategy Request": {
-      "main": [
-        [
-          {
-            "node": "Gemini Strategy API",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Gemini Strategy API": {
-      "main": [
-        [
-          {
-            "node": "Extract Strategy Output",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Extract Strategy Output": {
-      "main": [
-        [
-          {
-            "node": "Parse Concepts Output",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Batch Research Records": {
       "main": [
         [
@@ -1131,11 +1331,166 @@
         ]
       ]
     },
-    "Parse Meta Ads": {
+    "Fetch Brand Voice": {
+      "main": [
+        [
+          {
+            "node": "Fetch Own Ad Performance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Own Ad Performance": {
       "main": [
         [
           {
             "node": "Build Analysis Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Meta Ads": {
+      "main": [
+        [
+          {
+            "node": "Fetch Brand Voice",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch System Learnings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Multi-Strategy Prompt": {
+      "main": [
+        [
+          {
+            "node": "Gemini — Generate 3 Strategies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini — Generate 3 Strategies": {
+      "main": [
+        [
+          {
+            "node": "Parse 3 Strategies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse 3 Strategies": {
+      "main": [
+        [
+          {
+            "node": "Build Evaluation Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Evaluation Prompt": {
+      "main": [
+        [
+          {
+            "node": "Gemini — Evaluate Strategies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini — Evaluate Strategies": {
+      "main": [
+        [
+          {
+            "node": "Select Best Strategy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Select Best Strategy": {
+      "main": [
+        [
+          {
+            "node": "Needs Retry?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs Retry?": {
+      "main": [
+        [
+          {
+            "node": "Build Retry Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Output B",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Retry Prompt": {
+      "main": [
+        [
+          {
+            "node": "Gemini — Retry Strategy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini — Retry Strategy": {
+      "main": [
+        [
+          {
+            "node": "Format Output A",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Output A": {
+      "main": [
+        [
+          {
+            "node": "Parse Concepts Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Output B": {
+      "main": [
+        [
+          {
+            "node": "Parse Concepts Output",
             "type": "main",
             "index": 0
           }
@@ -1148,1367 +1503,5 @@
     "availableInMCP": false,
     "callerPolicy": "workflowsFromSameOwner"
   },
-  "staticData": null,
-  "meta": {
-    "templateCredsSetupCompleted": true
-  },
-  "pinData": {},
-  "versionId": "08f10390-9d69-4887-8bd4-e5e8d9813650",
-  "activeVersionId": "08f10390-9d69-4887-8bd4-e5e8d9813650",
-  "versionCounter": 126,
-  "triggerCount": 1,
-  "shared": [
-    {
-      "updatedAt": "2026-02-13T18:13:10.864Z",
-      "createdAt": "2026-02-13T18:13:10.864Z",
-      "role": "workflow:owner",
-      "workflowId": "RLi-u9gL1aQ7Bl37TSidA",
-      "projectId": "AD8mXtbIf5cdYNIV",
-      "project": {
-        "updatedAt": "2026-01-26T04:34:53.263Z",
-        "createdAt": "2026-01-26T04:34:35.063Z",
-        "id": "AD8mXtbIf5cdYNIV",
-        "name": "SenseInfo Tech <senseinfotechno@gmail.com>",
-        "type": "personal",
-        "icon": null,
-        "description": null,
-        "creatorId": "ed50a507-d93d-45c3-9412-d80babb81dd0",
-        "projectRelations": [
-          {
-            "updatedAt": "2026-01-26T04:34:35.063Z",
-            "createdAt": "2026-01-26T04:34:35.063Z",
-            "userId": "ed50a507-d93d-45c3-9412-d80babb81dd0",
-            "projectId": "AD8mXtbIf5cdYNIV",
-            "user": {
-              "updatedAt": "2026-02-17T18:53:18.000Z",
-              "createdAt": "2026-01-26T04:34:34.578Z",
-              "id": "ed50a507-d93d-45c3-9412-d80babb81dd0",
-              "email": "senseinfotechno@gmail.com",
-              "firstName": "SenseInfo",
-              "lastName": "Tech",
-              "personalizationAnswers": {
-                "version": "v4",
-                "personalization_survey_submitted_at": "2026-01-26T04:35:01.423Z",
-                "personalization_survey_n8n_version": "2.4.6",
-                "companySize": "<20",
-                "companyType": "saas",
-                "role": "business-owner",
-                "reportedSource": "google"
-              },
-              "settings": {
-                "userActivated": true,
-                "firstSuccessfulWorkflowId": "T2U_raVAJPmEIai1EY6TF",
-                "userActivatedAt": 1769404953077,
-                "easyAIWorkflowOnboarded": true,
-                "npsSurvey": {
-                  "waitingForResponse": true,
-                  "ignoredCount": 2,
-                  "lastShownAt": 1770721963325
-                }
-              },
-              "disabled": false,
-              "mfaEnabled": false,
-              "lastActiveAt": "2026-02-17",
-              "isPending": false
-            }
-          }
-        ]
-      }
-    }
-  ],
-  "tags": [],
-  "activeVersion": {
-    "updatedAt": "2026-02-17T13:40:16.484Z",
-    "createdAt": "2026-02-17T13:40:16.484Z",
-    "versionId": "08f10390-9d69-4887-8bd4-e5e8d9813650",
-    "workflowId": "RLi-u9gL1aQ7Bl37TSidA",
-    "nodes": [
-      {
-        "parameters": {
-          "content": "## WORKFLOW 1: RESEARCH + CONCEPTS\n\nWebhook POST /ugc-phase1 with { client_code }\n1. Fetch brief from Google Sheets\n2. Create Project record in Airtable (status: Research)\n3. Research Agent runs (8 tools)\n4. Parse research → Store in Airtable Research table\n5. Parse reference videos → Store in Airtable Reference_Videos table\n6. Update Project status to 'Concepts Pending'\n7. Strategy Agent runs (creates 1.5x concepts)\n8. Parse concepts → Store in Airtable Concepts table\n9. Update Project status to 'PM Review'\n10. Slack message to PM with concept summary + buttons\n\nWorkflow STOPS here — waits for PM action via Workflow 2.",
-          "height": 460,
-          "width": 500,
-          "color": 7
-        },
-        "id": "7c7ddff6-410c-4464-92da-853777629061",
-        "name": "Sticky Note - Overview",
-        "type": "n8n-nodes-base.stickyNote",
-        "typeVersion": 1,
-        "position": [
-          4704,
-          80
-        ]
-      },
-      {
-        "parameters": {
-          "httpMethod": "POST",
-          "path": "ugc-phase1",
-          "responseMode": "lastNode",
-          "options": {}
-        },
-        "id": "cbd4786e-8a84-4445-b5fd-119efc6f9634",
-        "name": "Webhook — Phase 1",
-        "type": "n8n-nodes-base.webhook",
-        "typeVersion": 1.1,
-        "position": [
-          5488,
-          288
-        ],
-        "webhookId": "ugc-phase1-webhook"
-      },
-      {
-        "parameters": {},
-        "id": "6d2bac56-17fb-4961-88ea-ec2419e1d1ce",
-        "name": "Manual Trigger — Test",
-        "type": "n8n-nodes-base.manualTrigger",
-        "typeVersion": 1,
-        "position": [
-          5264,
-          96
-        ]
-      },
-      {
-        "parameters": {
-          "jsCode": "return [{ json: { body: { client_code: 'TES-0213' } } }];"
-        },
-        "id": "0a37d7e2-8a26-4b4d-b474-fe3e0dc20089",
-        "name": "Set Test Data",
-        "type": "n8n-nodes-base.code",
-        "typeVersion": 2,
-        "position": [
-          5488,
-          96
-        ]
-      },
-      {
-        "parameters": {
-          "jsCode": "const body = $input.first().json.body || $input.first().json;\nconst client_code = (body.client_code || body.clientCode || '').trim();\nif (!client_code) throw new Error('client_code is required');\n\n// Pass through regeneration params if present\nconst regenerate = body.regenerate || false;\nconst num_needed = body.num_needed || 0;\nconst rejection_notes = (body.rejection_notes || '').trim();\nconst exclude_concepts = body.exclude_concepts || [];\n\nreturn [{ json: { client_code, regenerate, num_needed, rejection_notes, exclude_concepts } }];"
-        },
-        "id": "1dd12e19-e2a8-4173-9b29-8b99c89b166a",
-        "name": "Extract Client Code",
-        "type": "n8n-nodes-base.code",
-        "typeVersion": 2,
-        "position": [
-          5712,
-          192
-        ]
-      },
-      {
-        "parameters": {
-          "documentId": {
-            "__rl": true,
-            "value": "1cB4wtyp0l0xwH2Ukw-U93eW9_Ix1lB6EroYs1GyDLCM",
-            "mode": "id"
-          },
-          "sheetName": {
-            "__rl": true,
-            "value": "Client Database",
-            "mode": "name"
-          },
-          "filtersUI": {
-            "values": [
-              {
-                "lookupColumn": "client_code",
-                "lookupValue": "={{ $json.client_code }}"
-              }
-            ]
-          },
-          "options": {}
-        },
-        "id": "95a75b71-3591-49f7-b6ad-2d6685a39268",
-        "name": "Fetch Client Brief",
-        "type": "n8n-nodes-base.googleSheets",
-        "typeVersion": 4.5,
-        "position": [
-          5936,
-          192
-        ],
-        "credentials": {
-          "googleSheetsOAuth2Api": {
-            "id": "Aas0vt74gbEuYgmW",
-            "name": "Google Sheets account 2 - vishant"
-          }
-        },
-        "onError": "continueErrorOutput"
-      },
-      {
-        "parameters": {
-          "jsCode": "const items = $input.all();\nif (!items || items.length === 0 || !items[0].json) {\n  throw new Error('No client found. Check client_code in the Client Database.');\n}\nconst row = items[0].json;\nfunction c(v) { return v === undefined || v === null ? '' : String(v).trim(); }\n\nconst brief = {\n  client_code: c(row.client_code),\n  brand_name: c(row.brand_name),\n  client_name: c(row.client_name),\n  client_email: c(row.client_email),\n  website_url: c(row.website_url),\n  product_feature: c(row.product_feature),\n  differentiator: c(row.differentiator),\n  competitors: c(row.competitors),\n  competitor_strengths: c(row.competitor_strengths),\n  target_user: c(row.target_user),\n  biggest_problem: c(row.biggest_problem),\n  main_hesitation: c(row.main_hesitation),\n  social_proof: c(row.social_proof),\n  selling_proposition: c(row.selling_proposition),\n  brand_personality: c(row.brand_personality),\n  credibility_point: c(row.credibility_point),\n  transformation: c(row.transformation),\n  best_concepts: c(row.best_concepts),\n  compliance: c(row.compliance),\n  reference_ads: c(row.reference_ads),\n  available_assets: c(row.available_assets),\n  do_not_say: c(row.do_not_say),\n  additional_notes: c(row.additional_notes),\n  num_scripts: parseInt(c(row.num_scripts)) || 3\n};\n\nconst required = ['brand_name', 'product_feature', 'target_user'];\nconst missing = required.filter(f => !brief[f]);\nif (missing.length > 0) throw new Error('Brief missing: ' + missing.join(', '));\n\nreturn [{ json: { brief, revision_count: 0 } }];"
-        },
-        "id": "506ae0d2-8af2-4dcc-92f1-f9e06692604b",
-        "name": "Validate Brief",
-        "type": "n8n-nodes-base.code",
-        "typeVersion": 2,
-        "position": [
-          6160,
-          96
-        ]
-      },
-      {
-        "parameters": {
-          "operation": "create",
-          "base": {
-            "__rl": true,
-            "value": "appvFxwZc9yU8o8pK",
-            "mode": "id"
-          },
-          "method": "POST",
-          "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Projects",
-          "authentication": "predefinedCredentialType",
-          "nodeCredentialType": "airtableTokenApi",
-          "sendBody": true,
-          "specifyBody": "json",
-          "jsonBody": "={{ JSON.stringify({ fields: { client_code: $json.brief.client_code, brand_name: $json.brief.brand_name, client_name: $json.brief.client_name, client_email: $json.brief.client_email, status: 'Research', num_scripts: Number($json.brief.num_scripts), brief_summary: $json.brief.product_feature + ' | ' + $json.brief.target_user + ' | ' + $json.brief.biggest_problem } }) }}",
-          "options": {}
-        },
-        "id": "5379572f-51cd-4991-bd9a-f8d771d1c10a",
-        "name": "Create Project in Airtable",
-        "type": "n8n-nodes-base.httpRequest",
-        "typeVersion": 4.2,
-        "position": [
-          6384,
-          96
-        ],
-        "credentials": {
-          "airtableTokenApi": {
-            "id": "WelvlJEjoHaI3l9G",
-            "name": "Airtable Personal Access Token account"
-          }
-        }
-      },
-      {
-        "parameters": {
-          "jsCode": "const brief = $('Validate Brief').first().json.brief;\nconst projectRecord = $input.first().json;\nconst project_id = projectRecord.id;\n\nconst prompt = `DEEP RESEARCH MISSION for ${brief.brand_name}.\n\nYou have 5 research tools. USE ALL OF THEM to gather real intelligence.\n\n== CLIENT BRIEF ==\nBrand: ${brief.brand_name}\nProduct: ${brief.product_feature}\nDifferentiator: ${brief.differentiator}\nSelling Proposition: ${brief.selling_proposition}\nWebsite: ${brief.website_url}\nCompetitors: ${brief.competitors}\nCompetitor Strengths: ${brief.competitor_strengths}\nTarget User: ${brief.target_user}\nBiggest Problem: ${brief.biggest_problem}\nMain Hesitation: ${brief.main_hesitation}\nTransformation: ${brief.transformation}\nBrand Personality: ${brief.brand_personality}\nCredibility: ${brief.credibility_point}\nSocial Proof: ${brief.social_proof}\nReference Ads: ${brief.reference_ads || 'Not specified'}\n\n== YOUR RESEARCH TASKS (do ALL of these) ==\n\n1. READ THE BRAND WEBSITE: Use read_website on ${brief.website_url || 'the brand website'} to understand their product, pricing, and claims.\n\n2. MINE AMAZON/MARKETPLACE REVIEWS: Use amazon_review_search for \"${brief.product_feature}\" to find real customer language. Then use read_website on the top 2-3 review pages.\n\n3. SEARCH REDDIT: Use reddit_search for \"${brief.biggest_problem}\" AND for \"${brief.product_feature}\". Extract real discussions, pain points, and the exact words people use.\n\n4. RESEARCH COMPETITOR ADS: Use competitor_ad_search for each competitor: ${brief.competitors || 'the main competitors in this space'}. Find what ads they are running.\n\n5. CHECK SOCIAL SENTIMENT: Use google_search for \"${brief.brand_name} review\" and \"${brief.product_feature} TikTok\". See what real people are saying.\n\n6. MINE VIRAL CONCEPTS ACROSS ALL PLATFORMS (CRITICAL):\n   a) TikTok: Use tiktok_viral_search for \"${brief.product_feature}\" and \"${brief.biggest_problem}\"\n   b) Instagram: Use instagram_viral_search for \"${brief.product_feature} Reel\" and the product category\n   c) Meta Ad Library: Use meta_ad_library_search for EACH competitor: ${brief.competitors || 'competitors in this space'} — find their ACTIVE paid ads\n   d) Competitor ads: Use competitor_ad_search for general ad breakdowns\n   Find 10-15 references total across platforms (mix organic + paid). For each, note URL, platform, format, hook, why it works, and how it adapts to ${brief.brand_name}.\n\n== REQUIRED OUTPUT FORMAT ==\n\nYou MUST output your research in the following structured format so it can be parsed and stored:\n\n=== VOC_QUOTES_START ===\nFor each VOC quote found, output on a single line:\nVOC|<category: Pain/Desire/Proof/Objection/Language>|<source: Amazon/Reddit/Forum/Brand Website/Google/TikTok/Instagram>|<relevance: High/Medium/Low>|<the actual quote text>\n=== VOC_QUOTES_END ===\n\n=== INSIGHTS_START ===\nFor each insight, output on a single line:\nINSIGHT|<type: Competitor Intel/Market Trend/Audience Insight/Script Ammunition>|<source>|<category: Competitor Gap/Trend/Pain/Desire/Proof/Objection/Language>|<relevance: High/Medium/Low>|<the insight text>\n=== INSIGHTS_END ===\n\n=== REFERENCE_VIDEOS_START ===\nFor each reference video/ad found, output on a single line:\nREF|<url>|<platform: TikTok/Instagram Reels/Facebook Ad/Instagram Ad/YouTube Shorts>|<type: Organic Viral/Paid Ad/UGC Ad/Creator Content>|<format: Talking Head/GRWM/Before-After/Unboxing/POV/Storytime/Routine/Transformation/Comparison/Green Screen/Testimonial Ad/Product Demo>|<hook text>|<why it works>|<adaptation idea>|<engagement info>\n=== REFERENCE_VIDEOS_END ===\n\nAfter the structured sections, include your full narrative research report with all analysis sections (Brand Analysis, VOC Goldmine narrative, Competitor Landscape, Audience Psychology, Market Gap, Script Ammunition, Format Trend Map).\n\nDo NOT skip the tool research. The entire value of this agent is real data, not AI assumptions.`;\n\nreturn [{ json: { prompt, brief, project_id } }];"
-        },
-        "id": "c1d7e382-c25d-42f7-9bdf-ac00f31be077",
-        "name": "Build Research Prompt",
-        "type": "n8n-nodes-base.code",
-        "typeVersion": 2,
-        "position": [
-          6608,
-          96
-        ]
-      },
-      {
-        "parameters": {
-          "agent": "openAiFunctionsAgent",
-          "promptType": "define",
-          "text": "={{ $json.prompt }}",
-          "options": {
-            "systemMessage": "You are a senior performance marketing research analyst who has spent 8 years inside UGC agencies managing $50M+ in ad spend across Meta, TikTok, and YouTube Shorts. You don't do academic research — you do LIVE AD CREATIVE INTELLIGENCE using real data.\n\nYOU HAVE 8 RESEARCH TOOLS — USE THEM ALL:\n1. google_search — Search Google for anything: reviews, forums, competitor analysis, trends\n2. reddit_search — Search Reddit for real unfiltered customer discussions and pain points\n3. amazon_review_search — Find Amazon reviews for the product category (real customer language)\n4. competitor_ad_search — Find competitor ads and ad breakdowns\n5. tiktok_viral_search — Find viral TikTok videos for reference concepts\n6. meta_ad_library_search — Search Facebook/Instagram Ad Library for competitor ad creatives\n7. instagram_viral_search — Find viral Instagram Reels and creator content\n8. read_website — Read any URL to get detailed content from search results\n\nYOUR RESEARCH PROTOCOL (follow this EXACT sequence):\n\nSTEP 1: BRAND DEEP DIVE — Use read_website on the brand's website URL.\nSTEP 2: AMAZON & MARKETPLACE REVIEW MINING — Use amazon_review_search + read_website on review pages.\nSTEP 3: REDDIT & FORUM INTELLIGENCE — Use reddit_search for the problem and category.\nSTEP 4: COMPETITOR AD RESEARCH — Use competitor_ad_search for each competitor.\nSTEP 5: SOCIAL MEDIA SENTIMENT — Use google_search for brand reviews and TikTok content.\nSTEP 6: MULTI-PLATFORM VIRAL CONCEPT MINING — Use tiktok_viral_search, instagram_viral_search, meta_ad_library_search, competitor_ad_search.\n\nCRITICAL: You MUST output your findings in the STRUCTURED FORMAT described in the prompt:\n- VOC quotes between === VOC_QUOTES_START === and === VOC_QUOTES_END === markers\n- Insights between === INSIGHTS_START === and === INSIGHTS_END === markers\n- Reference videos between === REFERENCE_VIDEOS_START === and === REFERENCE_VIDEOS_END === markers\n\nEach line uses pipe-delimited fields. This format is REQUIRED for automated Airtable storage.\n\nAfter the structured sections, also include your full narrative analysis.\n\nDo NOT skip any research step. USE THE TOOLS to get REAL, CURRENT data.",
-            "maxIterations": 10
-          }
-        },
-        "id": "33ef8edf-5715-44b9-854f-c62b1da2008a",
-        "name": "Research Analyst Agent",
-        "type": "@n8n/n8n-nodes-langchain.agent",
-        "typeVersion": 1.7,
-        "position": [
-          7272,
-          96
-        ]
-      },
-      {
-        "parameters": {
-          "options": {
-            "maxTokens": 3000,
-            "temperature": 0.6
-          }
-        },
-        "id": "0df7a7e0-4c37-4caf-b6ba-5bfa357ad698",
-        "name": "GPT-4o-mini — Research",
-        "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
-        "typeVersion": 1,
-        "position": [
-          6832,
-          320
-        ],
-        "credentials": {
-          "openAiApi": {
-            "id": "OUom69v74KTvlioi",
-            "name": "OpenAi account"
-          }
-        }
-      },
-      {
-        "parameters": {
-          "url": "={{ $fromAI('url', 'The full URL to fetch') }}"
-        },
-        "id": "acca458b-d759-4123-85b6-4e90c7f22fea",
-        "name": "Tool_Read_Website",
-        "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
-        "typeVersion": 1.1,
-        "position": [
-          6960,
-          320
-        ]
-      },
-      {
-        "parameters": {
-          "url": "=https://serpapi.com/search.json?q={{ encodeURIComponent($fromAI('query', 'The Google search query')) }}&api_key={{ $credentials.httpHeaderAuth.value }}&num=10"
-        },
-        "id": "92efc107-19ed-4780-95f2-0fafe4e85f9f",
-        "name": "Tool_Google_Search",
-        "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
-        "typeVersion": 1.1,
-        "position": [
-          7088,
-          320
-        ],
-        "credentials": {
-          "httpHeaderAuth": {
-            "id": "CmIS7AD49M1ajRog",
-            "name": "SerpAPI Key"
-          }
-        }
-      },
-      {
-        "parameters": {
-          "url": "=https://www.reddit.com/search.json?q={{ $fromAI('query', 'The Reddit search query', 'string') }}&sort=relevance&limit=15&t=year"
-        },
-        "id": "d1aa5038-81c0-4782-a767-eddfc7b3af38",
-        "name": "Tool_Reddit_Search",
-        "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
-        "typeVersion": 1.1,
-        "position": [
-          7216,
-          320
-        ]
-      },
-      {
-        "parameters": {
-          "url": "=https://serpapi.com/search.json?q=site%3Aamazon.com+{{ $fromAI('product', 'The product or category', 'string') }}+reviews&api_key={{ $credentials.httpHeaderAuth.value }}&num=10"
-        },
-        "id": "e886f2c7-c323-4e8c-9dc1-f9c1d9e13119",
-        "name": "Tool_Amazon_Review_Search",
-        "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
-        "typeVersion": 1.1,
-        "position": [
-          7344,
-          320
-        ],
-        "credentials": {
-          "httpHeaderAuth": {
-            "id": "CmIS7AD49M1ajRog",
-            "name": "SerpAPI Key"
-          }
-        }
-      },
-      {
-        "parameters": {
-          "url": "=https://serpapi.com/search.json?q={{ $fromAI('query', 'Competitor or category to search ads for', 'string') }}+ads+OR+%22ad+library%22+OR+%22facebook+ads%22&api_key={{ $credentials.httpHeaderAuth.value }}&num=10"
-        },
-        "id": "c210e789-76a8-4b9e-8174-8f077667eb63",
-        "name": "Tool_Competitor_Ad_Search",
-        "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
-        "typeVersion": 1.1,
-        "position": [
-          7472,
-          320
-        ],
-        "credentials": {
-          "httpHeaderAuth": {
-            "id": "CmIS7AD49M1ajRog",
-            "name": "SerpAPI Key"
-          }
-        }
-      },
-      {
-        "parameters": {
-          "url": "=https://serpapi.com/search.json?q=site%3Atiktok.com+{{ encodeURIComponent($fromAI('query', 'The TikTok search query')) }}+viral+OR+trending&api_key={{ $credentials.httpHeaderAuth.value }}&num=15"
-        },
-        "id": "c6a78d57-9e08-4cce-8c1d-4beb076b165a",
-        "name": "Tool_TikTok_Viral_Search",
-        "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
-        "typeVersion": 1.1,
-        "position": [
-          7600,
-          320
-        ],
-        "credentials": {
-          "httpHeaderAuth": {
-            "id": "CmIS7AD49M1ajRog",
-            "name": "SerpAPI Key"
-          }
-        }
-      },
-      {
-        "parameters": {
-          "url": "=https://serpapi.com/search.json?q={{ $fromAI('query', 'Brand or category to search in Meta Ad Library', 'string') }}+%22meta+ad+library%22+OR+%22facebook+ad+library%22+OR+%22facebook+ads%22+OR+%22instagram+ads%22&api_key={{ $credentials.httpHeaderAuth.value }}&num=15"
-        },
-        "id": "48151e83-574b-43d1-85e9-99d81f293a60",
-        "name": "Tool_Meta_Ad_Library_Search",
-        "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
-        "typeVersion": 1.1,
-        "position": [
-          7728,
-          320
-        ],
-        "credentials": {
-          "httpHeaderAuth": {
-            "id": "CmIS7AD49M1ajRog",
-            "name": "SerpAPI Key"
-          }
-        }
-      },
-      {
-        "parameters": {
-          "url": "=https://serpapi.com/search.json?q=site%3Ainstagram.com+{{ encodeURIComponent($fromAI('query', 'The Instagram search query')) }}+reel+OR+viral+OR+trending&api_key={{ $credentials.httpHeaderAuth.value }}&num=15"
-        },
-        "id": "566d2393-aaa2-461c-b0d0-b61bc84c27be",
-        "name": "Tool_Instagram_Viral_Search",
-        "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
-        "typeVersion": 1.1,
-        "position": [
-          7856,
-          320
-        ],
-        "credentials": {
-          "httpHeaderAuth": {
-            "id": "CmIS7AD49M1ajRog",
-            "name": "SerpAPI Key"
-          }
-        }
-      },
-      {
-        "parameters": {
-          "jsCode": "// ============================================================\n// Parse research output into structured Airtable records\n// Extracts VOC quotes, insights, and reference videos\n// ============================================================\n\nconst researchOutput = $input.first().json.output || $input.first().json.text || JSON.stringify($input.first().json);\nconst brief = $('Build Research Prompt').first().json.brief;\nconst project_id = $('Build Research Prompt').first().json.project_id;\n\n// Parse VOC quotes\nconst vocRecords = [];\nconst vocMatch = researchOutput.match(/=== VOC_QUOTES_START ===[\\s\\S]*?=== VOC_QUOTES_END ===/i);\nif (vocMatch) {\n  const lines = vocMatch[0].split('\\n').filter(l => l.startsWith('VOC|'));\n  for (const line of lines) {\n    const parts = line.split('|');\n    if (parts.length >= 5) {\n      vocRecords.push({\n        project_id: [project_id],\n        research_type: 'VOC Quote',\n        category: (parts[1] || 'Pain').trim(),\n        source: (parts[2] || 'Unknown').trim(),\n        relevance: (parts[3] || 'Medium').trim(),\n        content: (parts[4] || '').trim()\n      });\n    }\n  }\n}\n\n// Parse insights\nconst insightRecords = [];\nconst insightMatch = researchOutput.match(/=== INSIGHTS_START ===[\\s\\S]*?=== INSIGHTS_END ===/i);\nif (insightMatch) {\n  const lines = insightMatch[0].split('\\n').filter(l => l.startsWith('INSIGHT|'));\n  for (const line of lines) {\n    const parts = line.split('|');\n    if (parts.length >= 6) {\n      insightRecords.push({\n        project_id: [project_id],\n        research_type: (parts[1] || 'Market Trend').trim(),\n        source: (parts[2] || 'Unknown').trim(),\n        category: (parts[3] || 'Trend').trim(),\n        relevance: (parts[4] || 'Medium').trim(),\n        content: (parts[5] || '').trim()\n      });\n    }\n  }\n}\n\n// Parse reference videos\nconst refRecords = [];\nconst refMatch = researchOutput.match(/=== REFERENCE_VIDEOS_START ===[\\s\\S]*?=== REFERENCE_VIDEOS_END ===/i);\nif (refMatch) {\n  const lines = refMatch[0].split('\\n').filter(l => l.startsWith('REF|'));\n  for (const line of lines) {\n    const parts = line.split('|');\n    if (parts.length >= 9) {\n      refRecords.push({\n        project_id: [project_id],\n        url: (parts[1] || '').trim(),\n        platform: (parts[2] || 'TikTok').trim(),\n        type: (parts[3] || 'Organic Viral').trim(),\n        format: (parts[4] || 'Talking Head').trim(),\n        hook: (parts[5] || '').trim(),\n        why_it_works: (parts[6] || '').trim(),\n        adaptation_idea: (parts[7] || '').trim(),\n        engagement: (parts[8] || '').trim()\n      });\n    }\n  }\n}\n\n// If structured parsing failed, create fallback records from the raw output\nif (vocRecords.length === 0) {\n  vocRecords.push({\n    project_id: [project_id],\n    research_type: 'VOC Quote',\n    category: 'Pain',\n    source: 'Research Agent',\n    relevance: 'High',\n    content: 'Research output could not be parsed into structured VOC quotes. See full research report in narrative form.'\n  });\n}\n\nif (refRecords.length === 0) {\n  refRecords.push({\n    project_id: [project_id],\n    url: '',\n    platform: 'TikTok',\n    type: 'Organic Viral',\n    format: 'Talking Head',\n    hook: 'N/A',\n    why_it_works: 'Reference videos could not be parsed from structured output.',\n    adaptation_idea: '',\n    engagement: ''\n  });\n}\n\nconst allResearch = [...vocRecords, ...insightRecords];\n\nreturn [{ json: {\n  project_id,\n  brief,\n  research_records: allResearch,\n  reference_records: refRecords,\n  research_output: researchOutput,\n  research_count: allResearch.length,\n  reference_count: refRecords.length\n} }];"
-        },
-        "id": "b2f1ca20-bd18-4947-b14d-14e5413080b6",
-        "name": "Parse Research Output",
-        "type": "n8n-nodes-base.code",
-        "typeVersion": 2,
-        "position": [
-          8064,
-          96
-        ]
-      },
-      {
-        "parameters": {
-          "jsCode": "// ============================================================\n// Split research records into individual items for Airtable batch create\n// ============================================================\nconst data = $input.first().json;\nconst items = data.research_records.map(record => ({ json: record }));\nreturn items;"
-        },
-        "id": "ccb20022-eed1-420d-af44-6371ac10dd9b",
-        "name": "Split Research Records",
-        "type": "n8n-nodes-base.code",
-        "typeVersion": 2,
-        "position": [
-          8288,
-          0
-        ]
-      },
-      {
-        "parameters": {
-          "method": "POST",
-          "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Research",
-          "authentication": "predefinedCredentialType",
-          "nodeCredentialType": "airtableTokenApi",
-          "sendBody": true,
-          "specifyBody": "json",
-          "jsonBody": "={{ JSON.stringify({ fields: { project_id: $json.project_id, research_type: $json.research_type, category: $json.category, content: $json.content, relevance: $json.relevance, source: $json.source } }) }}",
-          "options": {}
-        },
-        "id": "aa1d4c0f-3a6d-4044-8b17-ec354b7bf1e1",
-        "name": "Store Research in Airtable",
-        "type": "n8n-nodes-base.httpRequest",
-        "typeVersion": 4.2,
-        "position": [
-          8512,
-          0
-        ],
-        "credentials": {
-          "airtableTokenApi": {
-            "id": "WelvlJEjoHaI3l9G",
-            "name": "Airtable Personal Access Token account"
-          }
-        },
-        "onError": "continueRegularOutput"
-      },
-      {
-        "parameters": {
-          "jsCode": "// ============================================================\n// Split reference video records into individual items for Airtable\n// ============================================================\nconst data = $('Parse Research Output').first().json;\nconst items = data.reference_records.map(record => ({ json: record }));\nreturn items;"
-        },
-        "id": "382699cd-3f48-4333-a04b-483ffcfd24af",
-        "name": "Split Reference Records",
-        "type": "n8n-nodes-base.code",
-        "typeVersion": 2,
-        "position": [
-          8288,
-          192
-        ]
-      },
-      {
-        "parameters": {
-          "method": "POST",
-          "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Reference_Videos",
-          "authentication": "predefinedCredentialType",
-          "nodeCredentialType": "airtableTokenApi",
-          "sendBody": true,
-          "specifyBody": "json",
-          "jsonBody": "={{ JSON.stringify({ fields: { project_id: $json.project_id, url: $json.url, platform: $json.platform, type: $json.type, format: $json.format, hook: $json.hook, why_it_works: $json.why_it_works, adaptation_idea: $json.adaptation_idea, engagement: $json.engagement } }) }}",
-          "options": {}
-        },
-        "id": "a76dce77-6020-4352-9f34-66ae5b9a27a7",
-        "name": "Store References in Airtable",
-        "type": "n8n-nodes-base.httpRequest",
-        "typeVersion": 4.2,
-        "position": [
-          8512,
-          192
-        ],
-        "credentials": {
-          "airtableTokenApi": {
-            "id": "WelvlJEjoHaI3l9G",
-            "name": "Airtable Personal Access Token account"
-          }
-        },
-        "onError": "continueRegularOutput"
-      },
-      {
-        "parameters": {
-          "jsCode": "// ============================================================\n// Wait for both Airtable stores to finish, then proceed\n// Inject Meta Ad Library snapshots + TikTok Creative Center\n// Only specific ad links, NOT generic search page URLs\n// ============================================================\nconst data = $('Parse Research Output').first().json;\n\nconst refRecords = [...(data.reference_records || [])];\nconst existingUrls = new Set(refRecords.map(r => r.url).filter(Boolean));\nconst pid = data.project_id;\nconst brief = data.brief || {};\n\n// Country code from brief\nconst countryMap = { 'india': 'IN', 'us': 'US', 'usa': 'US', 'uk': 'GB', 'united states': 'US', 'united kingdom': 'GB', 'canada': 'CA', 'australia': 'AU' };\nconst countryCode = countryMap[(brief.target_country || brief.country || 'india').toLowerCase()] || 'IN';\n\n// --- Inject Meta Ad Library specific ad_snapshot_urls (competitor ads only) ---\ntry {\n  const metaData = $('Parse Meta Ads').first().json;\n  const metaAds = (metaData.allResults && metaData.allResults.meta_ad_library) || [];\n  for (const ad of metaAds.slice(0, 8)) {\n    if (ad.url && !existingUrls.has(ad.url)) {\n      refRecords.push({\n        project_id: [pid], url: ad.url, platform: 'Facebook', type: 'Paid Ad', format: 'Product Demo',\n        hook: (ad.body || '').slice(0, 100) || 'Competitor ad \\u2014 ' + (ad.title || ''),\n        why_it_works: 'Active competitor ad on Meta \\u2014 ' + (ad.title || 'Unknown'),\n        adaptation_idea: '', engagement: ''\n      });\n      existingUrls.add(ad.url);\n    }\n  }\n} catch(e) { /* Meta Ads node may not have run */ }\n\n// --- Inject TikTok Creative Center link ---\nconst ttUrl = 'https://ads.tiktok.com/business/creativecenter/inspiration/topads/pc/en?period=30&region=' + countryCode;\nif (!existingUrls.has(ttUrl)) {\n  refRecords.push({\n    project_id: [pid], url: ttUrl, platform: 'TikTok', type: 'Paid Ad', format: 'Product Demo',\n    hook: (brief.product_feature || brief.brand_name || 'Product') + ' \\u2014 TikTok Top Ads (last 30 days)',\n    why_it_works: 'Browse top-performing TikTok ads in target market',\n    adaptation_idea: '', engagement: ''\n  });\n}\n\nreturn [{ json: {\n  project_id: pid,\n  brief: data.brief,\n  research_output: data.research_output,\n  reference_records: refRecords,\n  research_count: data.research_count,\n  reference_count: refRecords.length\n} }];"
-        },
-        "id": "3f4dbb36-8142-4505-975b-e0baee79b1fe",
-        "name": "Merge Store Results",
-        "type": "n8n-nodes-base.code",
-        "typeVersion": 2,
-        "position": [
-          8736,
-          96
-        ]
-      },
-      {
-        "parameters": {
-          "method": "PATCH",
-          "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Projects/{{ Array.isArray($json.project_id) ? $json.project_id[0] : $json.project_id }}",
-          "authentication": "predefinedCredentialType",
-          "nodeCredentialType": "airtableTokenApi",
-          "sendBody": true,
-          "specifyBody": "json",
-          "jsonBody": "={{ JSON.stringify({ fields: { status: \"Concepts Pending\" } }) }}",
-          "options": {}
-        },
-        "id": "abf74cd8-f7ee-486a-9766-cfed6322c3b3",
-        "name": "Update Project — Concepts Pending",
-        "type": "n8n-nodes-base.httpRequest",
-        "typeVersion": 4.2,
-        "position": [
-          8960,
-          96
-        ],
-        "credentials": {
-          "airtableTokenApi": {
-            "id": "WelvlJEjoHaI3l9G",
-            "name": "Airtable Personal Access Token account"
-          }
-        }
-      },
-      {
-        "parameters": {
-          "jsCode": "// ============================================================\n// Build Strategy Agent prompt with brief + research output\n// Groups reference videos by platform for easy browsing\n// ============================================================\n\nconst data = $('Merge Store Results').first().json;\nconst brief = data.brief;\nconst researchOutput = data.research_output;\nconst project_id = data.project_id;\nconst refRecords = data.reference_records || [];\n\n// Regeneration mode support\nconst regenData = $('Extract Client Code').first().json;\nconst isRegeneration = regenData.regenerate || false;\nconst numNeeded = regenData.num_needed || 0;\nconst excludeNames = regenData.exclude_concepts || [];\nconst rejectionNotes = regenData.rejection_notes || '';\n\nlet numConcepts = Math.ceil(brief.num_scripts * 1.5);\nif (isRegeneration && numNeeded > 0) {\n  numConcepts = Math.ceil(numNeeded * 1.5);\n}\n\n// Group references by platform\nconst validRefs = refRecords.filter(r => r.url && r.url.length > 10);\nconst grouped = {};\nfor (const r of validRefs) {\n  const plat = r.platform || 'Other';\n  if (!grouped[plat]) grouped[plat] = [];\n  grouped[plat].push(r);\n}\n\n// Build platform-grouped reference list\nlet refVideoList = '';\nlet idx = 1;\nconst platformOrder = ['YouTube Shorts', 'Facebook', 'TikTok', 'Instagram Reels', 'Multi-platform', 'Other'];\nfor (const plat of platformOrder) {\n  if (!grouped[plat] || grouped[plat].length === 0) continue;\n  const label = plat === 'Facebook' ? 'Meta Ad Library' : plat;\n  refVideoList += '\\n--- ' + label + ' ---\\n';\n  for (const r of grouped[plat]) {\n    const isBrowse = r.url.includes('ads/library') || r.url.includes('creativecenter') || r.url.includes('ads.tiktok.com');\n    const browseTag = isBrowse ? ' (Browse link)' : '';\n    refVideoList += '[' + idx + '] ' + r.url + ' | Platform: ' + r.platform + ' | Format: ' + (r.format || 'N/A') + ' | Hook: \"' + (r.hook || '').slice(0, 80) + '\"' + browseTag + '\\n';\n    idx++;\n  }\n}\n\nconst prompt = `You have deep research from our Research Analyst. Now develop the creative strategy.\n\n== CLIENT BRIEF ==\nBrand: ${brief.brand_name}\nProduct: ${brief.product_feature}\nDifferentiator: ${brief.differentiator}\nTarget: ${brief.target_user}\nProblem: ${brief.biggest_problem}\nHesitation: ${brief.main_hesitation}\nTransformation: ${brief.transformation}\nPersonality: ${brief.brand_personality}\nSocial Proof: ${brief.social_proof}\nCredibility: ${brief.credibility_point}\nBest Concepts: ${brief.best_concepts || 'Not specified'}\nCompliance: ${brief.compliance || 'None'}\nDo NOT Say: ${brief.do_not_say || 'None'}\nScripts Ordered: ${brief.num_scripts}\nConcepts to Present: ${numConcepts}\n\n== RESEARCH REPORT ==\n${researchOutput}\n\n== AVAILABLE REFERENCE VIDEOS & AD LIBRARY LINKS ==\nThese are REAL, verified reference videos and ad library links from the research phase.\n${refVideoList || 'No reference videos available.'}\n\n== YOUR TASK ==\nDevelop ${numConcepts} UNIQUE creative concepts.\n\nCRITICAL RULES:\n1. Output ONLY valid JSON with a \"concepts\" array.\n2. For reference_video_url, you MUST use a URL from the AVAILABLE REFERENCE VIDEOS list above. Do NOT make up or hallucinate URLs. Each concept should use the reference video that best matches its creative direction.\n3. If there are fewer reference videos than concepts, you may reuse URLs, but try to spread them across different concepts.\n\nJSON format:\n\\`\\`\\`json\n{\n  \"concepts\": [\n    {\n      \"concept_name\": \"The Skeptic Convert\",\n      \"reference_video_url\": \"exact URL from reference list above\",\n      \"reference_platform\": \"TikTok\",\n      \"framework\": \"PAS\",\n      \"hook_type\": \"controversy\",\n      \"hook_text\": \"Stop buying vitamin C serums. Here's why.\",\n      \"format\": \"Talking Head\",\n      \"funnel_stage\": \"TOF\",\n      \"virality_score\": 8,\n      \"concept_pitch\": \"One-line pitch for the client\",\n      \"emotional_journey\": \"frustration > curiosity > relief > desire\",\n      \"target_objection\": \"They all oxidize and turn orange\",\n      \"platform\": \"TikTok\",\n      \"ab_test_pair\": \"Name of paired concept or null\"\n    }\n  ]\n}\n\\`\\`\\`\n\nFor EACH concept provide ALL fields listed above.\n\nDIVERSITY RULES:\n- Each concept MUST use a DIFFERENT framework + hook type combination\n- At least 4 different UGC video formats\n- Mix funnel stages: at least 2 TOF, 1-2 MOF, 1-2 BOF\n- Mix platforms\n- At least one concept under 20 seconds\n- Include at least 1 A/B test pair\n\nOutput ONLY valid JSON.`;\n\n// Add regeneration context if in regeneration mode\nlet finalPrompt = prompt;\nif (isRegeneration && excludeNames.length > 0) {\n  finalPrompt += `\\n\\n== REGENERATION MODE ==\\nPreviously approved concepts (DO NOT duplicate these themes):\\n${excludeNames.map((n, i) => (i+1) + '. ' + n).join('\\n')}\\n\\nPM feedback on rejected concepts: \"${rejectionNotes}\"\\n\\nGenerate ${numConcepts} NEW concepts that address this feedback.\\nEnsure they are thematically different from the approved ones above.`;\n}\n\nreturn [{ json: { prompt: finalPrompt, brief, project_id } }];"
-        },
-        "id": "eb3fbfbd-1c8d-4ed8-8a5f-7ee069e6fae2",
-        "name": "Build Strategy Prompt",
-        "type": "n8n-nodes-base.code",
-        "typeVersion": 2,
-        "position": [
-          9184,
-          96
-        ]
-      },
-      {
-        "parameters": {
-          "agent": "openAiFunctionsAgent",
-          "promptType": "define",
-          "text": "={{ $json.prompt }}",
-          "options": {
-            "systemMessage": "You are a UGC Creative Director who has driven 8-figure ad spend. You don't guess — you choose frameworks strategically based on the brand, audience, and funnel position.\n\nYOUR CORE PRINCIPLE: CONCEPT OVERDELIVERY\nWhen a client orders N scripts, you ALWAYS present 1.5x concepts. Each concept must be inspired by a REAL reference from the research.\n\nVIRALITY SCORING MATRIX:\n- Hook Strength (0-3): 0=generic, 1=decent, 2=strong pattern interrupt, 3=impossible to scroll past\n- Format Trend (0-3): 0=outdated, 1=standard, 2=trending, 3=peaking now\n- Audience Match (0-2): 0=wrong audience, 1=broad match, 2=bullseye\n- Uniqueness (0-2): 0=everyone runs this, 1=with a twist, 2=white space\nTotal = /10.\n\nFRAMEWORKS: PAS, AIDA, BAB, FAB, PASTOR, 4Ps, Star-Story-Solution, Feel-Felt-Found, SLAP, Curiosity Gap, Contrast Frame, Micro-Story.\n\nHOOK TYPES: controversy, POV, calling-out, negative, authority, social-proof, curiosity-gap, story, fear/urgency, hot-take, whisper, text-first.\n\nCRITICAL: Output ONLY valid JSON with a \"concepts\" array. Each concept must have ALL required fields: concept_name, reference_video_url, reference_platform, framework, hook_type, hook_text, format, funnel_stage, virality_score, concept_pitch, emotional_journey, target_objection, platform, ab_test_pair.\n\nSort by virality_score (highest first).",
-            "maxIterations": 5
-          }
-        },
-        "id": "821ef5e7-ed96-455d-9fa5-97ac77fcafee",
-        "name": "Creative Strategist Agent",
-        "type": "@n8n/n8n-nodes-langchain.agent",
-        "typeVersion": 1.7,
-        "position": [
-          9408,
-          96
-        ]
-      },
-      {
-        "parameters": {
-          "model": "gpt-4o",
-          "options": {
-            "maxTokens": 5000,
-            "temperature": 0.85
-          }
-        },
-        "id": "613750bc-655b-4a4d-92ba-60831df25f3c",
-        "name": "GPT-4o — Strategy",
-        "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
-        "typeVersion": 1,
-        "position": [
-          9480,
-          320
-        ],
-        "credentials": {
-          "openAiApi": {
-            "id": "OUom69v74KTvlioi",
-            "name": "OpenAi account"
-          }
-        }
-      },
-      {
-        "parameters": {
-          "jsCode": "// ============================================================\n// Parse Strategy Agent output into concept records for Airtable\n// ============================================================\n\nconst strategyOutput = $input.first().json.output || $input.first().json.text || JSON.stringify($input.first().json);\nconst project_id = $('Build Strategy Prompt').first().json.project_id;\nconst brief = $('Build Strategy Prompt').first().json.brief;\n\nlet concepts = [];\ntry {\n  const parsed = JSON.parse(strategyOutput);\n  concepts = parsed.concepts || [parsed];\n} catch(e) {\n  const match = strategyOutput.match(/\\{[\\s\\S]*\\}/);\n  if (match) {\n    try {\n      const parsed = JSON.parse(match[0]);\n      concepts = parsed.concepts || [parsed];\n    } catch(e2) {\n      // Fallback: create a single concept from text\n      concepts = [{\n        concept_name: 'Concept from Strategy',\n        framework: 'PAS',\n        hook_type: 'curiosity-gap',\n        hook_text: 'N/A — see strategy output',\n        format: 'Talking Head',\n        funnel_stage: 'TOF',\n        virality_score: 5,\n        concept_pitch: 'Strategy output could not be parsed into structured concepts.',\n        emotional_journey: 'N/A',\n        target_objection: 'N/A',\n        platform: 'TikTok',\n        ab_test_pair: null,\n        reference_video_url: '',\n        reference_platform: 'TikTok'\n      }];\n    }\n  }\n}\n\n// Normalize select field values to match Airtable options\nconst hookTypeMap = { 'controversy': 'Controversy', 'pov': 'POV', 'calling-out': 'Calling-Out', 'negative': 'Negative', 'authority': 'Authority', 'social-proof': 'Social Proof', 'social proof': 'Social Proof', 'curiosity-gap': 'Curiosity Gap', 'curiosity gap': 'Curiosity Gap', 'story': 'Story', 'fear/urgency': 'Fear/Urgency', 'fear-urgency': 'Fear/Urgency', 'hot-take': 'Hot Take', 'hot take': 'Hot Take', 'whisper': 'Whisper/ASMR', 'whisper/asmr': 'Whisper/ASMR', 'text-first': 'Text-First', 'text first': 'Text-First' };\nconst formatMap = { 'talking head': 'Talking Head', 'grwm': 'GRWM', 'before-after': 'Before-After', 'unboxing': 'Unboxing', 'pov': 'POV', 'storytime': 'Storytime', 'routine': 'Routine', 'transformation': 'Transformation', 'comparison': 'Comparison', 'green screen': 'Green Screen', 'testimonial ad': 'Testimonial Ad', 'product demo': 'Product Demo', 'stitch/duet': 'Stitch/Duet' };\nconst platformMap = { 'tiktok': 'TikTok', 'instagram reels': 'Instagram Reels', 'instagram': 'Instagram Reels', 'facebook': 'Facebook', 'youtube shorts': 'YouTube Shorts', 'youtube': 'YouTube Shorts', 'multi-platform': 'Multi-platform' };\nconst norm = (val, map) => { if (!val) return null; const key = val.toLowerCase().trim(); return map[key] || val; };\n\nconst conceptRecords = concepts.map(c => ({\n  project_id: [project_id],\n  concept_name: c.concept_name || 'Unnamed Concept',\n  reference_video_url: c.reference_video_url || '',\n  reference_platform: c.reference_platform || 'TikTok',\n  framework: (c.framework || 'PAS').toUpperCase() === c.framework ? c.framework : (c.framework || 'PAS'),\n  hook_type: norm(c.hook_type || 'Curiosity Gap', hookTypeMap),\n  hook_text: c.hook_text || '',\n  format: norm(c.format || 'Talking Head', formatMap),\n  funnel_stage: (c.funnel_stage || 'TOF').toUpperCase(),\n  virality_score: parseInt(c.virality_score) || 5,\n  concept_pitch: c.concept_pitch || '',\n  emotional_journey: c.emotional_journey || '',\n  target_objection: c.target_objection || '',\n  platform: norm(c.platform || 'TikTok', platformMap),\n  ab_test_pair: c.ab_test_pair || '',\n  pm_status: 'Pending',\n  client_status: 'Pending',\n  overall_status: 'PM Review'\n}));\n\nreturn [{ json: {\n  project_id,\n  brief,\n  concept_records: conceptRecords,\n  concept_count: conceptRecords.length,\n  strategy_output: strategyOutput\n} }];"
-        },
-        "id": "02a7cc9a-e817-414a-ac94-fc10288f68db",
-        "name": "Parse Concepts Output",
-        "type": "n8n-nodes-base.code",
-        "typeVersion": 2,
-        "position": [
-          9760,
-          96
-        ]
-      },
-      {
-        "parameters": {
-          "jsCode": "// Split concept records into individual items for Airtable\nconst data = $input.first().json;\nconst items = data.concept_records.map(record => ({ json: record }));\nreturn items;"
-        },
-        "id": "9708e5fc-e08e-489e-9569-1d0199bcb782",
-        "name": "Split Concept Records",
-        "type": "n8n-nodes-base.code",
-        "typeVersion": 2,
-        "position": [
-          9984,
-          96
-        ]
-      },
-      {
-        "parameters": {
-          "method": "POST",
-          "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Concepts",
-          "authentication": "predefinedCredentialType",
-          "nodeCredentialType": "airtableTokenApi",
-          "sendBody": true,
-          "specifyBody": "json",
-          "jsonBody": "={{ JSON.stringify({ fields: { project_id: $json.project_id, concept_name: $json.concept_name, hook_text: $json.hook_text, concept_pitch: $json.concept_pitch, emotional_journey: $json.emotional_journey, target_objection: $json.target_objection, virality_score: $json.virality_score, hook_type: $json.hook_type, framework: $json.framework, format: $json.format, funnel_stage: $json.funnel_stage, platform: $json.platform, reference_video_url: $json.reference_video_url, pm_status: $json.pm_status, client_status: $json.client_status, overall_status: $json.overall_status } }) }}",
-          "options": {}
-        },
-        "id": "b9439c69-9b3f-4814-b625-14150c29559a",
-        "name": "Store Concepts in Airtable",
-        "type": "n8n-nodes-base.httpRequest",
-        "typeVersion": 4.2,
-        "position": [
-          10208,
-          96
-        ],
-        "credentials": {
-          "airtableTokenApi": {
-            "id": "WelvlJEjoHaI3l9G",
-            "name": "Airtable Personal Access Token account"
-          }
-        },
-        "onError": "continueRegularOutput"
-      },
-      {
-        "parameters": {
-          "method": "PATCH",
-          "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Projects/{{ $('Parse Concepts Output').first().json.project_id }}",
-          "authentication": "predefinedCredentialType",
-          "nodeCredentialType": "airtableTokenApi",
-          "sendBody": true,
-          "specifyBody": "json",
-          "jsonBody": "={{ JSON.stringify({ fields: { status: \"PM Review\" } }) }}",
-          "options": {}
-        },
-        "id": "217a1f8b-db68-4914-9cb2-054eacc81fc2",
-        "name": "Update Project — PM Review",
-        "type": "n8n-nodes-base.httpRequest",
-        "typeVersion": 4.2,
-        "position": [
-          10432,
-          96
-        ],
-        "credentials": {
-          "airtableTokenApi": {
-            "id": "WelvlJEjoHaI3l9G",
-            "name": "Airtable Personal Access Token account"
-          }
-        }
-      },
-      {
-        "parameters": {
-          "jsCode": "// ============================================================\n// Build Slack notification with concept summary + approval buttons\n// ============================================================\nconst data = $('Parse Concepts Output').first().json;\nconst brief = data.brief;\nconst concepts = data.concept_records;\nconst project_id = data.project_id;\n\nconst conceptSummary = concepts.map((c, i) => \n  `${i + 1}. *${c.concept_name}* (${c.framework} / ${c.format}) — Virality: ${c.virality_score}/10\\n   _\"${c.hook_text}\"_\\n   Pitch: ${c.concept_pitch}`\n).join('\\n\\n');\n\nconst slackBlocks = [\n  {\n    \"type\": \"header\",\n    \"text\": { \"type\": \"plain_text\", \"text\": `Concepts Ready for Review: ${brief.brand_name}` }\n  },\n  {\n    \"type\": \"section\",\n    \"text\": {\n      \"type\": \"mrkdwn\",\n      \"text\": `*${concepts.length} concepts generated for ${brief.client_code}*\\nClient: ${brief.client_name}\\nScripts ordered: ${brief.num_scripts} | Concepts presented: ${concepts.length}\\n\\n${conceptSummary}`\n    }\n  },\n  {\n    \"type\": \"divider\"\n  },\n  {\n    \"type\": \"section\",\n    \"text\": {\n      \"type\": \"mrkdwn\",\n      \"text\": \"Review concepts in Airtable, then approve or reject below.\"\n    }\n  },\n  {\n    \"type\": \"actions\",\n    \"elements\": [\n      {\n        \"type\": \"button\",\n        \"text\": { \"type\": \"plain_text\", \"text\": \"Approve All Concepts\" },\n        \"style\": \"primary\",\n        \"url\": `http://n8n-jeet.duckdns.org:5678/webhook/ugc-concept-approval?project_id=${project_id}&action=pm_approve`\n      },\n      {\n        \"type\": \"button\",\n        \"text\": { \"type\": \"plain_text\", \"text\": \"Review in Airtable\" },\n        \"url\": `https://airtable.com/appvFxwZc9yU8o8pK/Concepts?filter_project_id=${project_id}`\n      }\n    ]\n  }\n];\n\nreturn [{ json: {\n  project_id,\n  brief,\n  concept_count: concepts.length,\n  slack_blocks: JSON.stringify(slackBlocks),\n  slack_text: `${concepts.length} UGC concepts ready for PM review: ${brief.brand_name} (${brief.client_code})`\n} }];"
-        },
-        "id": "26ba7a95-b647-4540-991b-8e9588c93c4f",
-        "name": "Prepare Slack Notification",
-        "type": "n8n-nodes-base.code",
-        "typeVersion": 2,
-        "position": [
-          10656,
-          96
-        ]
-      },
-      {
-        "parameters": {
-          "select": "channel",
-          "channelId": {
-            "__rl": true,
-            "value": "C0AFBQ5UF0E",
-            "mode": "id"
-          },
-          "text": "={{ $json.slack_text }}",
-          "otherOptions": {}
-        },
-        "id": "f020bee8-0f93-4218-9c77-3cca96ccd15f",
-        "name": "Notify PM — Concepts Ready",
-        "type": "n8n-nodes-base.slack",
-        "typeVersion": 2.2,
-        "position": [
-          10880,
-          96
-        ],
-        "webhookId": "c6e79774-7b07-42c1-9345-bb7800c0bbfd",
-        "credentials": {
-          "slackApi": {
-            "id": "5Q37UpOjGx4YsbyC",
-            "name": "Slack account"
-          }
-        },
-        "onError": "continueRegularOutput"
-      },
-      {
-        "parameters": {
-          "respondWith": "json",
-          "responseBody": "={{ JSON.stringify({ status: 'success', phase: 'research_and_concepts', project_id: $json.project_id, brand: $json.brief.brand_name, client_code: $json.brief.client_code, concepts_generated: $json.concept_count, message: 'Research complete. Concepts stored in Airtable. PM notified for review.' }) }}",
-          "options": {}
-        },
-        "id": "c6135a46-9033-4edc-b5b5-66b61045e7d4",
-        "name": "Respond to Webhook",
-        "type": "n8n-nodes-base.respondToWebhook",
-        "typeVersion": 1.1,
-        "position": [
-          11104,
-          96
-        ]
-      },
-      {
-        "parameters": {
-          "jsCode": "const err = $input.first().json;\nlet brand = 'Unknown', code = 'N/A';\ntry { const b = $('Validate Brief').first().json.brief; brand = b.brand_name; code = b.client_code; } catch(e) {}\nreturn [{ json: { brand_name: brand, client_code: code, error_message: err.error?.message || err.message || 'Unknown', error_node: err.error?.node?.name || 'Unknown', created_at: new Date().toISOString() } }];"
-        },
-        "id": "cb611ba1-0e38-4b27-830d-51e55b1519be",
-        "name": "Handle Error",
-        "type": "n8n-nodes-base.code",
-        "typeVersion": 2,
-        "position": [
-          6160,
-          288
-        ]
-      },
-      {
-        "parameters": {
-          "select": "user",
-          "user": {
-            "__rl": true,
-            "value": "U06P9F49BJT",
-            "mode": "id"
-          },
-          "text": "={{ `Phase 1 (Research+Concepts) failed for ${$json.brand_name} (${$json.client_code}). Error: ${$json.error_message}. Node: ${$json.error_node}` }}",
-          "otherOptions": {}
-        },
-        "id": "cd2c87e1-984f-44a9-842a-59707d624578",
-        "name": "Error Slack DM",
-        "type": "n8n-nodes-base.slack",
-        "typeVersion": 2.2,
-        "position": [
-          6384,
-          288
-        ],
-        "webhookId": "5341edc3-ea03-4e25-af2a-0a5cefdd8f72",
-        "credentials": {
-          "slackApi": {
-            "id": "5Q37UpOjGx4YsbyC",
-            "name": "Slack account"
-          }
-        },
-        "onError": "continueRegularOutput"
-      },
-      {
-        "parameters": {
-          "respondWith": "json",
-          "responseBody": "={{ JSON.stringify({ status: 'error', phase: 'research_and_concepts', message: $json.error_message, client_code: $json.client_code }) }}",
-          "options": {
-            "responseCode": 200
-          }
-        },
-        "id": "aa85d4a3-f4f7-457a-bd50-3b26381c8730",
-        "name": "Respond 200 on Error",
-        "type": "n8n-nodes-base.respondToWebhook",
-        "typeVersion": 1.1,
-        "position": [
-          6608,
-          288
-        ]
-      },
-      {
-        "parameters": {
-          "mode": "runOnceForAllItems",
-          "jsCode": "const data = $input.first().json;\nconst brief = data.brief;\nconst competitors = (brief.competitors || '').split(',').map(c => c.trim()).filter(Boolean);\n\n// Search for product CATEGORY keywords (short, focused)\n// Meta Ad Library works best with 1-3 word queries\nconst terms = [];\n\n// Use product_feature but only first 3-4 words\nif (brief.product_feature) {\n  const words = brief.product_feature.split(/\\s+/).slice(0, 4).join(' ');\n  terms.push(words);\n}\n\n// Add industry keyword as fallback\nif (brief.industry) {\n  const industry = brief.industry.split(/\\s+/).slice(0, 2).join(' ');\n  if (!terms[0] || !terms[0].toLowerCase().includes(industry.toLowerCase())) {\n    terms.push(industry);\n  }\n}\n\n// Add valid competitor names\nconst skipTerms = ['no direct', 'none', 'n/a', 'not specified', 'not identified', 'no competitor'];\nfor (const comp of competitors) {\n  if (!skipTerms.some(s => comp.toLowerCase().includes(s))) {\n    terms.push(comp);\n  }\n}\n\n// Use first term only (Ad Library search works best with focused queries)\nconst searchTerms = terms[0] || 'product review';\n\nconst countryMap = {\n  'india': 'IN', 'us': 'US', 'usa': 'US', 'united states': 'US',\n  'uk': 'GB', 'united kingdom': 'GB', 'canada': 'CA',\n  'australia': 'AU', 'germany': 'DE', 'france': 'FR'\n};\nconst briefCountry = (brief.target_country || brief.country || 'IN').toLowerCase().trim();\nconst countryCode = countryMap[briefCountry] || briefCountry.toUpperCase().substring(0, 2) || 'IN';\n\nreturn [{ json: {\n  ...data,\n  meta_search_terms: searchTerms,\n  meta_country: countryCode,\n  competitor_names: competitors,\n  brand_name_lower: (brief.brand_name || '').toLowerCase()\n} }];"
-        },
-        "id": "w1-build-meta-ads-req",
-        "name": "Build Meta Ads Request",
-        "type": "n8n-nodes-base.code",
-        "typeVersion": 2,
-        "position": [
-          7056,
-          96
-        ]
-      },
-      {
-        "parameters": {
-          "method": "GET",
-          "url": "https://graph.facebook.com/v23.0/ads_archive",
-          "authentication": "predefinedCredentialType",
-          "nodeCredentialType": "facebookGraphApi",
-          "sendQuery": true,
-          "queryParameters": {
-            "parameters": [
-              {
-                "name": "search_terms",
-                "value": "={{ $json.meta_search_terms }}"
-              },
-              {
-                "name": "ad_reached_countries",
-                "value": "={{ '[\"' + $json.meta_country + '\"]' }}"
-              },
-              {
-                "name": "ad_active_status",
-                "value": "ACTIVE"
-              },
-              {
-                "name": "media_type",
-                "value": "VIDEO"
-              },
-              {
-                "name": "limit",
-                "value": "25"
-              },
-              {
-                "name": "fields",
-                "value": "ad_snapshot_url,page_name,ad_creative_bodies"
-              }
-            ]
-          },
-          "options": {
-            "timeout": 30000
-          }
-        },
-        "id": "w1-fetch-meta-ads",
-        "name": "Fetch Meta Ad Library",
-        "type": "n8n-nodes-base.httpRequest",
-        "typeVersion": 4.2,
-        "position": [
-          7280,
-          96
-        ],
-        "credentials": {
-          "facebookGraphApi": {
-            "id": "G4AHd7ZseuLWhZkk",
-            "name": "Facebook Graph account"
-          }
-        },
-        "onError": "continueRegularOutput"
-      },
-      {
-        "parameters": {
-          "mode": "runOnceForAllItems",
-          "jsCode": "const data = $('Build Meta Ads Request').first().json;\nconst allResults = data.allResults;\nconst metaResponse = $input.first().json;\nconst brandNameLower = data.brand_name_lower || '';\n\n// Parse Meta Ad Library response — only specific ad snapshots\nconst metaAds = [];\nconst adData = metaResponse.data || [];\nfor (const ad of adData.slice(0, 25)) {\n  // Skip brand's own ads\n  const pageName = (ad.page_name || '').toLowerCase();\n  if (brandNameLower && pageName.includes(brandNameLower)) continue;\n\n  const snapshotUrl = ad.ad_snapshot_url || '';\n  if (!snapshotUrl) continue;\n\n  metaAds.push({\n    title: ad.page_name || 'Competitor Ad',\n    url: snapshotUrl,\n    body: Array.isArray(ad.ad_creative_bodies) ? ad.ad_creative_bodies[0] || '' : '',\n    platform: 'Facebook',\n    type: 'Paid Ad'\n  });\n}\n\nallResults.meta_ad_library = metaAds;\n\nreturn [{ json: { allResults, brief: data.brief, project_id: data.project_id } }];"
-        },
-        "id": "w1-parse-meta-ads",
-        "name": "Parse Meta Ads",
-        "type": "n8n-nodes-base.code",
-        "typeVersion": 2,
-        "position": [
-          7504,
-          96
-        ]
-      }
-    ],
-    "connections": {
-      "Webhook — Phase 1": {
-        "main": [
-          [
-            {
-              "node": "Extract Client Code",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Manual Trigger — Test": {
-        "main": [
-          [
-            {
-              "node": "Set Test Data",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Set Test Data": {
-        "main": [
-          [
-            {
-              "node": "Extract Client Code",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Extract Client Code": {
-        "main": [
-          [
-            {
-              "node": "Fetch Client Brief",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Fetch Client Brief": {
-        "main": [
-          [
-            {
-              "node": "Validate Brief",
-              "type": "main",
-              "index": 0
-            }
-          ],
-          [
-            {
-              "node": "Handle Error",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Validate Brief": {
-        "main": [
-          [
-            {
-              "node": "Create Project in Airtable",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Create Project in Airtable": {
-        "main": [
-          [
-            {
-              "node": "Build Research Prompt",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Build Research Prompt": {
-        "main": [
-          [
-            {
-              "node": "Research Analyst Agent",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "GPT-4o-mini — Research": {
-        "ai_languageModel": [
-          [
-            {
-              "node": "Research Analyst Agent",
-              "type": "ai_languageModel",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Tool_Read_Website": {
-        "ai_tool": [
-          [
-            {
-              "node": "Research Analyst Agent",
-              "type": "ai_tool",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Tool_Google_Search": {
-        "ai_tool": [
-          [
-            {
-              "node": "Research Analyst Agent",
-              "type": "ai_tool",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Tool_Reddit_Search": {
-        "ai_tool": [
-          [
-            {
-              "node": "Research Analyst Agent",
-              "type": "ai_tool",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Tool_Amazon_Review_Search": {
-        "ai_tool": [
-          [
-            {
-              "node": "Research Analyst Agent",
-              "type": "ai_tool",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Tool_Competitor_Ad_Search": {
-        "ai_tool": [
-          [
-            {
-              "node": "Research Analyst Agent",
-              "type": "ai_tool",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Tool_TikTok_Viral_Search": {
-        "ai_tool": [
-          [
-            {
-              "node": "Research Analyst Agent",
-              "type": "ai_tool",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Tool_Meta_Ad_Library_Search": {
-        "ai_tool": [
-          [
-            {
-              "node": "Research Analyst Agent",
-              "type": "ai_tool",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Tool_Instagram_Viral_Search": {
-        "ai_tool": [
-          [
-            {
-              "node": "Research Analyst Agent",
-              "type": "ai_tool",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Research Analyst Agent": {
-        "main": [
-          [
-            {
-              "node": "Parse Research Output",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Parse Research Output": {
-        "main": [
-          [
-            {
-              "node": "Split Research Records",
-              "type": "main",
-              "index": 0
-            },
-            {
-              "node": "Split Reference Records",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Split Research Records": {
-        "main": [
-          [
-            {
-              "node": "Store Research in Airtable",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Split Reference Records": {
-        "main": [
-          [
-            {
-              "node": "Store References in Airtable",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Store Research in Airtable": {
-        "main": [
-          [
-            {
-              "node": "Merge Store Results",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Store References in Airtable": {
-        "main": [
-          [
-            {
-              "node": "Merge Store Results",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Merge Store Results": {
-        "main": [
-          [
-            {
-              "node": "Update Project — Concepts Pending",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Update Project — Concepts Pending": {
-        "main": [
-          [
-            {
-              "node": "Build Strategy Prompt",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Build Strategy Prompt": {
-        "main": [
-          [
-            {
-              "node": "Creative Strategist Agent",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "GPT-4o — Strategy": {
-        "ai_languageModel": [
-          [
-            {
-              "node": "Creative Strategist Agent",
-              "type": "ai_languageModel",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Creative Strategist Agent": {
-        "main": [
-          [
-            {
-              "node": "Parse Concepts Output",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Parse Concepts Output": {
-        "main": [
-          [
-            {
-              "node": "Split Concept Records",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Split Concept Records": {
-        "main": [
-          [
-            {
-              "node": "Store Concepts in Airtable",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Store Concepts in Airtable": {
-        "main": [
-          [
-            {
-              "node": "Update Project — PM Review",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Update Project — PM Review": {
-        "main": [
-          [
-            {
-              "node": "Prepare Slack Notification",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Prepare Slack Notification": {
-        "main": [
-          [
-            {
-              "node": "Notify PM — Concepts Ready",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Notify PM — Concepts Ready": {
-        "main": [
-          [
-            {
-              "node": "Respond to Webhook",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Handle Error": {
-        "main": [
-          [
-            {
-              "node": "Error Slack DM",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Error Slack DM": {
-        "main": [
-          [
-            {
-              "node": "Respond 200 on Error",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Execute All Searches": {
-        "main": [
-          [
-            {
-              "node": "Build Meta Ads Request",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Build Meta Ads Request": {
-        "main": [
-          [
-            {
-              "node": "Fetch Meta Ad Library",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Fetch Meta Ad Library": {
-        "main": [
-          [
-            {
-              "node": "Parse Meta Ads",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Parse Meta Ads": {
-        "main": [
-          [
-            {
-              "node": "Build Analysis Request",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      }
-    },
-    "authors": "SenseInfo Tech",
-    "name": null,
-    "description": null,
-    "autosaved": false,
-    "workflowPublishHistory": [
-      {
-        "createdAt": "2026-02-17T13:40:16.608Z",
-        "id": 98,
-        "workflowId": "RLi-u9gL1aQ7Bl37TSidA",
-        "versionId": "08f10390-9d69-4887-8bd4-e5e8d9813650",
-        "event": "activated",
-        "userId": "ed50a507-d93d-45c3-9412-d80babb81dd0"
-      },
-      {
-        "createdAt": "2026-02-17T13:40:18.173Z",
-        "id": 99,
-        "workflowId": "RLi-u9gL1aQ7Bl37TSidA",
-        "versionId": "08f10390-9d69-4887-8bd4-e5e8d9813650",
-        "event": "activated",
-        "userId": "ed50a507-d93d-45c3-9412-d80babb81dd0"
-      }
-    ]
-  }
+  "staticData": null
 }

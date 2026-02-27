@@ -1,0 +1,579 @@
+{
+  "name": "Content Repurposing Engine",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "repurpose",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "rep-00000001",
+      "name": "rep-webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 300],
+      "webhookId": "repurpose-wh"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || {};\nconst query = $input.first().json.query || {};\n\nconst scriptId = body.script_id || query.script_id || '';\nconst variations = body.variations || query.variations || 'all';\n// variations: 'all', 'hooks', 'lengths', 'angles'\n\nif (!scriptId) {\n  throw new Error('script_id is required');\n}\n\nreturn [{ json: { script_id: scriptId, variations } }];"
+      },
+      "id": "rep-00000002",
+      "name": "rep-parse",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [400, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tbl2D9mapezLKMPg7/{{ $json.script_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "rep-00000003",
+      "name": "rep-fetch-script",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [600, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "a0TTu3NVsuJUEbct",
+          "name": "Airtable PAT Header"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblAfe1LYh8kHPVbP?filterByFormula=AND(%7Bactive%7D%3DTRUE()%2C+OR(%7Bcategory%7D%3D'hook_patterns'%2C+%7Bcategory%7D%3D'content_format'%2C+%7Bcategory%7D%3D'audience_insight'%2C+%7Bcategory%7D%3D'creative_strategy'))&sort%5B0%5D%5Bfield%5D=confidence&sort%5B0%5D%5Bdirection%5D=desc&maxRecords=10",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "rep-00000010",
+      "name": "rep-fetch-learnings",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [800, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "a0TTu3NVsuJUEbct",
+          "name": "Airtable PAT Header"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblEkb2WGoh407zEn?maxRecords=10",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "rep-00000011",
+      "name": "rep-fetch-brand",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1000, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "a0TTu3NVsuJUEbct",
+          "name": "Airtable PAT Header"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const parseData = $('rep-parse').first().json;\nconst scriptRecord = $('rep-fetch-script').first().json;\nconst fields = scriptRecord.fields || {};\n\n// Get learnings\nlet learnings = [];\ntry {\n  const lr = $('rep-fetch-learnings').first().json;\n  learnings = (lr.records || []).map(r => ({\n    category: r.fields?.category || '',\n    title: r.fields?.title || '',\n    insight: r.fields?.insight || '',\n    confidence: r.fields?.confidence || 0\n  }));\n} catch(e) {}\n\n// Get brand voice\nlet brandVoice = '';\nlet brandName = '';\ntry {\n  const brands = $('rep-fetch-brand').first().json;\n  const projectIds = fields.project_id || [];\n  const projectId = Array.isArray(projectIds) ? projectIds[0] : projectIds;\n  \n  // Try to match brand via project - for now just get all brands and use first match\n  // In practice, the brand_voice field on the script's project would link to a brand\n  if (brands.records && brands.records.length > 0) {\n    for (const b of brands.records) {\n      if (b.fields?.brand_voice) {\n        brandVoice = b.fields.brand_voice;\n        brandName = b.fields?.brand_name || b.fields?.name || '';\n        break; // Use first brand with voice data\n      }\n    }\n  }\n} catch(e) {}\n\nreturn [{ json: {\n  script_id: scriptRecord.id,\n  variations: parseData.variations,\n  project_id: (fields.project_id || [])[0] || '',\n  concept_id: (fields.concept_id || [])[0] || '',\n  full_script: fields.full_script || '',\n  hook: fields.hook || '',\n  hook_1: fields.hook_1 || '',\n  hook_2: fields.hook_2 || '',\n  hook_3: fields.hook_3 || '',\n  hook_reinforcement: fields.hook_reinforcement || '',\n  problem: fields.problem || '',\n  solution: fields.solution || '',\n  proof: fields.proof || '',\n  cta: fields.cta || '',\n  visual_direction: fields.visual_direction || '',\n  on_screen_text: fields.on_screen_text || '',\n  creator_notes: fields.creator_notes || '',\n  estimated_duration: fields.estimated_duration || '',\n  concept_story: fields.concept_story || '',\n  creative_table_json: fields.creative_table_json || '',\n  script_number: fields.script_number || '',\n  qa_score: fields.qa_score || 0,\n  system_learnings: learnings,\n  brand_voice: brandVoice,\n  brand_name: brandName\n}}];"
+      },
+      "id": "rep-00000004",
+      "name": "rep-merge-context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const s = $input.first().json;\n\n// Format system learnings for prompt injection\nlet learningsBlock = '';\nif (s.system_learnings && s.system_learnings.length > 0) {\n  learningsBlock = '\\n\\n== SYSTEM LEARNINGS (proven patterns from past campaigns) ==\\n';\n  for (const l of s.system_learnings) {\n    learningsBlock += `- [${l.category}] ${l.title}: ${l.insight} (confidence: ${l.confidence}/10)\\n`;\n  }\n  learningsBlock += '\\nApply these learnings where relevant. Prioritize high-confidence insights.\\n';\n}\n\n// Format brand voice DNA\nlet brandVoiceBlock = '';\nif (s.brand_voice) {\n  let voiceData = s.brand_voice;\n  // If it's a JSON string, try to make it readable\n  try {\n    const parsed = JSON.parse(voiceData);\n    voiceData = JSON.stringify(parsed, null, 2);\n  } catch(e) {\n    // Already a string, use as-is\n  }\n  brandVoiceBlock = `\\n\\n== BRAND VOICE DNA${s.brand_name ? ' (' + s.brand_name + ')' : ''} ==\\n${voiceData}\\n\\nEvery variation MUST match this brand voice. The tone, vocabulary, and personality should feel consistent with the brand identity above.\\n`;\n}\n\nconst systemPrompt = `You are a senior UGC ad creative director. You take winning ad scripts and create variations that test different angles, hooks, lengths, and energy levels.\n\nYou know that the #1 driver of ad performance is the HOOK — the first 3 seconds. Different hooks attract different segments of the same audience. You also know that shorter ads often outperform longer ones on Meta/TikTok, and that the same product story can be told through completely different angles.\n\nRULES:\n- Every variation must be a COMPLETE, ready-to-film script. Not an outline.\n- Each hook must use a genuinely DIFFERENT psychological trigger — not the same idea reworded.\n- Keep the core product truth the same. Change the angle, not the facts.\n- Write like a real person talks. No marketing jargon.\n- Each script variation should specify: hook (first 3 sec), body, CTA, estimated duration, and creator energy note.\n\nBANNED PHRASES (never use these — they are overused and destroy authenticity):\n- \"game-changer\"\n- \"literally obsessed\"\n- \"I can't believe\"\n- \"you need this\"\n- \"trust me\"\n- \"not sponsored\" (when it is)\n- \"best thing ever\"\n- \"life-changing\"\n\nHOOK DIFFERENTIATION RULES:\n- Curiosity hook: Must create an information gap. Use specificity (numbers, unexpected details).\n- Controversy hook: Must challenge a common belief or industry norm. Should feel like a hot take, not clickbait.\n- Story hook: Must start mid-action or mid-emotion. Never start with \"So I was...\" — drop us INTO the moment.${learningsBlock}${brandVoiceBlock}`;\n\nconst userPrompt = `Here's a winning ad script. Create variations.\n\n== ORIGINAL SCRIPT ==\nHook: ${s.hook}\nHook variations: ${s.hook_1} / ${s.hook_2} / ${s.hook_3}\nHook reinforcement: ${s.hook_reinforcement}\nProblem: ${s.problem}\nSolution: ${s.solution}\nProof: ${s.proof}\nCTA: ${s.cta}\nVisual direction: ${s.visual_direction}\nCreator notes: ${s.creator_notes}\nDuration: ${s.estimated_duration}\nConcept: ${s.concept_story}\n\nFull script:\n${s.full_script}\n\n== CREATE THESE VARIATIONS ==\n\n1. THREE NEW HOOKS (keep body + CTA same, just swap the opening 3 seconds):\n   - Curiosity hook: Open with a question or mystery that makes them NEED to watch\n   - Controversy hook: Open with a bold claim or hot take that stops the scroll\n   - Story hook: Open with a personal \"I\" story that pulls them in emotionally\n\n2. TWO LENGTH VARIANTS:\n   - 15-second version: Hook + one key benefit + CTA. That's it. Ruthlessly short.\n   - 45-second version: Full story arc. Hook + problem + solution + proof + CTA with room to breathe.\n\n3. TWO ANGLE VARIANTS (same product, completely different approach):\n   - \"Friend recommending\" angle: Casual, like texting a friend about something you found\n   - \"Skeptic converted\" angle: Start doubting the product, show the moment you changed your mind\n\nReturn ONLY valid JSON (no markdown fences):\n{\n  \"original_hook\": \"${s.hook.replace(/\"/g, \"'\")}\",\n  \"new_hooks\": [\n    {\n      \"type\": \"curiosity\",\n      \"hook_text\": \"The actual words the creator says in first 3 seconds\",\n      \"why_it_works\": \"One sentence on why this hook stops the scroll\"\n    },\n    {\n      \"type\": \"controversy\",\n      \"hook_text\": \"...\",\n      \"why_it_works\": \"...\"\n    },\n    {\n      \"type\": \"story\",\n      \"hook_text\": \"...\",\n      \"why_it_works\": \"...\"\n    }\n  ],\n  \"length_variants\": [\n    {\n      \"duration\": \"15s\",\n      \"full_script\": \"Complete 15-second script — every word the creator says\",\n      \"visual_notes\": \"What's on screen\",\n      \"energy\": \"Fast, punchy, confident\"\n    },\n    {\n      \"duration\": \"45s\",\n      \"full_script\": \"Complete 45-second script — every word\",\n      \"visual_notes\": \"What's on screen\",\n      \"energy\": \"Conversational, storytelling pace\"\n    }\n  ],\n  \"angle_variants\": [\n    {\n      \"angle\": \"friend_recommending\",\n      \"full_script\": \"Complete script — casual friend energy\",\n      \"hook\": \"Opening line\",\n      \"cta\": \"Closing line\",\n      \"visual_notes\": \"Setting and vibe\",\n      \"duration\": \"30s\",\n      \"energy\": \"Casual, genuine, like a voice note to your bestie\"\n    },\n    {\n      \"angle\": \"skeptic_converted\",\n      \"full_script\": \"Complete script — starts skeptical, ends convinced\",\n      \"hook\": \"Opening line\",\n      \"cta\": \"Closing line\",\n      \"visual_notes\": \"Setting and vibe\",\n      \"duration\": \"30s\",\n      \"energy\": \"Honest, relatable, the turning point is the climax\"\n    }\n  ]\n}`;\n\nreturn [{ json: {\n  ...s,\n  requestBody: {\n    systemInstruction: { parts: [{ text: systemPrompt }] },\n    contents: [{ role: 'user', parts: [{ text: userPrompt }] }],\n    generationConfig: { temperature: 0.85, maxOutputTokens: 8192 }\n  }\n}}];"
+      },
+      "id": "rep-00000005",
+      "name": "rep-build-prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1400, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.requestBody) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "rep-00000006",
+      "name": "rep-gemini",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1600, 300],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "rIL63TG4xfMQL8uJ",
+          "name": "Cosmisk AI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const geminiText = $input.first().json.candidates?.[0]?.content?.parts?.[0]?.text || '';\nconst original = $('rep-merge-context').first().json;\n\n// Parse the generation output\nlet cleaned = geminiText.replace(/^```json\\s*/i, '').replace(/^```\\s*/m, '').replace(/\\s*```\\s*$/m, '').trim();\n\nlet variations = {};\ntry {\n  variations = JSON.parse(cleaned);\n} catch(e) {\n  const match = cleaned.match(/\\{[\\s\\S]*\\}/);\n  if (match) {\n    try { variations = JSON.parse(match[0]); } catch(e2) {\n      let salvage = match[0].replace(/,\\s*$/, '');\n      let ob = (salvage.match(/\\{/g)||[]).length;\n      let cb = (salvage.match(/\\}/g)||[]).length;\n      let oB = (salvage.match(/\\[/g)||[]).length;\n      let cB = (salvage.match(/\\]/g)||[]).length;\n      for (let i=0;i<oB-cB;i++) salvage+=']';\n      for (let i=0;i<ob-cb;i++) salvage+='}';\n      try { variations = JSON.parse(salvage); } catch(e3) {\n        variations = { error: 'parse failed', raw: geminiText.substring(0,2000) };\n      }\n    }\n  }\n}\n\n// Build evaluation prompt\nconst hooks = variations.new_hooks || [];\nconst lengths = variations.length_variants || [];\nconst angles = variations.angle_variants || [];\n\nlet variationsSummary = 'VARIATIONS TO EVALUATE:\\n\\n';\n\nfor (let i = 0; i < hooks.length; i++) {\n  variationsSummary += `--- Hook Variation ${i+1} (${hooks[i].type}) ---\\n`;\n  variationsSummary += `Hook: ${hooks[i].hook_text}\\n`;\n  variationsSummary += `Why: ${hooks[i].why_it_works}\\n\\n`;\n}\nfor (let i = 0; i < lengths.length; i++) {\n  variationsSummary += `--- Length Variation (${lengths[i].duration}) ---\\n`;\n  variationsSummary += `Script: ${lengths[i].full_script}\\n`;\n  variationsSummary += `Energy: ${lengths[i].energy}\\n\\n`;\n}\nfor (let i = 0; i < angles.length; i++) {\n  variationsSummary += `--- Angle Variation (${angles[i].angle}) ---\\n`;\n  variationsSummary += `Hook: ${angles[i].hook}\\n`;\n  variationsSummary += `Script: ${angles[i].full_script}\\n`;\n  variationsSummary += `Energy: ${angles[i].energy}\\n\\n`;\n}\n\n// Brand voice context for evaluation\nlet brandContext = '';\nif (original.brand_voice) {\n  brandContext = `\\n\\nBRAND VOICE DNA:\\n${original.brand_voice}\\n`;\n}\n\nconst evalSystemPrompt = `You are a ruthless ad creative QA evaluator. You score UGC ad script variations on strict criteria. You do NOT give generous scores — a 7 means \"good enough to test\", an 8 means \"strong\", a 9 means \"exceptional\". Most scripts should score 6-8.`;\n\nconst evalUserPrompt = `Evaluate each of these 7 ad script variations against the original script.\n\nORIGINAL SCRIPT:\nHook: ${original.hook}\nFull script: ${original.full_script}\nBrand: ${original.brand_name || 'Unknown'}${brandContext}\n\n${variationsSummary}\n\nScore each variation on these 5 criteria (1-10 scale):\n1. hook_strength: Does the hook stop the scroll in 3 seconds? Is it specific, not generic?\n2. authenticity: Does it sound like a real person talking, not a marketer? Would you skip this ad?\n3. brand_alignment: Does it match the brand voice DNA? (If no brand voice provided, score on general consistency)\n4. differentiation: Is this genuinely different from the original and other variations? Or just a rewording?\n5. production_feasibility: Can a solo creator actually film this with a phone? No unrealistic setups.\n\nFor each WEAK variation (average score < 7), explain specifically:\n- What's wrong\n- How to fix it\n- What psychological trigger or angle would work better\n\nReturn ONLY valid JSON (no markdown fences):\n{\n  \"evaluations\": [\n    {\n      \"variation_index\": 0,\n      \"variation_type\": \"hook_curiosity\",\n      \"scores\": {\n        \"hook_strength\": 8,\n        \"authenticity\": 7,\n        \"brand_alignment\": 8,\n        \"differentiation\": 7,\n        \"production_feasibility\": 9\n      },\n      \"avg_score\": 7.8,\n      \"is_weak\": false,\n      \"weakness_feedback\": \"\"\n    }\n  ],\n  \"overall_assessment\": \"One sentence summary of quality\",\n  \"weak_count\": 0\n}`;\n\nreturn [{ json: {\n  generatedVariations: variations,\n  originalContext: original,\n  evalRequestBody: {\n    systemInstruction: { parts: [{ text: evalSystemPrompt }] },\n    contents: [{ role: 'user', parts: [{ text: evalUserPrompt }] }],\n    generationConfig: { temperature: 0.3, maxOutputTokens: 4096, thinkingConfig: { thinkingBudget: 0 } }\n  }\n}}];"
+      },
+      "id": "rep-00000012",
+      "name": "rep-build-eval-prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1800, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.evalRequestBody) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "rep-00000013",
+      "name": "rep-gemini-eval",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2000, 300],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "rIL63TG4xfMQL8uJ",
+          "name": "Cosmisk AI"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const evalText = $input.first().json.candidates?.[0]?.content?.parts?.[0]?.text || '';\nconst upstream = $('rep-build-eval-prompt').first().json;\nconst generatedVariations = upstream.generatedVariations;\nconst originalContext = upstream.originalContext;\n\n// Parse evaluation JSON\nlet cleaned = evalText.replace(/^```json\\s*/i, '').replace(/^```\\s*/m, '').replace(/\\s*```\\s*$/m, '').trim();\n\nlet evalResult = {};\ntry {\n  evalResult = JSON.parse(cleaned);\n} catch(e) {\n  const match = cleaned.match(/\\{[\\s\\S]*\\}/);\n  if (match) {\n    try { evalResult = JSON.parse(match[0]); } catch(e2) {\n      let salvage = match[0].replace(/,\\s*$/, '');\n      let ob = (salvage.match(/\\{/g)||[]).length;\n      let cb = (salvage.match(/\\}/g)||[]).length;\n      let oB = (salvage.match(/\\[/g)||[]).length;\n      let cB = (salvage.match(/\\]/g)||[]).length;\n      for (let i=0;i<oB-cB;i++) salvage+=']';\n      for (let i=0;i<ob-cb;i++) salvage+='}';\n      try { evalResult = JSON.parse(salvage); } catch(e3) {\n        // If eval parse fails entirely, pass everything through as-is\n        evalResult = { evaluations: [], weak_count: 0 };\n      }\n    }\n  }\n}\n\nconst evaluations = evalResult.evaluations || [];\nconst weakCount = evalResult.weak_count || evaluations.filter(e => e.is_weak).length;\n\n// Identify weak variations\nconst weakVariations = evaluations.filter(e => {\n  if (e.is_weak) return true;\n  if (e.avg_score && e.avg_score < 7) return true;\n  if (e.scores) {\n    const vals = Object.values(e.scores);\n    const avg = vals.reduce((a,b) => a+b, 0) / vals.length;\n    if (avg < 7) return true;\n  }\n  return false;\n});\n\nreturn [{ json: {\n  needsRetry: weakVariations.length > 0,\n  weakCount: weakVariations.length,\n  evaluations: evaluations,\n  weakVariations: weakVariations,\n  overallAssessment: evalResult.overall_assessment || '',\n  generatedVariations: generatedVariations,\n  originalContext: originalContext\n}}];"
+      },
+      "id": "rep-00000014",
+      "name": "rep-parse-eval",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2200, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "condition-retry",
+              "leftValue": "={{ $json.weakCount }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "rep-00000015",
+      "name": "rep-needs-retry",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2400, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst original = data.originalContext;\nconst variations = data.generatedVariations;\nconst weakVars = data.weakVariations || [];\nconst evaluations = data.evaluations || [];\n\n// Build the list of what needs fixing\nlet weakFeedback = 'WEAK VARIATIONS THAT NEED REWRITING:\\n\\n';\nfor (const w of weakVars) {\n  weakFeedback += `--- ${w.variation_type || 'Variation ' + w.variation_index} ---\\n`;\n  if (w.scores) {\n    weakFeedback += `Scores: hook_strength=${w.scores.hook_strength}, authenticity=${w.scores.authenticity}, brand_alignment=${w.scores.brand_alignment}, differentiation=${w.scores.differentiation}, production_feasibility=${w.scores.production_feasibility}\\n`;\n  }\n  weakFeedback += `Average: ${w.avg_score || 'N/A'}\\n`;\n  weakFeedback += `Feedback: ${w.weakness_feedback || 'Below threshold'}\\n\\n`;\n}\n\n// Identify which variations are strong (to keep)\nconst strongEvals = evaluations.filter(e => {\n  if (e.is_weak) return false;\n  if (e.avg_score && e.avg_score < 7) return false;\n  if (e.scores) {\n    const vals = Object.values(e.scores);\n    const avg = vals.reduce((a,b) => a+b, 0) / vals.length;\n    if (avg < 7) return false;\n  }\n  return true;\n});\n\n// Brand voice context\nlet brandContext = '';\nif (original.brand_voice) {\n  brandContext = `\\nBRAND VOICE DNA:\\n${original.brand_voice}\\n`;\n}\n\n// System learnings context\nlet learningsBlock = '';\nif (original.system_learnings && original.system_learnings.length > 0) {\n  learningsBlock = '\\nSYSTEM LEARNINGS:\\n';\n  for (const l of original.system_learnings) {\n    learningsBlock += `- [${l.category}] ${l.title}: ${l.insight}\\n`;\n  }\n}\n\nconst retrySystemPrompt = `You are a senior UGC ad creative director doing a revision pass. Some of the script variations you wrote scored below quality threshold. Rewrite ONLY the weak ones. Keep the strong ones exactly as they are.\n\nBANNED PHRASES: \"game-changer\", \"literally obsessed\", \"I can't believe\", \"you need this\", \"trust me\", \"not sponsored\", \"best thing ever\", \"life-changing\".\n\nEach hook must use a genuinely DIFFERENT psychological trigger. Write like a real person talks.${brandContext}${learningsBlock}`;\n\nconst retryUserPrompt = `ORIGINAL SCRIPT:\nHook: ${original.hook}\nFull script: ${original.full_script}\n\nCURRENT VARIATIONS (your first attempt):\n${JSON.stringify(variations, null, 2)}\n\n${weakFeedback}\n\nRewrite ONLY the weak variations listed above. Make them score 7+ on all criteria.\n\nReturn the COMPLETE set of all 7 variations — keep strong ones exactly as-is, replace weak ones with improved versions.\n\nReturn ONLY valid JSON (no markdown fences) in the exact same format:\n{\n  \"original_hook\": \"${(original.hook || '').replace(/\"/g, \"'\")}\",\n  \"new_hooks\": [\n    { \"type\": \"curiosity\", \"hook_text\": \"...\", \"why_it_works\": \"...\" },\n    { \"type\": \"controversy\", \"hook_text\": \"...\", \"why_it_works\": \"...\" },\n    { \"type\": \"story\", \"hook_text\": \"...\", \"why_it_works\": \"...\" }\n  ],\n  \"length_variants\": [\n    { \"duration\": \"15s\", \"full_script\": \"...\", \"visual_notes\": \"...\", \"energy\": \"...\" },\n    { \"duration\": \"45s\", \"full_script\": \"...\", \"visual_notes\": \"...\", \"energy\": \"...\" }\n  ],\n  \"angle_variants\": [\n    { \"angle\": \"friend_recommending\", \"full_script\": \"...\", \"hook\": \"...\", \"cta\": \"...\", \"visual_notes\": \"...\", \"duration\": \"30s\", \"energy\": \"...\" },\n    { \"angle\": \"skeptic_converted\", \"full_script\": \"...\", \"hook\": \"...\", \"cta\": \"...\", \"visual_notes\": \"...\", \"duration\": \"30s\", \"energy\": \"...\" }\n  ]\n}`;\n\nreturn [{ json: {\n  originalContext: original,\n  strongEvals: strongEvals,\n  firstPassVariations: variations,\n  retryRequestBody: {\n    systemInstruction: { parts: [{ text: retrySystemPrompt }] },\n    contents: [{ role: 'user', parts: [{ text: retryUserPrompt }] }],\n    generationConfig: { temperature: 0.75, maxOutputTokens: 8192 }\n  }\n}}];"
+      },
+      "id": "rep-00000016",
+      "name": "rep-build-retry-prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2600, 100]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.retryRequestBody) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "rep-00000017",
+      "name": "rep-gemini-retry",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2800, 100],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "rIL63TG4xfMQL8uJ",
+          "name": "Cosmisk AI"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const geminiText = $input.first().json.candidates?.[0]?.content?.parts?.[0]?.text || '';\nconst upstream = $('rep-build-retry-prompt').first().json;\nconst original = upstream.originalContext;\nconst firstPass = upstream.firstPassVariations;\n\n// Parse retry output\nlet cleaned = geminiText.replace(/^```json\\s*/i, '').replace(/^```\\s*/m, '').replace(/\\s*```\\s*$/m, '').trim();\n\nlet retryVariations = {};\ntry {\n  retryVariations = JSON.parse(cleaned);\n} catch(e) {\n  const match = cleaned.match(/\\{[\\s\\S]*\\}/);\n  if (match) {\n    try { retryVariations = JSON.parse(match[0]); } catch(e2) {\n      let salvage = match[0].replace(/,\\s*$/, '');\n      let ob = (salvage.match(/\\{/g)||[]).length;\n      let cb = (salvage.match(/\\}/g)||[]).length;\n      let oB = (salvage.match(/\\[/g)||[]).length;\n      let cB = (salvage.match(/\\]/g)||[]).length;\n      for (let i=0;i<oB-cB;i++) salvage+=']';\n      for (let i=0;i<ob-cb;i++) salvage+='}';\n      try { retryVariations = JSON.parse(salvage); } catch(e3) {\n        // If retry parse fails, fall back to first pass\n        retryVariations = firstPass;\n      }\n    }\n  }\n}\n\n// The retry prompt asked for the COMPLETE set with improvements merged in,\n// so retryVariations should have all 7. If parsing failed, fall back to firstPass.\nconst finalVariations = retryVariations.new_hooks ? retryVariations : firstPass;\n\nreturn [{ json: {\n  candidates: [{\n    content: {\n      parts: [{ text: JSON.stringify(finalVariations) }]\n    }\n  }]\n}}];"
+      },
+      "id": "rep-00000018",
+      "name": "rep-merge-final",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3000, 100]
+    },
+    {
+      "parameters": {
+        "jsCode": "const original = $('rep-merge-context').first().json;\n\n// Accept input from either the direct path (no retry needed) or the retry path\nconst inputData = $input.first().json;\n\n// Determine where the variations JSON comes from\nlet geminiText = '';\nif (inputData.candidates) {\n  // Coming from rep-merge-final (retry path) — already cleaned JSON in text\n  geminiText = inputData.candidates?.[0]?.content?.parts?.[0]?.text || '';\n} else if (inputData.generatedVariations) {\n  // Coming from rep-parse-eval via rep-needs-retry false path\n  geminiText = JSON.stringify(inputData.generatedVariations);\n} else {\n  // Fallback: try to parse as Gemini raw response\n  geminiText = inputData.candidates?.[0]?.content?.parts?.[0]?.text || JSON.stringify(inputData);\n}\n\n// Parse JSON\nlet cleaned = geminiText.replace(/^```json\\s*/i, '').replace(/^```\\s*/m, '').replace(/\\s*```\\s*$/m, '').trim();\n\nlet variations = {};\ntry {\n  variations = JSON.parse(cleaned);\n} catch(e) {\n  const match = cleaned.match(/\\{[\\s\\S]*\\}/);\n  if (match) {\n    try { variations = JSON.parse(match[0]); } catch(e2) {\n      let salvage = match[0].replace(/,\\s*$/, '');\n      let ob = (salvage.match(/\\{/g)||[]).length;\n      let cb = (salvage.match(/\\}/g)||[]).length;\n      let oB = (salvage.match(/\\[/g)||[]).length;\n      let cB = (salvage.match(/\\]/g)||[]).length;\n      for (let i=0;i<oB-cB;i++) salvage+=']';\n      for (let i=0;i<ob-cb;i++) salvage+='}';\n      try { variations = JSON.parse(salvage); } catch(e3) {\n        variations = { error: 'parse failed', raw: geminiText.substring(0,2000) };\n      }\n    }\n  }\n}\n\nconst hooks = variations.new_hooks || [];\nconst lengths = variations.length_variants || [];\nconst angles = variations.angle_variants || [];\n\n// Build Airtable records for each variation\nconst records = [];\nconst projectId = original.project_id;\nconst conceptId = original.concept_id;\nconst baseNum = original.script_number || '1';\n\n// Hook variations — create as new scripts with swapped hooks\nfor (let i = 0; i < hooks.length; i++) {\n  const h = hooks[i];\n  records.push({\n    fields: {\n      hook: h.hook_text,\n      hook_reinforcement: original.hook_reinforcement,\n      problem: original.problem,\n      solution: original.solution,\n      proof: original.proof,\n      cta: original.cta,\n      full_script: `[${h.type.toUpperCase()} HOOK]\\n${h.hook_text}\\n\\n${original.problem}\\n\\n${original.solution}\\n\\n${original.proof}\\n\\n${original.cta}`,\n      visual_direction: original.visual_direction,\n      creator_notes: `Repurposed: ${h.type} hook variant. ${h.why_it_works}`,\n      estimated_duration: original.estimated_duration,\n      concept_story: `[REPURPOSED - ${h.type} hook] ${original.concept_story}`,\n      script_number: `${baseNum}-H${i+1}`,\n      ...(projectId ? { project_id: [projectId] } : {}),\n      ...(conceptId ? { concept_id: [conceptId] } : {})\n    }\n  });\n}\n\n// Length variations\nfor (const lv of lengths) {\n  records.push({\n    fields: {\n      full_script: lv.full_script,\n      visual_direction: lv.visual_notes || '',\n      creator_notes: `Repurposed: ${lv.duration} version. Energy: ${lv.energy}`,\n      estimated_duration: lv.duration,\n      concept_story: `[REPURPOSED - ${lv.duration}] ${original.concept_story}`,\n      script_number: `${baseNum}-${lv.duration.replace('s','')}S`,\n      ...(projectId ? { project_id: [projectId] } : {}),\n      ...(conceptId ? { concept_id: [conceptId] } : {})\n    }\n  });\n}\n\n// Angle variations\nfor (const av of angles) {\n  records.push({\n    fields: {\n      hook: av.hook || '',\n      cta: av.cta || '',\n      full_script: av.full_script,\n      visual_direction: av.visual_notes || '',\n      creator_notes: `Repurposed: ${av.angle} angle. Energy: ${av.energy}`,\n      estimated_duration: av.duration || '30s',\n      concept_story: `[REPURPOSED - ${av.angle}] ${original.concept_story}`,\n      script_number: `${baseNum}-${av.angle.substring(0,3).toUpperCase()}`,\n      ...(projectId ? { project_id: [projectId] } : {}),\n      ...(conceptId ? { concept_id: [conceptId] } : {})\n    }\n  });\n}\n\n// Build Slack message\nconst slackLines = [\n  `*Content Repurposed: Script ${baseNum}*`,\n  `Original: ${(original.hook || '').substring(0, 80)}...`,\n  '',\n  `*New Hooks (${hooks.length}):*`\n];\nfor (const h of hooks) {\n  slackLines.push(`> *${h.type}*: ${h.hook_text}`);\n}\nslackLines.push('');\nslackLines.push(`*Length Variants (${lengths.length}):*`);\nfor (const lv of lengths) {\n  slackLines.push(`> *${lv.duration}*: ${(lv.full_script || '').substring(0, 100)}...`);\n}\nslackLines.push('');\nslackLines.push(`*Angle Variants (${angles.length}):*`);\nfor (const av of angles) {\n  slackLines.push(`> *${av.angle}*: ${(av.full_script || '').substring(0, 100)}...`);\n}\nslackLines.push('');\nslackLines.push(`_Total: ${records.length} new script variations created_`);\n\n// Check if this went through self-eval retry\ntry {\n  const evalData = $('rep-parse-eval').first().json;\n  if (evalData.weakCount > 0) {\n    slackLines.push(`_Self-eval: ${evalData.weakCount} weak variation(s) were auto-improved before publishing_`);\n  } else {\n    slackLines.push(`_Self-eval: All variations passed quality threshold on first pass_`);\n  }\n} catch(e) {\n  // eval node may not have run in this path\n}\n\n// Batch records (max 10 per Airtable request)\nconst batches = [];\nfor (let i = 0; i < records.length; i += 10) {\n  batches.push(records.slice(i, i + 10));\n}\n\nreturn [{ json: {\n  script_id: original.script_id,\n  variations_json: JSON.stringify(variations),\n  records: records,\n  batches: batches,\n  batch_count: batches.length,\n  total_variations: records.length,\n  slack_message: slackLines.join('\\n'),\n  hooks_summary: hooks.map(h => `${h.type}: ${h.hook_text}`).join(' | '),\n  original_hook: original.hook\n}}];"
+      },
+      "id": "rep-00000007",
+      "name": "rep-parse-variations",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3200, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tbl2D9mapezLKMPg7",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ records: $json.batches[0] || [] }) }}",
+        "options": {}
+      },
+      "id": "rep-00000008",
+      "name": "rep-create-scripts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3400, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "a0TTu3NVsuJUEbct",
+          "name": "Airtable PAT Header"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ JSON.stringify({ success: true, script_id: $json.script_id, total_variations: $json.total_variations, original_hook: $json.original_hook, hooks_summary: $json.hooks_summary, variations: JSON.parse($json.variations_json || '{}') }) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "rep-00000009",
+      "name": "rep-respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [3400, 400]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0AGF6SJNMD",
+          "mode": "id"
+        },
+        "text": "={{ $json.slack_message }}",
+        "otherOptions": {}
+      },
+      "id": "rep-0000000a",
+      "name": "rep-slack",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [3400, 550],
+      "credentials": {
+        "slackApi": {
+          "id": "5Q37UpOjGx4YsbyC",
+          "name": "Slack account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblGhzSJ5RXWDS8h8",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ records: [{ fields: { event_type: 'content_repurposed', source: 'repurposing_engine', details: JSON.stringify({ script_id: $json.script_id, total_variations: $json.total_variations }), status: 'unprocessed', created_at: new Date().toISOString() } }] }) }}",
+        "options": {}
+      },
+      "id": "rep-0000000b",
+      "name": "rep-write-event",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3400, 100],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "a0TTu3NVsuJUEbct",
+          "name": "Airtable PAT Header"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "content": "## Content Repurposing Engine v2 (Self-Evaluating Agent)\n\n**Webhook:** POST /repurpose\n**Body:** { script_id: 'recXXX' }\n\n**Pipeline:**\n1. Fetch script + System_Learnings + Brand Voice DNA\n2. Generate 7 variations (3 hooks, 2 lengths, 2 angles)\n3. **Self-evaluate** each variation on 5 criteria (1-10)\n4. If any variation scores < 7 avg, **auto-retry** with specific feedback\n5. Merge strong (first pass) + improved (retry) variations\n6. Store in Airtable + Slack notify\n\n**Anti-generic rules:** Banned phrases, unique psychological triggers per hook\n**System Learnings:** Pulls proven patterns from past campaigns\n**Brand Voice:** Ensures all variations match brand DNA",
+        "width": 440,
+        "height": 320
+      },
+      "id": "rep-0000000c",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [200, 480]
+    }
+  ],
+  "connections": {
+    "rep-webhook": {
+      "main": [
+        [
+          {
+            "node": "rep-parse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "rep-parse": {
+      "main": [
+        [
+          {
+            "node": "rep-fetch-script",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "rep-fetch-script": {
+      "main": [
+        [
+          {
+            "node": "rep-fetch-learnings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "rep-fetch-learnings": {
+      "main": [
+        [
+          {
+            "node": "rep-fetch-brand",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "rep-fetch-brand": {
+      "main": [
+        [
+          {
+            "node": "rep-merge-context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "rep-merge-context": {
+      "main": [
+        [
+          {
+            "node": "rep-build-prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "rep-build-prompt": {
+      "main": [
+        [
+          {
+            "node": "rep-gemini",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "rep-gemini": {
+      "main": [
+        [
+          {
+            "node": "rep-build-eval-prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "rep-build-eval-prompt": {
+      "main": [
+        [
+          {
+            "node": "rep-gemini-eval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "rep-gemini-eval": {
+      "main": [
+        [
+          {
+            "node": "rep-parse-eval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "rep-parse-eval": {
+      "main": [
+        [
+          {
+            "node": "rep-needs-retry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "rep-needs-retry": {
+      "main": [
+        [
+          {
+            "node": "rep-build-retry-prompt",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "rep-parse-variations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "rep-build-retry-prompt": {
+      "main": [
+        [
+          {
+            "node": "rep-gemini-retry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "rep-gemini-retry": {
+      "main": [
+        [
+          {
+            "node": "rep-merge-final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "rep-merge-final": {
+      "main": [
+        [
+          {
+            "node": "rep-parse-variations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "rep-parse-variations": {
+      "main": [
+        [
+          {
+            "node": "rep-create-scripts",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "rep-respond",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "rep-slack",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "rep-write-event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": null
+}

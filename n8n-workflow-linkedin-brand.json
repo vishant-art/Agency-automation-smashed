@@ -1,0 +1,773 @@
+{
+  "name": "LinkedIn Personal Brand Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 3 * * *"
+            }
+          ]
+        }
+      },
+      "id": "lb-schedule",
+      "name": "Schedule — Daily 3 AM UTC",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "linkedin-brand",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "lb-webhook",
+      "name": "Webhook — LinkedIn Brand",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 300],
+      "webhookId": "linkedin-brand-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\n// Webhook requests have headers; schedule triggers don't\nif (input.headers) {\n  // Webhook source\n  const body = input.body || {};\n  return [{ json: { topic: body.topic || null, pillar: body.pillar || null, source: 'webhook' } }];\n} else {\n  // Schedule source\n  return [{ json: { topic: null, pillar: null, source: 'schedule' } }];\n}"
+      },
+      "id": "lb-set-defaults",
+      "name": "Set Defaults",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [260, 150]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tbl9hLdiwip66slEJ",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "specifyQuery": "keypair",
+        "queryParameters": {
+          "parameters": [
+            { "name": "filterByFormula", "value": "{status}='posted'" },
+            { "name": "sort[0][field]", "value": "likes" },
+            { "name": "sort[0][direction]", "value": "desc" },
+            { "name": "maxRecords", "value": "10" }
+          ]
+        },
+        "options": { "timeout": 15000 }
+      },
+      "id": "lb-fetch-top-posts",
+      "name": "Fetch Top Posts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [520, 150],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "a0TTu3NVsuJUEbct",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblFYxSuiwbeY3Pny",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "specifyQuery": "keypair",
+        "queryParameters": {
+          "parameters": [
+            { "name": "filterByFormula", "value": "{active}=TRUE()" },
+            { "name": "maxRecords", "value": "20" }
+          ]
+        },
+        "options": { "timeout": 15000 }
+      },
+      "id": "lb-fetch-learnings",
+      "name": "Fetch Brand Learnings",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [740, 150],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "a0TTu3NVsuJUEbct",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblGhzSJ5RXWDS8h8",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "specifyQuery": "keypair",
+        "queryParameters": {
+          "parameters": [
+            { "name": "filterByFormula", "value": "IS_AFTER({created_at},DATEADD(NOW(),-48,'hours'))" },
+            { "name": "sort[0][field]", "value": "created_at" },
+            { "name": "sort[0][direction]", "value": "desc" },
+            { "name": "maxRecords", "value": "20" }
+          ]
+        },
+        "options": { "timeout": 15000 }
+      },
+      "id": "lb-fetch-events",
+      "name": "Fetch Recent Events",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [960, 150],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "a0TTu3NVsuJUEbct",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const apiKey = 'b183c082b67f0971673dbab7ce0a14883f75e5012d09720d17c540efce67bc39';\n\nconst aiQuery = encodeURIComponent('\"AI agents\" OR \"Claude AI\" OR \"AI automation\" news today');\nconst mktQuery = encodeURIComponent('\"UGC ads\" OR \"AI marketing\" OR \"AI ads\" latest');\n\nconst [aiResp, mktResp] = await Promise.all([\n  this.helpers.httpRequest({\n    method: 'GET',\n    url: 'https://serpapi.com/search.json?engine=google&q=' + aiQuery + '&num=5&api_key=' + apiKey,\n    json: true\n  }),\n  this.helpers.httpRequest({\n    method: 'GET',\n    url: 'https://serpapi.com/search.json?engine=google&q=' + mktQuery + '&num=5&api_key=' + apiKey,\n    json: true\n  })\n]);\n\nconst results = [];\n\nconst aiOrganic = (aiResp.organic_results || []).slice(0, 4);\nfor (const r of aiOrganic) {\n  results.push({ title: r.title || '', snippet: r.snippet || '', link: r.link || '' });\n}\n\nconst aiVideos = (aiResp.inline_videos || []).slice(0, 2);\nfor (const v of aiVideos) {\n  results.push({ title: v.title || '', snippet: v.channel || '', link: v.link || '' });\n}\n\nconst mktOrganic = (mktResp.organic_results || []).slice(0, 3);\nfor (const r of mktOrganic) {\n  results.push({ title: r.title || '', snippet: r.snippet || '', link: r.link || '' });\n}\n\nreturn [{ json: { ai_news: results.slice(0, 8) } }];"
+      },
+      "id": "lb-scan-news",
+      "name": "Scan AI News",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1180, 150]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblAfe1LYh8kHPVbP",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "specifyQuery": "keypair",
+        "queryParameters": {
+          "parameters": [
+            { "name": "filterByFormula", "value": "{active}=TRUE()" },
+            { "name": "sort[0][field]", "value": "confidence" },
+            { "name": "sort[0][direction]", "value": "desc" },
+            { "name": "maxRecords", "value": "10" }
+          ]
+        },
+        "options": { "timeout": 15000 }
+      },
+      "id": "lb-fetch-sys-learnings",
+      "name": "Fetch System Learnings",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1400, 150],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "a0TTu3NVsuJUEbct",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const topPostsData = $('Fetch Top Posts').first().json;\nconst learningsData = $('Fetch Brand Learnings').first().json;\nconst eventsData = $('Fetch Recent Events').first().json;\nconst newsData = $('Scan AI News').first().json;\nconst sysLearningsData = $('Fetch System Learnings').first().json;\nconst defaults = $('Set Defaults').first().json;\n\nconst topPosts = (topPostsData.records || []).map(r => ({\n  pillar: r.fields.content_pillar,\n  format: r.fields.post_format,\n  text: r.fields.draft_text,\n  likes: r.fields.likes || 0,\n  comments: r.fields.comments_count || 0,\n  impressions: r.fields.impressions || 0\n}));\n\nconst learnings = (learningsData.records || []).map(r => ({\n  category: r.fields.category,\n  insight: r.fields.insight\n}));\n\nconst events = (eventsData.records || []).map(r => ({\n  agent: r.fields.agent,\n  event_type: r.fields.event_type,\n  details: r.fields.details,\n  created_at: r.fields.created_at\n}));\n\nconst aiNews = newsData.ai_news || [];\n\nconst systemLearnings = (sysLearningsData.records || []).map(r => ({\n  source: r.fields.source_agent,\n  category: r.fields.category,\n  insight: r.fields.insight,\n  confidence: r.fields.confidence\n}));\n\n// Pillar rotation\nconst pillars = ['AI_Builds', 'Paid_Media', 'Teaching', 'Vision', 'Trend_Commentary', 'Case_Study'];\nconst recentPillars = topPosts.slice(0, 7).map(p => p.pillar).filter(Boolean);\nconst pillarCounts = {};\npillars.forEach(p => { pillarCounts[p] = recentPillars.filter(rp => rp === p).length; });\nconst selectedPillar = defaults.pillar || pillars.reduce((a, b) => pillarCounts[a] <= pillarCounts[b] ? a : b);\n\n// Format rotation\nconst formats = ['Story', 'Data_Insight', 'Hot_Take', 'Tutorial', 'Behind_The_Scenes', 'Thread', 'Carousel_Outline'];\nconst recentFormats = topPosts.slice(0, 7).map(p => p.format).filter(Boolean);\nconst formatCounts = {};\nformats.forEach(f => { formatCounts[f] = recentFormats.filter(rf => rf === f).length; });\nconst selectedFormat = formats.reduce((a, b) => formatCounts[a] <= formatCounts[b] ? a : b);\n\nreturn [{\n  json: {\n    topPosts,\n    learnings,\n    events,\n    aiNews,\n    systemLearnings,\n    selectedPillar,\n    selectedFormat,\n    topic: defaults.topic,\n    source: defaults.source,\n    today: new Date().toISOString().split('T')[0]\n  }\n}];"
+      },
+      "id": "lb-build-context",
+      "name": "Build Post Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1620, 150]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $input.first().json;\n\nconst systemPrompt = 'You are a LinkedIn ghostwriter for Vishant Jain, founder of Cosmisk (an AI-powered ad creation platform) and Smashed Agency (a UGC ads agency run by AI agents).\\n\\nVishant\\'s positioning: AI infrastructure builder + marketing/ads expert. He builds AI systems that run agency operations \\u2014 21 automated workflows, 10 AI agents, handling everything from creator scouting to script writing to performance tracking.\\n\\nVoice guidelines:\\n- Professional but accessible. Not corporate-speak.\\n- Data-driven: use specific numbers, metrics, real results\\n- Builder narrative: show what you\\'re creating, not just talking about AI\\n- Confident but not arrogant. Share real challenges too.\\n- Short paragraphs (1-2 sentences each). Use line breaks for readability.\\n- Hook must stop the scroll in the first line\\n- End with a thought-provoking question or clear CTA\\n- NO hashtags. NO emojis (unless specifically part of the format). NO \"let me know in the comments\" generic CTAs.\\n- Write like a founder sharing real experiences, not a LinkedIn guru.\\n\\nThe ecosystem:\\n- Cosmisk: AI platform that creates ads (UGC, AI-generated, mashup ads). Sells to agencies.\\n- Smashed Agency: UGC ads agency powered by Cosmisk + AI agents. Proof that the system works.\\n- The flywheel: Agency proves Cosmisk \\u2192 Cosmisk powers more agencies \\u2192 More data \\u2192 Better AI \\u2192 More content';\n\nlet userPrompt = 'Generate exactly 3 DISTINCT LinkedIn post drafts with DIFFERENT angles and hooks. All posts should use the same content pillar and format but take completely different creative approaches.\\n\\nCONTENT PILLAR: ' + ctx.selectedPillar + '\\nPOST FORMAT: ' + ctx.selectedFormat + '\\nDATE: ' + ctx.today + '\\n';\n\nif (ctx.topic) {\n  userPrompt += 'SPECIFIC TOPIC: ' + ctx.topic + '\\n';\n}\n\nuserPrompt += '\\n## DRAFT REQUIREMENTS:\\n';\nuserPrompt += 'Draft A \\u2014 BOLD/CONTRARIAN ANGLE: Challenge a common belief. Start with a provocative statement that makes people stop and think. Take a strong stance.\\n';\nuserPrompt += 'Draft B \\u2014 DATA-DRIVEN/SPECIFIC NUMBERS ANGLE: Lead with a specific metric, result, or data point. Use real numbers from Vishant\\'s AI infrastructure (21 workflows, 10 agents, 476 creators managed, etc). Build the story around measurable outcomes.\\n';\nuserPrompt += 'Draft C \\u2014 STORY/PERSONAL EXPERIENCE ANGLE: Start with a specific moment, conversation, or event. Tell a mini-story that reveals an insight. Make it feel like a founder\\'s journal entry.\\n';\n\nif (ctx.topPosts.length > 0) {\n  userPrompt += '\\n## TOP-PERFORMING PAST POSTS (learn from these patterns):\\n';\n  ctx.topPosts.slice(0, 5).forEach((p, i) => {\n    userPrompt += '\\nPost ' + (i + 1) + ' (' + p.likes + ' likes, ' + p.comments + ' comments):\\nPillar: ' + p.pillar + ' | Format: ' + p.format + '\\n' + (p.text || '').substring(0, 400) + '\\n';\n  });\n}\n\nif (ctx.learnings.length > 0) {\n  userPrompt += '\\n## BRAND LEARNINGS (accumulated insights about what works):\\n';\n  ctx.learnings.forEach(l => {\n    userPrompt += '- [' + l.category + '] ' + l.insight + '\\n';\n  });\n}\n\nif (ctx.aiNews.length > 0) {\n  userPrompt += '\\n## TODAY\\'S AI NEWS (use if relevant to the pillar):\\n';\n  ctx.aiNews.slice(0, 5).forEach(n => {\n    userPrompt += '- ' + n.title + ': ' + n.snippet + '\\n';\n  });\n}\n\nif (ctx.events.length > 0) {\n  userPrompt += '\\n## RECENT SYSTEM ACTIVITY (real things happening in Vishant\\'s AI infrastructure \\u2014 great for authentic content):\\n';\n  ctx.events.slice(0, 10).forEach(e => {\n    userPrompt += '- [' + e.agent + '] ' + e.event_type + ': ' + (e.details || 'completed') + ' (' + e.created_at + ')\\n';\n  });\n}\n\nif (ctx.systemLearnings && ctx.systemLearnings.length > 0) {\n  userPrompt += '\\n## SYSTEM INSIGHTS (cross-agent learnings from the AI agency infrastructure):\\n';\n  ctx.systemLearnings.forEach(l => {\n    userPrompt += '- [' + l.source + '/' + l.category + '] ' + l.insight + '\\n';\n  });\n  userPrompt += '\\nUse these real operational insights to make content more specific and authentic.\\n';\n}\n\nuserPrompt += '\\n## OUTPUT FORMAT\\nReturn a JSON object (no markdown fences) with this exact structure:\\n{\\n  \"drafts\": [\\n    {\\n      \"draft_id\": \"A\",\\n      \"angle\": \"bold_contrarian\",\\n      \"post_text\": \"The full LinkedIn post text, ready to copy-paste\",\\n      \"hook_strategy\": \"Brief description of the hook technique used\",\\n      \"strategy_explanation\": \"Why this angle was chosen and what makes it compelling\"\\n    },\\n    {\\n      \"draft_id\": \"B\",\\n      \"angle\": \"data_driven\",\\n      \"post_text\": \"...\",\\n      \"hook_strategy\": \"...\",\\n      \"strategy_explanation\": \"...\"\\n    },\\n    {\\n      \"draft_id\": \"C\",\\n      \"angle\": \"story_personal\",\\n      \"post_text\": \"...\",\\n      \"hook_strategy\": \"...\",\\n      \"strategy_explanation\": \"...\"\\n    }\\n  ],\\n  \"content_pillar\": \"' + ctx.selectedPillar + '\",\\n  \"post_format\": \"' + ctx.selectedFormat + '\",\\n  \"ai_news_used\": \"Which AI news story inspired this (or none if original)\",\\n  \"ecosystem_link\": \"Which part of the ecosystem this promotes: Cosmisk, Agency, Both, or Standalone\"\\n}';\n\nconst geminiBody = JSON.stringify({\n  systemInstruction: { parts: [{ text: systemPrompt }] },\n  contents: [{ role: 'user', parts: [{ text: userPrompt }] }],\n  generationConfig: { temperature: 0.8, maxOutputTokens: 8192 }\n});\n\nreturn [{ json: { gemini_body: geminiBody, context: ctx } }];"
+      },
+      "id": "lb-build-3draft-prompt",
+      "name": "Build 3-Draft Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1840, 150]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.gemini_body }}",
+        "options": { "timeout": 90000 }
+      },
+      "id": "lb-gemini-3drafts",
+      "name": "Gemini — Generate 3 Drafts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2060, 150],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "rIL63TG4xfMQL8uJ",
+          "name": "Cosmisk AI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nconst context = $('Build 3-Draft Prompt').first().json.context;\nconst text = raw.candidates[0].content.parts[0].text;\nconst cleaned = text.replace(/^```json\\s*/i, '').replace(/^```\\s*/m, '').replace(/\\s*```\\s*$/m, '').trim();\n\nlet parsed;\ntry {\n  parsed = JSON.parse(cleaned);\n} catch (e) {\n  // Try extracting the outermost JSON object\n  const match = cleaned.match(/\\{[\\s\\S]*\\}/);\n  if (match) {\n    try {\n      parsed = JSON.parse(match[0]);\n    } catch (e2) {\n      // Truncated JSON - try to extract individual drafts with regex\n      const draftRegex = /\\{[^{}]*\"draft_id\"\\s*:\\s*\"([ABC])\"[^{}]*\"post_text\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"[^{}]*\\}/g;\n      const drafts = [];\n      let m;\n      while ((m = draftRegex.exec(cleaned)) !== null) {\n        try {\n          const draftObj = JSON.parse(m[0]);\n          drafts.push(draftObj);\n        } catch (e3) {\n          drafts.push({\n            draft_id: m[1],\n            angle: m[1] === 'A' ? 'bold_contrarian' : m[1] === 'B' ? 'data_driven' : 'story_personal',\n            post_text: m[2].replace(/\\\\n/g, '\\n').replace(/\\\\\"/g, '\"'),\n            hook_strategy: 'extracted from truncated response',\n            strategy_explanation: 'extracted from truncated response'\n          });\n        }\n      }\n      if (drafts.length === 0) {\n        throw new Error('Failed to parse any drafts from Gemini response: ' + cleaned.substring(0, 300));\n      }\n      parsed = {\n        drafts: drafts,\n        content_pillar: context.selectedPillar,\n        post_format: context.selectedFormat,\n        ai_news_used: 'unknown (truncated)',\n        ecosystem_link: 'Standalone'\n      };\n    }\n  } else {\n    throw new Error('Failed to parse Gemini 3-drafts response: ' + cleaned.substring(0, 300));\n  }\n}\n\n// Ensure we have at least the drafts array\nconst drafts = parsed.drafts || [];\nif (drafts.length === 0) {\n  throw new Error('No drafts found in parsed response');\n}\n\nreturn [{\n  json: {\n    drafts: drafts,\n    content_pillar: parsed.content_pillar || context.selectedPillar,\n    post_format: parsed.post_format || context.selectedFormat,\n    ai_news_used: parsed.ai_news_used || 'none',\n    ecosystem_link: parsed.ecosystem_link || 'Standalone',\n    context: context\n  }\n}];"
+      },
+      "id": "lb-parse-3drafts",
+      "name": "Parse 3 Drafts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2280, 150]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst drafts = input.drafts;\n\nlet draftsText = '';\ndrafts.forEach((d, i) => {\n  draftsText += '\\n=== DRAFT ' + d.draft_id + ' (' + d.angle + ') ===\\n';\n  draftsText += 'Hook strategy: ' + d.hook_strategy + '\\n';\n  draftsText += 'Full post text:\\n' + d.post_text + '\\n';\n  draftsText += '=== END DRAFT ' + d.draft_id + ' ===\\n';\n});\n\nconst evalPrompt = 'You are a LinkedIn content quality evaluator. Score each of the following 3 draft posts for Vishant Jain\\'s personal brand.\\n\\nVishant is the founder of Cosmisk (AI ad creation platform) and Smashed Agency (AI-powered UGC agency). His content should feel authentic, data-driven, and like a builder sharing real experiences.\\n\\nScore each draft on these 5 criteria (1-10 each):\\n\\n1. HOOK STRENGTH (1-10): Does the first line stop the scroll? Is it specific enough to be intriguing but not clickbait?\\n2. SPECIFICITY (1-10): Does it use real numbers, names, examples? Or is it generic advice anyone could write?\\n3. AUTHENTICITY (1-10): Does it sound like a founder sharing real experience, or like AI-generated LinkedIn content? Would you believe a human wrote this?\\n4. ENGAGEMENT POTENTIAL (1-10): Would people comment, share, or save this? Does it invite discussion or just broadcast?\\n5. BRAND ALIGNMENT (1-10): Does it naturally promote Cosmisk/Agency ecosystem without being salesy? Does it reinforce Vishant\\'s positioning as an AI infrastructure builder?\\n\\n' + draftsText + '\\n\\nReturn a JSON object (no markdown fences) with this exact structure:\\n{\\n  \"evaluations\": [\\n    {\\n      \"draft_id\": \"A\",\\n      \"hook_strength\": 8,\\n      \"specificity\": 7,\\n      \"authenticity\": 9,\\n      \"engagement_potential\": 7,\\n      \"brand_alignment\": 8,\\n      \"total\": 39,\\n      \"strengths\": \"What makes this draft strong (1-2 sentences)\",\\n      \"weaknesses\": \"What could be improved (1-2 sentences)\"\\n    },\\n    { \"draft_id\": \"B\", ... },\\n    { \"draft_id\": \"C\", ... }\\n  ],\\n  \"best_draft_id\": \"A\",\\n  \"reasoning\": \"Why this draft is the best choice (2-3 sentences comparing them)\",\\n  \"improvement_suggestions\": \"If the best draft scores below 7 avg, specific suggestions for how to improve it\"\\n}';\n\nconst geminiBody = JSON.stringify({\n  systemInstruction: { parts: [{ text: 'You are a ruthlessly honest LinkedIn content evaluator. Be critical. A score of 7+ means genuinely good content that would perform well. Do not inflate scores. Generic AI-sounding content should score below 5 on authenticity.' }] },\n  contents: [{ role: 'user', parts: [{ text: evalPrompt }] }],\n  generationConfig: { temperature: 0.2, maxOutputTokens: 4096 }\n});\n\nreturn [{ json: { gemini_body: geminiBody, drafts: drafts, meta: { content_pillar: input.content_pillar, post_format: input.post_format, ai_news_used: input.ai_news_used, ecosystem_link: input.ecosystem_link }, context: input.context } }];"
+      },
+      "id": "lb-build-eval-prompt",
+      "name": "Build Evaluation Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2500, 150]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.gemini_body }}",
+        "options": { "timeout": 60000 }
+      },
+      "id": "lb-gemini-evaluate",
+      "name": "Gemini — Evaluate Drafts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2720, 150],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "rIL63TG4xfMQL8uJ",
+          "name": "Cosmisk AI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nconst prevData = $('Build Evaluation Prompt').first().json;\nconst drafts = prevData.drafts;\nconst meta = prevData.meta;\nconst context = prevData.context;\n\nconst text = raw.candidates[0].content.parts[0].text;\nconst cleaned = text.replace(/^```json\\s*/i, '').replace(/^```\\s*/m, '').replace(/\\s*```\\s*$/m, '').trim();\n\nlet evalResult;\ntry {\n  evalResult = JSON.parse(cleaned);\n} catch (e) {\n  // Try extracting individual evaluation objects with regex\n  const evalRegex = /\\{[^{}]*\"draft_id\"\\s*:\\s*\"([A-C])\"[^{}]*\"hook_strength\"\\s*:\\s*(\\d+)[^{}]*\"specificity\"\\s*:\\s*(\\d+)[^{}]*\"authenticity\"\\s*:\\s*(\\d+)[^{}]*\"engagement_potential\"\\s*:\\s*(\\d+)[^{}]*\"brand_alignment\"\\s*:\\s*(\\d+)[^{}]*/g;\n  const evals = [];\n  let m;\n  while ((m = evalRegex.exec(cleaned)) !== null) {\n    evals.push({\n      draft_id: m[1],\n      hook_strength: parseInt(m[2]),\n      specificity: parseInt(m[3]),\n      authenticity: parseInt(m[4]),\n      engagement_potential: parseInt(m[5]),\n      brand_alignment: parseInt(m[6]),\n      strengths: '',\n      weaknesses: ''\n    });\n  }\n  if (evals.length > 0) {\n    const bestMatch = cleaned.match(/\"best_draft_id\"\\s*:\\s*\"([A-C])\"/);\n    const reasonMatch = cleaned.match(/\"reasoning\"\\s*:\\s*\"((?:[^\"\\\\\\\\]|\\\\\\\\.)*)\"/);\n    evalResult = {\n      evaluations: evals,\n      best_draft_id: bestMatch ? bestMatch[1] : evals[0].draft_id,\n      reasoning: reasonMatch ? reasonMatch[1] : 'Extracted from truncated response',\n      improvement_suggestions: ''\n    };\n  } else {\n    throw new Error('Failed to parse evaluation response: ' + cleaned.substring(0, 300));\n  }\n}\n\nconst evaluations = evalResult.evaluations || [];\n\n// Calculate totals and find best\nlet bestEval = null;\nlet bestTotal = 0;\nfor (const ev of evaluations) {\n  ev.total = (ev.hook_strength || 0) + (ev.specificity || 0) + (ev.authenticity || 0) + (ev.engagement_potential || 0) + (ev.brand_alignment || 0);\n  if (ev.total > bestTotal) {\n    bestTotal = ev.total;\n    bestEval = ev;\n  }\n}\n\nif (!bestEval) {\n  throw new Error('No evaluations found');\n}\n\n// Find the matching draft\nconst bestDraft = drafts.find(d => d.draft_id === bestEval.draft_id) || drafts[0];\n\nconst avgScore = bestTotal / 5;\nconst needsRetry = avgScore < 7;\n\nlet retryFeedback = '';\nif (needsRetry) {\n  // Build specific feedback about what was weak\n  const weakAreas = [];\n  if (bestEval.hook_strength < 7) weakAreas.push('Hook needs to be more specific and scroll-stopping (scored ' + bestEval.hook_strength + '/10)');\n  if (bestEval.specificity < 7) weakAreas.push('Too generic - needs real numbers, specific examples, concrete details (scored ' + bestEval.specificity + '/10)');\n  if (bestEval.authenticity < 7) weakAreas.push('Sounds too AI-generated - needs more personal voice, imperfections, real founder energy (scored ' + bestEval.authenticity + '/10)');\n  if (bestEval.engagement_potential < 7) weakAreas.push('Low engagement potential - needs a stronger CTA, controversial take, or question that invites debate (scored ' + bestEval.engagement_potential + '/10)');\n  if (bestEval.brand_alignment < 7) weakAreas.push('Brand alignment weak - needs to more naturally reference Cosmisk/Agency ecosystem (scored ' + bestEval.brand_alignment + '/10)');\n  retryFeedback = weakAreas.join('. ') + '. Evaluator said: ' + (bestEval.weaknesses || '') + '. ' + (evalResult.improvement_suggestions || '');\n}\n\nreturn [{\n  json: {\n    selected_draft: bestDraft,\n    scores: bestEval,\n    all_evaluations: evaluations,\n    reasoning: evalResult.reasoning || '',\n    needs_retry: needsRetry,\n    retry_feedback: retryFeedback,\n    total_score: bestTotal,\n    avg_score: avgScore,\n    meta: meta,\n    context: context\n  }\n}];"
+      },
+      "id": "lb-select-best",
+      "name": "Select Best Draft",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2940, 150]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "lb-check-retry",
+              "leftValue": "={{ $json.needs_retry }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "lb-if-retry",
+      "name": "Needs Retry?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [3160, 150]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst draft = input.selected_draft;\nconst scores = input.scores;\nconst feedback = input.retry_feedback;\nconst context = input.context;\n\nconst systemPrompt = 'You are a LinkedIn ghostwriter for Vishant Jain, founder of Cosmisk (an AI-powered ad creation platform) and Smashed Agency (a UGC ads agency run by AI agents).\\n\\nVishant\\'s positioning: AI infrastructure builder + marketing/ads expert. He builds AI systems that run agency operations \\u2014 21 automated workflows, 10 AI agents, handling everything from creator scouting to script writing to performance tracking.\\n\\nVoice guidelines:\\n- Professional but accessible. Not corporate-speak.\\n- Data-driven: use specific numbers, metrics, real results\\n- Builder narrative: show what you\\'re creating, not just talking about AI\\n- Confident but not arrogant. Share real challenges too.\\n- Short paragraphs (1-2 sentences each). Use line breaks for readability.\\n- Hook must stop the scroll in the first line\\n- End with a thought-provoking question or clear CTA\\n- NO hashtags. NO emojis. NO \"let me know in the comments\" generic CTAs.\\n- Write like a founder sharing real experiences, not a LinkedIn guru.';\n\nconst userPrompt = 'A LinkedIn post draft was written but scored below quality threshold. Your job is to rewrite it, fixing the specific weaknesses identified by the evaluator.\\n\\n## ORIGINAL DRAFT (Draft ' + draft.draft_id + ' - ' + draft.angle + '):\\n' + draft.post_text + '\\n\\n## SCORES:\\n- Hook strength: ' + scores.hook_strength + '/10\\n- Specificity: ' + scores.specificity + '/10\\n- Authenticity: ' + scores.authenticity + '/10\\n- Engagement potential: ' + scores.engagement_potential + '/10\\n- Brand alignment: ' + scores.brand_alignment + '/10\\n- Total: ' + scores.total + '/50\\n\\n## SPECIFIC FEEDBACK TO ADDRESS:\\n' + feedback + '\\n\\n## REQUIREMENTS:\\n- Keep the same general angle (' + draft.angle + ') but significantly improve the weak areas\\n- Make the hook more specific and scroll-stopping\\n- Add real numbers and concrete details where possible\\n- Make it sound more human and less AI-generated\\n- The post should feel like it was written by a founder who just had this experience\\n\\nReturn a JSON object (no markdown fences):\\n{\\n  \"post_text\": \"The full rewritten LinkedIn post text\",\\n  \"hook_strategy\": \"What hook technique was used in the rewrite\",\\n  \"changes_made\": \"Specific changes made to address the feedback\"\\n}';\n\nconst geminiBody = JSON.stringify({\n  systemInstruction: { parts: [{ text: systemPrompt }] },\n  contents: [{ role: 'user', parts: [{ text: userPrompt }] }],\n  generationConfig: { temperature: 0.6, maxOutputTokens: 4096 }\n});\n\nreturn [{ json: { gemini_body: geminiBody, original_scores: scores, all_evaluations: input.all_evaluations, reasoning: input.reasoning, meta: input.meta, context: context, selected_draft: draft } }];"
+      },
+      "id": "lb-build-retry-prompt",
+      "name": "Build Retry Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3380, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.gemini_body }}",
+        "options": { "timeout": 60000 }
+      },
+      "id": "lb-gemini-retry",
+      "name": "Gemini — Retry Draft",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3600, 0],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "rIL63TG4xfMQL8uJ",
+          "name": "Cosmisk AI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nconst prevData = $('Build Retry Prompt').first().json;\nconst scores = prevData.original_scores;\nconst meta = prevData.meta;\nconst context = prevData.context;\n\nconst text = raw.candidates[0].content.parts[0].text;\nconst cleaned = text.replace(/^```json\\s*/i, '').replace(/^```\\s*/m, '').replace(/\\s*```\\s*$/m, '').trim();\n\nlet parsed;\ntry {\n  parsed = JSON.parse(cleaned);\n} catch (e) {\n  const match = cleaned.match(/\\{[\\s\\S]*\\}/);\n  if (match) {\n    try {\n      parsed = JSON.parse(match[0]);\n    } catch (e2) {\n      // Extract post_text with regex as fallback\n      const postMatch = cleaned.match(/\"post_text\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"/);\n      parsed = {\n        post_text: postMatch ? postMatch[1].replace(/\\\\n/g, '\\n').replace(/\\\\\"/g, '\"') : 'Error: could not extract retry post text',\n        hook_strategy: 'extracted from truncated retry response',\n        changes_made: 'extracted from truncated response'\n      };\n    }\n  } else {\n    throw new Error('Failed to parse Gemini retry response: ' + cleaned.substring(0, 300));\n  }\n}\n\nconst today = context.today || new Date().toISOString().split('T')[0];\nconst retryNote = ' (Retry: original scored ' + scores.total + '/50, below 35 threshold)';\n\nconst slackMessage = '\\ud83d\\udcdd *LinkedIn Post Draft \\u2014 ' + today + '*\\nScore: ' + scores.total + '/50 (' + (scores.total / 5).toFixed(1) + '/10 avg)' + retryNote + '\\n\\nHook strength: ' + scores.hook_strength + '/10 | Specificity: ' + scores.specificity + '/10\\nAuthenticity: ' + scores.authenticity + '/10 | Engagement: ' + scores.engagement_potential + '/10\\nBrand alignment: ' + scores.brand_alignment + '/10\\n\\nPillar: ' + meta.content_pillar + ' | Format: ' + meta.post_format + '\\nStrategy: ' + (parsed.hook_strategy || 'N/A') + '\\nEvaluator reasoning: ' + (prevData.reasoning || 'N/A') + '\\nRetry changes: ' + (parsed.changes_made || 'N/A') + '\\n\\n---\\n' + parsed.post_text + '\\n---\\n\\nReply \"post\" when published, paste the LinkedIn URL';\n\nconst scoresJson = JSON.stringify({ hook_strength: scores.hook_strength, specificity: scores.specificity, authenticity: scores.authenticity, engagement_potential: scores.engagement_potential, brand_alignment: scores.brand_alignment, total: scores.total, avg: (scores.total / 5).toFixed(1), retried: true, changes_made: parsed.changes_made || '' });\n\nconst airtableFields = {\n  post_date: today,\n  content_pillar: meta.content_pillar,\n  post_format: meta.post_format,\n  draft_text: parsed.post_text,\n  status: 'draft',\n  strategy_used: scoresJson,\n  ai_news_source: meta.ai_news_used || '',\n  ecosystem_link: meta.ecosystem_link || 'Standalone',\n  created_at: new Date().toISOString()\n};\n\nreturn [{\n  json: {\n    slack_message: slackMessage,\n    airtable_fields: airtableFields,\n    post_text: parsed.post_text,\n    scores: scores,\n    meta: meta,\n    retried: true\n  }\n}];"
+      },
+      "id": "lb-format-retry-output",
+      "name": "Format Final Output A",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3820, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst draft = input.selected_draft;\nconst scores = input.scores;\nconst meta = input.meta;\nconst context = input.context;\n\nconst today = context.today || new Date().toISOString().split('T')[0];\n\nconst slackMessage = '\\ud83d\\udcdd *LinkedIn Post Draft \\u2014 ' + today + '*\\nScore: ' + scores.total + '/50 (' + (scores.total / 5).toFixed(1) + '/10 avg)\\n\\nHook strength: ' + scores.hook_strength + '/10 | Specificity: ' + scores.specificity + '/10\\nAuthenticity: ' + scores.authenticity + '/10 | Engagement: ' + scores.engagement_potential + '/10\\nBrand alignment: ' + scores.brand_alignment + '/10\\n\\nPillar: ' + meta.content_pillar + ' | Format: ' + meta.post_format + '\\nStrategy: ' + (draft.strategy_explanation || draft.hook_strategy || 'N/A') + '\\nEvaluator reasoning: ' + (input.reasoning || 'N/A') + '\\n\\n---\\n' + draft.post_text + '\\n---\\n\\nReply \"post\" when published, paste the LinkedIn URL';\n\nconst scoresJson = JSON.stringify({ hook_strength: scores.hook_strength, specificity: scores.specificity, authenticity: scores.authenticity, engagement_potential: scores.engagement_potential, brand_alignment: scores.brand_alignment, total: scores.total, avg: (scores.total / 5).toFixed(1), retried: false, draft_id: draft.draft_id, angle: draft.angle });\n\nconst airtableFields = {\n  post_date: today,\n  content_pillar: meta.content_pillar,\n  post_format: meta.post_format,\n  draft_text: draft.post_text,\n  status: 'draft',\n  strategy_used: scoresJson,\n  ai_news_source: meta.ai_news_used || '',\n  ecosystem_link: meta.ecosystem_link || 'Standalone',\n  created_at: new Date().toISOString()\n};\n\nreturn [{\n  json: {\n    slack_message: slackMessage,\n    airtable_fields: airtableFields,\n    post_text: draft.post_text,\n    scores: scores,\n    meta: meta,\n    retried: false\n  }\n}];"
+      },
+      "id": "lb-format-no-retry-output",
+      "name": "Format Final Output B",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3380, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tbl9hLdiwip66slEJ",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ records: [{ fields: $json.airtable_fields }] }) }}",
+        "options": { "timeout": 15000 }
+      },
+      "id": "lb-save-draft",
+      "name": "Save Draft to Airtable",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [4080, 0],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "a0TTu3NVsuJUEbct",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": { "__rl": true, "value": "C0AGQ8RH0NP", "mode": "id" },
+        "text": "={{ $json.slack_message }}",
+        "otherOptions": {}
+      },
+      "id": "lb-slack-draft",
+      "name": "Slack — Post Draft",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [4080, 150],
+      "credentials": {
+        "slackApi": { "id": "5Q37UpOjGx4YsbyC", "name": "Slack account" }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblGhzSJ5RXWDS8h8",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ records: [{ fields: { agent: 'linkedin_brand', event_type: 'post_draft_generated', details: 'Score: ' + $json.scores.total + '/50 (avg ' + ($json.scores.total / 5).toFixed(1) + ') | Pillar: ' + $json.meta.content_pillar + ' | Format: ' + $json.meta.post_format + ' | Retried: ' + $json.retried, created_at: new Date().toISOString() } }] }) }}",
+        "options": { "timeout": 15000 }
+      },
+      "id": "lb-write-event",
+      "name": "Write Event",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [4080, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "a0TTu3NVsuJUEbct",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ JSON.stringify({ status: 'success', pillar: $json.meta.content_pillar, format: $json.meta.post_format, post_text: $json.post_text, scores: $json.scores, retried: $json.retried }) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              { "name": "Content-Type", "value": "application/json" }
+            ]
+          }
+        }
+      },
+      "id": "lb-respond",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [4080, 450]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "30 15 * * 0"
+            }
+          ]
+        }
+      },
+      "id": "lb-weekly-schedule",
+      "name": "Weekly Review Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 600]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tbl9hLdiwip66slEJ",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "specifyQuery": "keypair",
+        "queryParameters": {
+          "parameters": [
+            { "name": "filterByFormula", "value": "AND({status}='posted',IS_AFTER({post_date},DATEADD(NOW(),-7,'days')))" },
+            { "name": "sort[0][field]", "value": "post_date" },
+            { "name": "sort[0][direction]", "value": "desc" }
+          ]
+        },
+        "options": { "timeout": 15000 }
+      },
+      "id": "lb-fetch-weekly-posts",
+      "name": "Fetch This Week's Posts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [260, 600],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "a0TTu3NVsuJUEbct",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst records = data.records || [];\n\nconst postedWithEngagement = records.filter(r => {\n  const f = r.fields;\n  return (f.likes || 0) > 0 || (f.comments_count || 0) > 0 || (f.impressions || 0) > 0;\n});\n\nif (postedWithEngagement.length === 0) {\n  return [{ json: { has_data: false, gemini_body: '', posts_summary: 'No posted records with engagement data this week.' } }];\n}\n\nconst postsSummary = postedWithEngagement.map((r, i) => {\n  const f = r.fields;\n  return 'Post ' + (i + 1) + ':\\n  Pillar: ' + (f.content_pillar || 'unknown') + '\\n  Format: ' + (f.post_format || 'unknown') + '\\n  Likes: ' + (f.likes || 0) + '\\n  Comments: ' + (f.comments_count || 0) + '\\n  Impressions: ' + (f.impressions || 0) + '\\n  Hook: ' + (f.strategy_used || 'unknown') + '\\n  Text: ' + ((f.draft_text || '').substring(0, 300));\n}).join('\\n\\n');\n\nconst prompt = 'Analyze the following LinkedIn post performance data for Vishant Jain\\'s personal brand account. Identify patterns, what worked, what didn\\'t, and extract actionable learnings.\\n\\n' + postsSummary + '\\n\\nReturn a JSON object (no markdown fences) with these fields:\\n{\\n  \"learnings\": [\\n    {\\n      \"title\": \"Short title for the learning\",\\n      \"category\": \"One of: hook_patterns, content_pillars, format_performance, posting_time, audience_engagement, topic_resonance\",\\n      \"insight\": \"Detailed actionable insight (2-3 sentences)\",\\n      \"evidence\": \"Specific data that supports this\"\\n    }\\n  ],\\n  \"weekly_summary\": \"2-3 sentence overall performance summary\",\\n  \"top_post_analysis\": \"Why the top post worked\",\\n  \"recommendation\": \"Specific recommendation for next week\\'s content strategy\"\\n}';\n\nconst geminiBody = JSON.stringify({\n  systemInstruction: { parts: [{ text: 'You are a LinkedIn content strategist analyzing post performance data. Be specific, data-driven, and actionable.' }] },\n  contents: [{ role: 'user', parts: [{ text: prompt }] }],\n  generationConfig: { temperature: 0.3, maxOutputTokens: 2000 }\n});\n\nreturn [{ json: { has_data: true, gemini_body: geminiBody, posts_summary: postsSummary, post_count: postedWithEngagement.length } }];"
+      },
+      "id": "lb-build-review",
+      "name": "Build Review Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [520, 600]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "lb-check-has-data",
+              "leftValue": "={{ $json.has_data }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "lb-if-has-data",
+      "name": "Has Data?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [780, 600]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.gemini_body }}",
+        "options": { "timeout": 60000 }
+      },
+      "id": "lb-gemini-review",
+      "name": "Gemini — Analyze Performance",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1040, 600],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "rIL63TG4xfMQL8uJ",
+          "name": "Cosmisk AI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nconst text = raw.candidates[0].content.parts[0].text;\nconst cleaned = text.replace(/^```json\\s*/i, '').replace(/^```\\s*/m, '').replace(/\\s*```\\s*$/m, '').trim();\n\nlet parsed;\ntry {\n  parsed = JSON.parse(cleaned);\n} catch (e) {\n  const match = cleaned.match(/\\{[\\s\\S]*\\}/);\n  if (match) {\n    parsed = JSON.parse(match[0]);\n  } else {\n    throw new Error('Failed to parse Gemini review response: ' + cleaned.substring(0, 200));\n  }\n}\n\nconst postCount = $('Build Review Prompt').first().json.post_count || 0;\n\n// Build Airtable batch create body for Brand_Learnings\nconst learningRecords = (parsed.learnings || []).slice(0, 10).map(l => ({\n  fields: {\n    title: l.title,\n    category: l.category,\n    insight: l.insight,\n    evidence: l.evidence || '',\n    source: 'weekly_review',\n    active: true,\n    created_at: new Date().toISOString()\n  }\n}));\n\nconst airtableBody = JSON.stringify({ records: learningRecords });\n\n// Build Slack message\nconst today = new Date().toISOString().split('T')[0];\nlet slackMsg = '*LinkedIn Weekly Review \\u2014 ' + today + '*\\n\\n';\nslackMsg += '*Posts analyzed:* ' + postCount + '\\n';\nslackMsg += '*Summary:* ' + (parsed.weekly_summary || 'N/A') + '\\n\\n';\nslackMsg += '*Top post analysis:* ' + (parsed.top_post_analysis || 'N/A') + '\\n\\n';\n\nif (parsed.learnings && parsed.learnings.length > 0) {\n  slackMsg += '*Key learnings:*\\n';\n  parsed.learnings.forEach((l, i) => {\n    slackMsg += (i + 1) + '. *' + l.title + '* [' + l.category + ']\\n   ' + l.insight + '\\n';\n  });\n}\n\nslackMsg += '\\n*Next week recommendation:* ' + (parsed.recommendation || 'N/A');\n\nreturn [{ json: { airtable_body: airtableBody, slack_message: slackMsg, learning_count: learningRecords.length, gemini_analysis: parsed } }];"
+      },
+      "id": "lb-parse-learnings",
+      "name": "Parse & Build Learnings",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1300, 600]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblFYxSuiwbeY3Pny",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.airtable_body }}",
+        "options": { "timeout": 15000 }
+      },
+      "id": "lb-save-learnings",
+      "name": "Save Learnings to Airtable",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 600],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "a0TTu3NVsuJUEbct",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": { "__rl": true, "value": "C0AGQ8RH0NP", "mode": "id" },
+        "text": "={{ $json.slack_message }}",
+        "otherOptions": {}
+      },
+      "id": "lb-slack-review",
+      "name": "Slack — Weekly Report",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [1560, 740],
+      "credentials": {
+        "slackApi": { "id": "5Q37UpOjGx4YsbyC", "name": "Slack account" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Read the Gemini analysis from Parse & Build Learnings\nconst parseData = $('Parse & Build Learnings').first().json;\nconst analysis = parseData.gemini_analysis;\n\nif (!analysis || !analysis.learnings || analysis.learnings.length === 0) {\n  return [{ json: { learningsCount: 0, airtable_body: '' } }];\n}\n\nconst today = new Date().toISOString().split('T')[0];\nconst weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];\nconst dateRange = weekAgo + ' to ' + today;\n\n// Filter for cross-cutting insights useful to OTHER agents\nconst crossCuttingCategories = {\n  'hook_patterns': 'hook_patterns',\n  'audience_engagement': 'audience_insight',\n  'topic_resonance': 'audience_insight',\n  'content_pillars': 'content_format',\n  'format_performance': 'content_format',\n  'posting_time': 'timing_pattern'\n};\n\n// Extract 1-3 learnings that generalize beyond LinkedIn\nconst sysLearnings = [];\n\nfor (const l of analysis.learnings) {\n  if (sysLearnings.length >= 3) break;\n\n  const insight = (l.insight || '').toLowerCase();\n  const title = (l.title || '').toLowerCase();\n\n  // Check if this insight generalizes beyond LinkedIn-specific tactics\n  const isCrossCutting =\n    // Hook/attention patterns useful for Script Agent\n    insight.includes('hook') || insight.includes('scroll') || insight.includes('attention') ||\n    insight.includes('save') || insight.includes('share') ||\n    // Audience/topic insights useful for Outreach or Content Strategy\n    insight.includes('audience') || insight.includes('resonate') || insight.includes('topic') ||\n    insight.includes('industry') || insight.includes('persona') || insight.includes('targeting') ||\n    // Content format insights useful broadly\n    insight.includes('contrarian') || insight.includes('data') || insight.includes('story') ||\n    insight.includes('specific') || insight.includes('number') || insight.includes('metric') ||\n    // Engagement patterns\n    insight.includes('comment') || insight.includes('engage') || insight.includes('cta');\n\n  if (isCrossCutting) {\n    const category = crossCuttingCategories[l.category] || 'content_format';\n    const confidence = l.evidence && l.evidence.length > 20 ? 0.7 : 0.5;\n\n    sysLearnings.push({\n      fields: {\n        title: l.title,\n        source_agent: 'linkedin_brand',\n        category: category,\n        insight: l.insight,\n        evidence: 'LinkedIn weekly review \\u2014 ' + dateRange + '. ' + (l.evidence || ''),\n        confidence: confidence,\n        active: true,\n        created_at: new Date().toISOString()\n      }\n    });\n  }\n}\n\nif (sysLearnings.length === 0) {\n  return [{ json: { learningsCount: 0, airtable_body: '' } }];\n}\n\nconst airtableBody = JSON.stringify({ records: sysLearnings });\n\nreturn [{ json: { learningsCount: sysLearnings.length, airtable_body: airtableBody } }];"
+      },
+      "id": "lb-build-sys-learning",
+      "name": "Build System Learnings",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1820, 600],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "lb-check-sys-learnings",
+              "leftValue": "={{ $json.learningsCount }}",
+              "rightValue": 0,
+              "operator": { "type": "number", "operation": "gt" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "lb-if-sys-learnings",
+      "name": "Has System Learnings?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2040, 600],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblAfe1LYh8kHPVbP",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.airtable_body }}",
+        "options": { "timeout": 15000 }
+      },
+      "id": "lb-write-sys-learnings",
+      "name": "Write System Learnings",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2260, 600],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "a0TTu3NVsuJUEbct",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Schedule — Daily 3 AM UTC": {
+      "main": [[{ "node": "Set Defaults", "type": "main", "index": 0 }]]
+    },
+    "Webhook — LinkedIn Brand": {
+      "main": [[{ "node": "Set Defaults", "type": "main", "index": 0 }]]
+    },
+    "Set Defaults": {
+      "main": [[{ "node": "Fetch Top Posts", "type": "main", "index": 0 }]]
+    },
+    "Fetch Top Posts": {
+      "main": [[{ "node": "Fetch Brand Learnings", "type": "main", "index": 0 }]]
+    },
+    "Fetch Brand Learnings": {
+      "main": [[{ "node": "Fetch Recent Events", "type": "main", "index": 0 }]]
+    },
+    "Fetch Recent Events": {
+      "main": [[{ "node": "Scan AI News", "type": "main", "index": 0 }]]
+    },
+    "Scan AI News": {
+      "main": [[{ "node": "Fetch System Learnings", "type": "main", "index": 0 }]]
+    },
+    "Fetch System Learnings": {
+      "main": [[{ "node": "Build Post Context", "type": "main", "index": 0 }]]
+    },
+    "Build Post Context": {
+      "main": [[{ "node": "Build 3-Draft Prompt", "type": "main", "index": 0 }]]
+    },
+    "Build 3-Draft Prompt": {
+      "main": [[{ "node": "Gemini — Generate 3 Drafts", "type": "main", "index": 0 }]]
+    },
+    "Gemini — Generate 3 Drafts": {
+      "main": [[{ "node": "Parse 3 Drafts", "type": "main", "index": 0 }]]
+    },
+    "Parse 3 Drafts": {
+      "main": [[{ "node": "Build Evaluation Prompt", "type": "main", "index": 0 }]]
+    },
+    "Build Evaluation Prompt": {
+      "main": [[{ "node": "Gemini — Evaluate Drafts", "type": "main", "index": 0 }]]
+    },
+    "Gemini — Evaluate Drafts": {
+      "main": [[{ "node": "Select Best Draft", "type": "main", "index": 0 }]]
+    },
+    "Select Best Draft": {
+      "main": [[{ "node": "Needs Retry?", "type": "main", "index": 0 }]]
+    },
+    "Needs Retry?": {
+      "main": [
+        [{ "node": "Build Retry Prompt", "type": "main", "index": 0 }],
+        [{ "node": "Format Final Output B", "type": "main", "index": 0 }]
+      ]
+    },
+    "Build Retry Prompt": {
+      "main": [[{ "node": "Gemini — Retry Draft", "type": "main", "index": 0 }]]
+    },
+    "Gemini — Retry Draft": {
+      "main": [[{ "node": "Format Final Output A", "type": "main", "index": 0 }]]
+    },
+    "Format Final Output A": {
+      "main": [[
+        { "node": "Save Draft to Airtable", "type": "main", "index": 0 },
+        { "node": "Slack — Post Draft", "type": "main", "index": 0 },
+        { "node": "Write Event", "type": "main", "index": 0 },
+        { "node": "Respond to Webhook", "type": "main", "index": 0 }
+      ]]
+    },
+    "Format Final Output B": {
+      "main": [[
+        { "node": "Save Draft to Airtable", "type": "main", "index": 0 },
+        { "node": "Slack — Post Draft", "type": "main", "index": 0 },
+        { "node": "Write Event", "type": "main", "index": 0 },
+        { "node": "Respond to Webhook", "type": "main", "index": 0 }
+      ]]
+    },
+    "Weekly Review Trigger": {
+      "main": [[{ "node": "Fetch This Week's Posts", "type": "main", "index": 0 }]]
+    },
+    "Fetch This Week's Posts": {
+      "main": [[{ "node": "Build Review Prompt", "type": "main", "index": 0 }]]
+    },
+    "Build Review Prompt": {
+      "main": [[{ "node": "Has Data?", "type": "main", "index": 0 }]]
+    },
+    "Has Data?": {
+      "main": [
+        [{ "node": "Gemini — Analyze Performance", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Gemini — Analyze Performance": {
+      "main": [[{ "node": "Parse & Build Learnings", "type": "main", "index": 0 }]]
+    },
+    "Parse & Build Learnings": {
+      "main": [[
+        { "node": "Save Learnings to Airtable", "type": "main", "index": 0 },
+        { "node": "Slack — Weekly Report", "type": "main", "index": 0 }
+      ]]
+    },
+    "Save Learnings to Airtable": {
+      "main": [[{ "node": "Build System Learnings", "type": "main", "index": 0 }]]
+    },
+    "Build System Learnings": {
+      "main": [[{ "node": "Has System Learnings?", "type": "main", "index": 0 }]]
+    },
+    "Has System Learnings?": {
+      "main": [
+        [{ "node": "Write System Learnings", "type": "main", "index": 0 }],
+        []
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": {
+    "node:Schedule — Daily 3 AM UTC": { "recurrenceRules": [] },
+    "node:Weekly Review Trigger": { "recurrenceRules": [] }
+  }
+}

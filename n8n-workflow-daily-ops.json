@@ -1,5 +1,5 @@
 {
-  "name": "Agent 1 — Daily Operations Briefing",
+  "name": "Daily Operations Briefing",
   "nodes": [
     {
       "parameters": {
@@ -13,26 +13,20 @@
         }
       },
       "id": "daily-ops-trigger",
-      "name": "Schedule — 8AM IST",
+      "name": "Schedule \u2014 8AM IST",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [
-        400,
-        400
-      ]
+      "position": [380, 400]
     },
     {
       "parameters": {
-        "jsCode": "// Fetch all data from Airtable in parallel using this.helpers.httpRequest\nconst baseUrl = 'https://api.airtable.com/v0/appvFxwZc9yU8o8pK';\n\nconst headers = {}; // Auth handled by predefinedCredentialType via HTTP Request nodes\n// Use this.helpers.httpRequestWithAuthentication is NOT available in Code nodes\n// So we'll output URLs for downstream HTTP Request nodes\n\n// Instead, let's just output a trigger signal\nreturn [{ json: { trigger: true, timestamp: new Date().toISOString() } }];"
+        "jsCode": "// Initialize the daily ops pipeline\n// Sequential chain follows — each fetch passes through to the next\nreturn [{ json: { trigger: true, timestamp: new Date().toISOString() } }];"
       },
       "id": "daily-ops-init",
       "name": "Init",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        620,
-        400
-      ]
+      "position": [540, 400]
     },
     {
       "parameters": {
@@ -46,10 +40,7 @@
       "name": "Fetch Active Projects",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        860,
-        200
-      ],
+      "position": [700, 400],
       "credentials": {
         "airtableTokenApi": {
           "id": "WelvlJEjoHaI3l9G",
@@ -70,10 +61,7 @@
       "name": "Fetch Pending Scripts",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        860,
-        400
-      ],
+      "position": [860, 400],
       "credentials": {
         "airtableTokenApi": {
           "id": "WelvlJEjoHaI3l9G",
@@ -94,10 +82,7 @@
       "name": "Fetch Due Follow-ups",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        860,
-        600
-      ],
+      "position": [700, 560],
       "credentials": {
         "airtableTokenApi": {
           "id": "WelvlJEjoHaI3l9G",
@@ -118,94 +103,11 @@
       "name": "Fetch Overdue Invoices",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        860,
-        800
-      ],
+      "position": [860, 560],
       "credentials": {
         "airtableTokenApi": {
           "id": "WelvlJEjoHaI3l9G",
           "name": "Airtable Personal Access Token account"
-        }
-      },
-      "onError": "continueRegularOutput"
-    },
-    {
-      "parameters": {
-        "jsCode": "// Aggregate all parallel Airtable responses\n// n8n runs Code node once per item, but with wait-for-all we get all items\nconst allItems = $input.all();\n\nlet projects = [];\nlet scripts = [];\nlet leads = [];\nlet invoices = [];\nlet events = [];\n\nfor (const item of allItems) {\n  const records = item.json.records || [];\n  if (records.length === 0) continue;\n  \n  const firstFields = records[0]?.fields || {};\n  \n  // Identify which table this is from based on field names\n  if ('event_type' in firstFields || 'agent_name' in firstFields || 'event_source' in firstFields) {\n    events = records.map(r => ({ id: r.id, ...r.fields }));\n  } else if ('client_code' in firstFields || 'num_scripts' in firstFields || ('brand_name' in firstFields && 'status' in firstFields && !('services' in firstFields))) {\n    projects = records.map(r => ({ id: r.id, ...r.fields }));\n  } else if ('script_title' in firstFields || 'script_number' in firstFields || 'google_doc_id' in firstFields) {\n    scripts = records.map(r => ({ id: r.id, ...r.fields }));\n  } else if ('company_name' in firstFields || ('next_follow_up' in firstFields && 'stage' in firstFields)) {\n    leads = records.map(r => ({ id: r.id, ...r.fields }));\n  } else if ('invoice_number' in firstFields || 'payment_link' in firstFields) {\n    invoices = records.map(r => ({ id: r.id, ...r.fields }));\n  }\n}\n\nconst now = new Date();\nconst todayStr = now.toISOString().split('T')[0];\n\n// Detect stuck projects (status unchanged for > 2 days)\nconst stuckProjects = projects.filter(p => {\n  const lastUpdate = p.updated_at || p.created_at;\n  if (!lastUpdate) return false;\n  const days = (now - new Date(lastUpdate)) / (1000 * 60 * 60 * 24);\n  return days > 2;\n});\n\n// Group projects by status\nconst projectsByStatus = {};\nfor (const p of projects) {\n  const s = p.status || 'Unknown';\n  projectsByStatus[s] = (projectsByStatus[s] || 0) + 1;\n}\n\n// Group scripts by status\nconst scriptsByStatus = {};\nfor (const s of scripts) {\n  const st = s.status || 'Unknown';\n  scriptsByStatus[st] = (scriptsByStatus[st] || 0) + 1;\n}\n\n// Summarize events by type\nconst eventsByType = {};\nconst escalations = [];\nconst phaseTransitions = [];\nconst campaignAlerts = [];\nconst leadActions = [];\nfor (const e of events) {\n  const t = e.event_type || 'unknown';\n  eventsByType[t] = (eventsByType[t] || 0) + 1;\n  \n  if (t === 'escalation' || t === 'sla_breach' || (e.severity && e.severity === 'high')) {\n    escalations.push({ type: t, brand: e.brand_name || e.project_id, detail: e.detail || e.message || '', agent: e.agent_name || '' });\n  }\n  if (t === 'phase_complete' || t === 'phase_triggered' || t === 'workflow_complete') {\n    phaseTransitions.push({ type: t, brand: e.brand_name || e.project_id, detail: e.detail || e.message || '', agent: e.agent_name || '' });\n  }\n  if (t === 'campaign_alert' || t === 'ad_performance' || t === 'budget_alert') {\n    campaignAlerts.push({ type: t, brand: e.brand_name, detail: e.detail || e.message || '' });\n  }\n  if (t === 'lead_action' || t === 'new_lead' || t === 'proposal_sent') {\n    leadActions.push({ type: t, company: e.company_name || e.lead_name, detail: e.detail || e.message || '' });\n  }\n}\n\n// Capacity\nconst MAX_CAPACITY = 15;\nconst available = Math.max(0, MAX_CAPACITY - projects.length);\n\nconst briefingData = {\n  date: todayStr,\n  active_projects: projects.length,\n  projects_by_status: projectsByStatus,\n  stuck_projects: stuckProjects.map(p => ({ brand: p.brand_name, code: p.client_code, status: p.status })),\n  pending_scripts: scripts.length,\n  scripts_by_status: scriptsByStatus,\n  scripts_awaiting_review: scripts.filter(s => s.status === 'In Review' || s.status === 'Client Review').map(s => ({ title: s.script_title, brand: s.brand_name, status: s.status })),\n  leads_to_follow_up: leads.map(l => ({ company: l.company_name, contact: l.contact_name, stage: l.stage, follow_up: l.next_follow_up })),\n  overdue_invoices: invoices.map(i => ({ number: i.invoice_number, amount: i.amount, due: i.due_date })),\n  capacity: { current: projects.length, max: MAX_CAPACITY, available },\n  agent_events: {\n    total_events: events.length,\n    events_by_type: eventsByType,\n    escalations,\n    phase_transitions: phaseTransitions,\n    campaign_alerts: campaignAlerts,\n    lead_actions: leadActions\n  }\n};\n\nreturn [{ json: briefingData }];"
-      },
-      "id": "daily-ops-aggregate",
-      "name": "Aggregate All Data",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        1140,
-        400
-      ]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "googlePalmApi",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ systemInstruction: { parts: [{ text: 'You are the Daily Operations Assistant for Smashed Agency, a UGC and AI creatives agency. Generate a concise, actionable morning briefing. Use *bold* for headers, bullet points for items. Structure: 1) Priority Actions (things needing immediate attention), 2) Pipeline Status (projects by stage), 3) Scripts Status, 4) Agent Activity Highlights (key events from the last 24h including phase transitions, campaign alerts, new leads, and any escalations or SLA breaches), 5) Sales (leads to follow up), 6) Finance (overdue invoices), 7) Capacity. Keep it under 1000 words. Be direct and actionable. If there are escalations or SLA breaches, put them at the top of Priority Actions.' }] }, contents: [{ role: 'user', parts: [{ text: 'Generate morning briefing for ' + $json.date + ':\\n' + JSON.stringify($json, null, 2) }] }], generationConfig: { temperature: 0.3, maxOutputTokens: 2500 } }) }}",
-        "options": {}
-      },
-      "id": "daily-ops-gemini",
-      "name": "Gemini — Generate Briefing",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        1380,
-        400
-      ],
-      "credentials": {
-        "googlePalmApi": {
-          "id": "rIL63TG4xfMQL8uJ",
-          "name": "Cosmisk AI"
-        }
-      },
-      "onError": "continueRegularOutput"
-    },
-    {
-      "parameters": {
-        "jsCode": "const response = $input.first().json;\nconst aggregatedData = $('Aggregate All Data').first().json;\n\n// Check for Gemini errors\nconst hasError = response.error || response.statusCode >= 400 || !response.candidates;\n\nlet briefing;\nif (!hasError) {\n  briefing = response.candidates?.[0]?.content?.parts?.[0]?.text;\n}\n\nif (!briefing) {\n  // Fallback: build plain-text briefing from raw aggregated data\n  const d = aggregatedData;\n  const lines = [];\n  lines.push('*Daily Operations Briefing — ' + (d.date || new Date().toISOString().split('T')[0]) + '*');\n  lines.push('_(Gemini unavailable — auto-generated fallback)_\\n');\n\n  // Priority actions\n  lines.push('*Priority Actions:*');\n  if (d.stuck_projects && d.stuck_projects.length > 0) {\n    for (const p of d.stuck_projects) {\n      lines.push('• STUCK: ' + p.brand + ' (' + p.code + ') — ' + p.status);\n    }\n  }\n  if (d.agent_events?.escalations?.length > 0) {\n    for (const e of d.agent_events.escalations) {\n      lines.push('• ESCALATION: ' + e.brand + ' — ' + e.detail);\n    }\n  }\n  if (d.stuck_projects?.length === 0 && (!d.agent_events?.escalations || d.agent_events.escalations.length === 0)) {\n    lines.push('• No urgent items');\n  }\n\n  // Pipeline\n  lines.push('\\n*Pipeline Status (' + d.active_projects + ' active):*');\n  for (const [status, count] of Object.entries(d.projects_by_status || {})) {\n    lines.push('• ' + status + ': ' + count);\n  }\n\n  // Scripts\n  lines.push('\\n*Scripts (' + d.pending_scripts + ' pending):*');\n  for (const [status, count] of Object.entries(d.scripts_by_status || {})) {\n    lines.push('• ' + status + ': ' + count);\n  }\n\n  // Leads\n  if (d.leads_to_follow_up?.length > 0) {\n    lines.push('\\n*Leads Due (' + d.leads_to_follow_up.length + '):*');\n    for (const l of d.leads_to_follow_up.slice(0, 5)) {\n      lines.push('• ' + l.company + ' (' + l.stage + ') — follow up: ' + l.follow_up);\n    }\n  }\n\n  // Invoices\n  if (d.overdue_invoices?.length > 0) {\n    lines.push('\\n*Overdue Invoices (' + d.overdue_invoices.length + '):*');\n    for (const i of d.overdue_invoices) {\n      lines.push('• ' + i.number + ' — ' + i.amount);\n    }\n  }\n\n  // Capacity\n  lines.push('\\n*Capacity:* ' + d.capacity?.current + '/' + d.capacity?.max + ' (' + d.capacity?.available + ' available)');\n\n  briefing = lines.join('\\n');\n}\n\nconst _geminiError = hasError ? (response.error || response.statusMessage || 'No candidates in response') : null;\nreturn [{ json: { briefing, _geminiError } }];"
-      },
-      "id": "daily-ops-parse",
-      "name": "Parse Briefing",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        1600,
-        400
-      ]
-    },
-    {
-      "parameters": {
-        "select": "channel",
-        "channelId": {
-          "__rl": true,
-          "value": "C0AFBQ5UF0E",
-          "mode": "id"
-        },
-        "text": "={{ $json.briefing }}",
-        "otherOptions": {}
-      },
-      "id": "daily-ops-slack",
-      "name": "Post to Slack Channel",
-      "type": "n8n-nodes-base.slack",
-      "typeVersion": 2.2,
-      "position": [
-        1840,
-        400
-      ],
-      "credentials": {
-        "slackApi": {
-          "id": "5Q37UpOjGx4YsbyC",
-          "name": "Slack account"
         }
       },
       "onError": "continueRegularOutput"
@@ -222,10 +124,7 @@
       "name": "Fetch Recent Events",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        860,
-        1000
-      ],
+      "position": [1020, 400],
       "credentials": {
         "airtableTokenApi": {
           "id": "WelvlJEjoHaI3l9G",
@@ -236,11 +135,121 @@
     },
     {
       "parameters": {
+        "method": "GET",
+        "url": "https://api.clickup.com/api/v2/team",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "clickUpApi",
+        "options": {}
+      },
+      "id": "daily-ops-fetch-clickup-teams",
+      "name": "Fetch ClickUp Teams",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1020, 560],
+      "credentials": {
+        "clickUpApi": {
+          "id": "CH8wDVhGoKw39AK1",
+          "name": "ClickUp account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.clickup.com/api/v2/team/{{ $json.teams[0].id }}/task?include_closed=false&order_by=due_date&subtasks=true&page=0",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "clickUpApi",
+        "options": {}
+      },
+      "id": "daily-ops-fetch-clickup-tasks",
+      "name": "Fetch ClickUp Tasks",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1180, 560],
+      "credentials": {
+        "clickUpApi": {
+          "id": "CH8wDVhGoKw39AK1",
+          "name": "ClickUp account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Use named references to get data from each upstream node\nconst projectsData = $('Fetch Active Projects').first().json;\nconst scriptsData = $('Fetch Pending Scripts').first().json;\nconst leadsData = $('Fetch Due Follow-ups').first().json;\nconst invoicesData = $('Fetch Overdue Invoices').first().json;\nconst eventsData = $('Fetch Recent Events').first().json;\n\n// ClickUp data\nlet clickupTeams = [];\nlet clickupTasks = [];\ntry {\n  clickupTeams = $('Fetch ClickUp Teams').first().json.teams || [];\n  clickupTasks = ($('Fetch ClickUp Tasks').first().json.tasks || []);\n} catch(e) {\n  // ClickUp fetch may fail - continue without it\n}\n\nconst projects = (projectsData.records || []).map(r => ({ id: r.id, ...r.fields }));\nconst scripts = (scriptsData.records || []).map(r => ({ id: r.id, ...r.fields }));\nconst leads = (leadsData.records || []).map(r => ({ id: r.id, ...r.fields }));\nconst invoices = (invoicesData.records || []).map(r => ({ id: r.id, ...r.fields }));\nconst events = (eventsData.records || []).map(r => ({ id: r.id, ...r.fields }));\n\nconst now = new Date();\nconst todayStr = now.toISOString().split('T')[0];\n\n// Detect stuck projects (status unchanged for > 2 days)\nconst stuckProjects = projects.filter(p => {\n  const lastUpdate = p.updated_at || p.created_at;\n  if (!lastUpdate) return false;\n  const days = (now - new Date(lastUpdate)) / (1000 * 60 * 60 * 24);\n  return days > 2;\n});\n\n// Group projects by status\nconst projectsByStatus = {};\nfor (const p of projects) {\n  const s = p.status || 'Unknown';\n  projectsByStatus[s] = (projectsByStatus[s] || 0) + 1;\n}\n\n// Group scripts by status\nconst scriptsByStatus = {};\nfor (const s of scripts) {\n  const st = s.status || 'Unknown';\n  scriptsByStatus[st] = (scriptsByStatus[st] || 0) + 1;\n}\n\n// Summarize events by type\nconst eventsByType = {};\nconst escalations = [];\nconst phaseTransitions = [];\nconst campaignAlerts = [];\nconst leadActions = [];\nfor (const e of events) {\n  const t = e.event_type || 'unknown';\n  eventsByType[t] = (eventsByType[t] || 0) + 1;\n  \n  if (t === 'escalation' || t === 'sla_breach' || (e.severity && e.severity === 'high')) {\n    escalations.push({ type: t, brand: e.brand_name || e.project_id, detail: e.detail || e.message || '', agent: e.agent_name || '' });\n  }\n  if (t === 'phase_complete' || t === 'phase_triggered' || t === 'workflow_complete') {\n    phaseTransitions.push({ type: t, brand: e.brand_name || e.project_id, detail: e.detail || e.message || '', agent: e.agent_name || '' });\n  }\n  if (t === 'campaign_alert' || t === 'ad_performance' || t === 'budget_alert') {\n    campaignAlerts.push({ type: t, brand: e.brand_name, detail: e.detail || e.message || '' });\n  }\n  if (t === 'lead_action' || t === 'new_lead' || t === 'proposal_sent') {\n    leadActions.push({ type: t, company: e.company_name || e.lead_name, detail: e.detail || e.message || '' });\n  }\n}\n\n// Process ClickUp tasks\nconst overdueTasks = [];\nconst todayTasks = [];\nconst inProgressTasks = [];\nconst clickupByStatus = {};\n\nfor (const task of clickupTasks) {\n  const status = (task.status && task.status.status) || 'unknown';\n  clickupByStatus[status] = (clickupByStatus[status] || 0) + 1;\n  \n  // Check due date\n  if (task.due_date) {\n    const dueDate = new Date(parseInt(task.due_date));\n    const dueDateStr = dueDate.toISOString().split('T')[0];\n    \n    if (dueDate < now && status !== 'closed' && status !== 'complete') {\n      overdueTasks.push({\n        name: task.name,\n        status: status,\n        due: dueDateStr,\n        assignees: (task.assignees || []).map(a => a.username || a.email).join(', '),\n        list: task.list ? task.list.name : '',\n        priority: task.priority ? task.priority.priority : 'none',\n        url: task.url || ''\n      });\n    } else if (dueDateStr === todayStr) {\n      todayTasks.push({\n        name: task.name,\n        status: status,\n        assignees: (task.assignees || []).map(a => a.username || a.email).join(', '),\n        list: task.list ? task.list.name : '',\n        priority: task.priority ? task.priority.priority : 'none',\n        url: task.url || ''\n      });\n    }\n  }\n  \n  if (status === 'in progress' || status === 'in review') {\n    inProgressTasks.push({\n      name: task.name,\n      status: status,\n      assignees: (task.assignees || []).map(a => a.username || a.email).join(', '),\n      list: task.list ? task.list.name : '',\n      due: task.due_date ? new Date(parseInt(task.due_date)).toISOString().split('T')[0] : 'none',\n      priority: task.priority ? task.priority.priority : 'none'\n    });\n  }\n}\n\n// Capacity\nconst MAX_CAPACITY = 15;\nconst available = Math.max(0, MAX_CAPACITY - projects.length);\n\nconst briefingData = {\n  date: todayStr,\n  active_projects: projects.length,\n  projects_by_status: projectsByStatus,\n  stuck_projects: stuckProjects.map(p => ({ brand: p.brand_name, code: p.client_code, status: p.status })),\n  pending_scripts: scripts.length,\n  scripts_by_status: scriptsByStatus,\n  scripts_awaiting_review: scripts.filter(s => s.status === 'In Review' || s.status === 'Client Review').map(s => ({ title: s.script_title, brand: s.brand_name, status: s.status })),\n  leads_to_follow_up: leads.map(l => ({ company: l.company_name, contact: l.contact_name, stage: l.stage, follow_up: l.next_follow_up })),\n  overdue_invoices: invoices.map(i => ({ number: i.invoice_number, amount: i.amount, due: i.due_date })),\n  capacity: { current: projects.length, max: MAX_CAPACITY, available },\n  agent_events: {\n    total_events: events.length,\n    events_by_type: eventsByType,\n    escalations,\n    phase_transitions: phaseTransitions,\n    campaign_alerts: campaignAlerts,\n    lead_actions: leadActions\n  },\n  clickup: {\n    total_tasks: clickupTasks.length,\n    tasks_by_status: clickupByStatus,\n    overdue_tasks: overdueTasks,\n    due_today: todayTasks,\n    in_progress: inProgressTasks,\n    workspace: clickupTeams.length > 0 ? clickupTeams[0].name : 'N/A'\n  }\n};\n\nreturn [{ json: briefingData }];"
+      },
+      "id": "daily-ops-aggregate",
+      "name": "Aggregate All Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 480]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ systemInstruction: { parts: [{ text: 'You are the Daily Operations Assistant for Smashed Agency, a UGC and AI creatives agency. Generate a concise, actionable morning briefing. Use *bold* for headers, bullet points for items. Structure: 1) Priority Actions (things needing immediate attention \\u2014 overdue ClickUp tasks, escalations, SLA breaches), 2) Pipeline Status (projects by stage), 3) Scripts Status, 4) ClickUp Tasks (overdue tasks, tasks due today, in-progress work), 5) Agent Activity Highlights (key events from the last 24h including phase transitions, campaign alerts, new leads), 6) Sales (leads to follow up), 7) Finance (overdue invoices), 8) Capacity. Keep it under 1200 words. Be direct and actionable. If there are escalations, SLA breaches, or overdue ClickUp tasks, put them at the top of Priority Actions.' }] }, contents: [{ role: 'user', parts: [{ text: 'Generate morning briefing for ' + $json.date + ':\\n' + JSON.stringify($json, null, 2) }] }], generationConfig: { temperature: 0.3, maxOutputTokens: 2500 } }) }}",
+        "options": {}
+      },
+      "id": "daily-ops-gemini",
+      "name": "Gemini \u2014 Generate Briefing",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1500, 480],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "rIL63TG4xfMQL8uJ",
+          "name": "Cosmisk AI"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst aggregatedData = $('Aggregate All Data').first().json;\n\n// Check for Gemini errors\nconst hasError = response.error || response.statusCode >= 400 || !response.candidates;\n\nlet briefing;\nif (!hasError) {\n  briefing = response.candidates?.[0]?.content?.parts?.[0]?.text;\n}\n\nif (!briefing) {\n  // Fallback: build plain-text briefing from raw aggregated data\n  const d = aggregatedData;\n  const lines = [];\n  lines.push('*Daily Operations Briefing \\u2014 ' + (d.date || new Date().toISOString().split('T')[0]) + '*');\n  lines.push('_(Gemini unavailable \\u2014 auto-generated fallback)_\\n');\n\n  // Priority actions\n  lines.push('*Priority Actions:*');\n  if (d.clickup?.overdue_tasks?.length > 0) {\n    for (const t of d.clickup.overdue_tasks) {\n      lines.push('\\u2022 OVERDUE TASK: ' + t.name + ' (due ' + t.due + ') \\u2014 ' + t.assignees);\n    }\n  }\n  if (d.stuck_projects && d.stuck_projects.length > 0) {\n    for (const p of d.stuck_projects) {\n      lines.push('\\u2022 STUCK: ' + p.brand + ' (' + p.code + ') \\u2014 ' + p.status);\n    }\n  }\n  if (d.agent_events?.escalations?.length > 0) {\n    for (const e of d.agent_events.escalations) {\n      lines.push('\\u2022 ESCALATION: ' + e.brand + ' \\u2014 ' + e.detail);\n    }\n  }\n  if ((!d.clickup?.overdue_tasks || d.clickup.overdue_tasks.length === 0) && d.stuck_projects?.length === 0 && (!d.agent_events?.escalations || d.agent_events.escalations.length === 0)) {\n    lines.push('\\u2022 No urgent items');\n  }\n\n  // Pipeline\n  lines.push('\\n*Pipeline Status (' + d.active_projects + ' active):*');\n  for (const [status, count] of Object.entries(d.projects_by_status || {})) {\n    lines.push('\\u2022 ' + status + ': ' + count);\n  }\n\n  // Scripts\n  lines.push('\\n*Scripts (' + d.pending_scripts + ' pending):*');\n  for (const [status, count] of Object.entries(d.scripts_by_status || {})) {\n    lines.push('\\u2022 ' + status + ': ' + count);\n  }\n\n  // ClickUp\n  if (d.clickup) {\n    lines.push('\\n*ClickUp Tasks (' + d.clickup.total_tasks + ' total):*');\n    if (d.clickup.due_today?.length > 0) {\n      lines.push('Due today:');\n      for (const t of d.clickup.due_today) {\n        lines.push('\\u2022 ' + t.name + ' (' + t.status + ') \\u2014 ' + t.assignees);\n      }\n    }\n    if (d.clickup.in_progress?.length > 0) {\n      lines.push('In progress:');\n      for (const t of d.clickup.in_progress.slice(0, 5)) {\n        lines.push('\\u2022 ' + t.name + ' (due ' + t.due + ') \\u2014 ' + t.assignees);\n      }\n    }\n  }\n\n  // Leads\n  if (d.leads_to_follow_up?.length > 0) {\n    lines.push('\\n*Leads Due (' + d.leads_to_follow_up.length + '):*');\n    for (const l of d.leads_to_follow_up.slice(0, 5)) {\n      lines.push('\\u2022 ' + l.company + ' (' + l.stage + ') \\u2014 follow up: ' + l.follow_up);\n    }\n  }\n\n  // Invoices\n  if (d.overdue_invoices?.length > 0) {\n    lines.push('\\n*Overdue Invoices (' + d.overdue_invoices.length + '):*');\n    for (const i of d.overdue_invoices) {\n      lines.push('\\u2022 ' + i.number + ' \\u2014 ' + i.amount);\n    }\n  }\n\n  // Capacity\n  lines.push('\\n*Capacity:* ' + d.capacity?.current + '/' + d.capacity?.max + ' (' + d.capacity?.available + ' available)');\n\n  briefing = lines.join('\\n');\n}\n\nconst _geminiError = hasError ? (response.error || response.statusMessage || 'No candidates in response') : null;\nreturn [{ json: { briefing, _geminiError } }];"
+      },
+      "id": "daily-ops-parse",
+      "name": "Parse Briefing",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1660, 480]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0AGWL13YGJ",
+          "mode": "id"
+        },
+        "text": "={{ $json.briefing }}",
+        "otherOptions": {}
+      },
+      "id": "daily-ops-slack",
+      "name": "Post to Slack Channel",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [1820, 480],
+      "credentials": {
+        "slackApi": {
+          "id": "5Q37UpOjGx4YsbyC",
+          "name": "Slack account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
         "jsCode": "// Check if Gemini or Slack had errors and log them\nconst parsedData = $('Parse Briefing').first().json;\nconst slackResult = $input.first().json;\n\nconst errors = [];\nif (parsedData._geminiError) {\n  errors.push('Gemini: ' + parsedData._geminiError);\n}\nif (slackResult.error || slackResult.statusCode >= 400) {\n  errors.push('Slack: ' + (slackResult.error || slackResult.statusMessage || 'HTTP ' + slackResult.statusCode));\n}\n\nif (errors.length === 0) return [];\n\nreturn [{ json: {\n  records: [{\n    fields: {\n      agent: 'daily_ops',\n      event_type: 'system_error',\n      severity: 'high',\n      message: 'Daily Ops errors: ' + errors.join('; '),\n      payload: JSON.stringify({ errors, timestamp: new Date().toISOString() }),\n      created_at: new Date().toISOString()\n    }\n  }]\n} }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2080, 400],
+      "position": [1980, 480],
       "id": "daily-ops-check-errors",
       "name": "Check Errors"
     },
@@ -257,20 +266,20 @@
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2320, 400],
+      "position": [2140, 480],
       "id": "daily-ops-write-error",
       "name": "Write Error Event",
       "credentials": {
         "airtableTokenApi": {
           "id": "WelvlJEjoHaI3l9G",
-          "name": "Airtable account"
+          "name": "Airtable Personal Access Token account"
         }
       },
       "onError": "continueRegularOutput"
     }
   ],
   "connections": {
-    "Schedule — 8AM IST": {
+    "Schedule \u2014 8AM IST": {
       "main": [
         [
           {
@@ -288,26 +297,6 @@
             "node": "Fetch Active Projects",
             "type": "main",
             "index": 0
-          },
-          {
-            "node": "Fetch Pending Scripts",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "Fetch Due Follow-ups",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "Fetch Overdue Invoices",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "Fetch Recent Events",
-            "type": "main",
-            "index": 0
           }
         ]
       ]
@@ -316,7 +305,7 @@
       "main": [
         [
           {
-            "node": "Aggregate All Data",
+            "node": "Fetch Pending Scripts",
             "type": "main",
             "index": 0
           }
@@ -327,7 +316,7 @@
       "main": [
         [
           {
-            "node": "Aggregate All Data",
+            "node": "Fetch Due Follow-ups",
             "type": "main",
             "index": 0
           }
@@ -338,7 +327,7 @@
       "main": [
         [
           {
-            "node": "Aggregate All Data",
+            "node": "Fetch Overdue Invoices",
             "type": "main",
             "index": 0
           }
@@ -346,6 +335,39 @@
       ]
     },
     "Fetch Overdue Invoices": {
+      "main": [
+        [
+          {
+            "node": "Fetch Recent Events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Recent Events": {
+      "main": [
+        [
+          {
+            "node": "Fetch ClickUp Teams",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch ClickUp Teams": {
+      "main": [
+        [
+          {
+            "node": "Fetch ClickUp Tasks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch ClickUp Tasks": {
       "main": [
         [
           {
@@ -360,14 +382,14 @@
       "main": [
         [
           {
-            "node": "Gemini — Generate Briefing",
+            "node": "Gemini \u2014 Generate Briefing",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Gemini — Generate Briefing": {
+    "Gemini \u2014 Generate Briefing": {
       "main": [
         [
           {
@@ -405,17 +427,6 @@
         [
           {
             "node": "Write Error Event",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Fetch Recent Events": {
-      "main": [
-        [
-          {
-            "node": "Aggregate All Data",
             "type": "main",
             "index": 0
           }

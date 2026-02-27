@@ -1,0 +1,515 @@
+{
+  "name": "Creative Tear-Down Engine",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "creative-teardown",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "f1a00001-0000-0000-0000-000000000001",
+      "name": "ctd-webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 300],
+      "webhookId": "creative-teardown-wh"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || {};\nconst query = $input.first().json.query || {};\n\nconst leadId = body.lead_id || query.lead_id || '';\nconst companyName = body.company_name || query.company_name || '';\nconst website = body.website || query.website || '';\nconst industry = body.industry || query.industry || '';\nconst contactName = body.contact_name || query.contact_name || '';\nconst notes = body.notes || query.notes || '';\n\nif (!companyName) {\n  throw new Error('company_name is required');\n}\n\nreturn [{\n  json: {\n    lead_id: leadId,\n    company_name: companyName,\n    website: website,\n    industry: industry,\n    contact_name: contactName,\n    notes: notes\n  }\n}];"
+      },
+      "id": "f1a00001-0000-0000-0000-000000000002",
+      "name": "ctd-parse",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst companyName = data.company_name;\nconst website = data.website || '';\nconst serpApiKey = 'b183c082b67f0971673dbab7ce0a14883f75e5012d09720d17c540efce67bc39';\n\n// Search 1: Brand website content\nlet websiteContent = '';\ntry {\n  let domain = '';\n  if (website) {\n    try {\n      domain = new URL(website.startsWith('http') ? website : `https://${website}`).hostname.replace('www.', '');\n    } catch(e) { domain = website.replace(/https?:\\/\\//, '').replace('www.', '').split('/')[0]; }\n  }\n  const siteQuery = domain ? `site:${domain}` : `\"${companyName}\" products about`;\n  const resp1 = await this.helpers.httpRequest({\n    method: 'GET',\n    url: `https://serpapi.com/search.json?engine=google&q=${encodeURIComponent(siteQuery)}&num=10&api_key=${serpApiKey}`,\n    json: true\n  });\n  const results = resp1.organic_results || [];\n  websiteContent = results.map(r => `${r.title}: ${r.snippet || ''}`).join('\\n');\n} catch (e) {\n  websiteContent = `Error: ${e.message}`;\n}\n\n// Search 2: Brand ads and creative\nlet adsContent = '';\ntry {\n  const adsQuery = `\"${companyName}\" ads OR advertisement OR creative OR campaign`;\n  const resp2 = await this.helpers.httpRequest({\n    method: 'GET',\n    url: `https://serpapi.com/search.json?engine=google&q=${encodeURIComponent(adsQuery)}&num=10&api_key=${serpApiKey}`,\n    json: true\n  });\n  const results = resp2.organic_results || [];\n  adsContent = results.map(r => `${r.title}: ${r.snippet || ''}`).join('\\n');\n} catch (e) {\n  adsContent = `Error: ${e.message}`;\n}\n\n// Search 3: Social media and reviews\nlet socialContent = '';\ntry {\n  const socialQuery = `\"${companyName}\" instagram OR facebook OR youtube review OR reviews`;\n  const resp3 = await this.helpers.httpRequest({\n    method: 'GET',\n    url: `https://serpapi.com/search.json?engine=google&q=${encodeURIComponent(socialQuery)}&num=5&api_key=${serpApiKey}`,\n    json: true\n  });\n  const results = resp3.organic_results || [];\n  socialContent = results.map(r => `${r.title}: ${r.snippet || ''}`).join('\\n');\n} catch (e) {\n  socialContent = `Error: ${e.message}`;\n}\n\nreturn [{\n  json: {\n    ...data,\n    website_content: websiteContent,\n    ads_content: adsContent,\n    social_content: socialContent\n  }\n}];"
+      },
+      "id": "f1a00001-0000-0000-0000-000000000003",
+      "name": "ctd-search-brand",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [640, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\n\nconst systemPrompt = `You are Jeet, a sharp creative strategist at Cosmisk — a UGC and performance ad agency in India. You analyze brands' current ads and tell them exactly what's wrong and how to fix it.\n\nYour tone: Direct, confident, casual-professional. Like a smart friend who works in advertising giving honest feedback over coffee. NOT like a corporate consultant or AI assistant.\n\nSTRICT RULES:\n- NEVER use these words/phrases: \"unparalleled\", \"dramatically\", \"game-changer\", \"unlock\", \"leverage\", \"amplify\", \"resonate\", \"captivate\", \"delve\", \"comprehensive\", \"cutting-edge\", \"incredible\", \"powerful promise\", \"deeply\", \"genuinely impressed\", \"massive opportunity\"\n- NEVER make up statistics. No \"2-3x ROAS\" or \"30-60% CPA reduction\" unless you have actual data.\n- NEVER say \"we specialize in helping brands like X\" — it's obvious and template-y\n- Be BRUTALLY specific. Reference actual products, actual pages, actual campaigns you found in the search data\n- Improvements must include EXACT script lines a creator would say, not vague descriptions\n- The email should read like one person wrote it to another person, not like a sales template\n- Keep sentences short. No compound sentences with semicolons.\n- If you can't find enough data to be specific, say so honestly instead of making generic observations\n\nCosmisk services: UGC video ads, AI-generated ad variations, mashup ads, Meta/Google media buying, ad account audits.`;\n\nconst userPrompt = `Analyze this brand for a Creative Tear-Down:\n\nBRAND: ${data.company_name}\nWEBSITE: ${data.website || 'Unknown'}\nINDUSTRY: ${data.industry || 'Unknown'}\nCONTACT: ${data.contact_name || 'Unknown'}\n\nWEBSITE DATA:\n${data.website_content || 'No data'}\n\nADS/MARKETING DATA:\n${data.ads_content || 'No data'}\n\nSOCIAL DATA:\n${data.social_content || 'No data'}\n\nNOTES: ${data.notes || 'None'}\n\n---\n\nReturn ONLY valid JSON (no markdown, no code fences):\n\n{\n  \"brand_overview\": {\n    \"name\": \"\",\n    \"industry\": \"\",\n    \"products\": [\"be specific - actual product names\"],\n    \"target_audience\": \"be specific - who exactly buys this\",\n    \"positioning\": \"one sentence, how they see themselves\",\n    \"estimated_size\": \"startup/growing/established/enterprise\"\n  },\n  \"creative_assessment\": {\n    \"strengths\": [\"2-3 specific things they do well - reference actual campaigns/pages/products you found\"],\n    \"weaknesses\": [\"3-4 specific gaps - what exactly is wrong with their current approach\"],\n    \"visual_style\": \"describe what their ads/website actually look like\",\n    \"hook_effectiveness\": \"low/medium/high\",\n    \"cta_clarity\": \"low/medium/high\",\n    \"social_proof_usage\": \"none/weak/moderate/strong\",\n    \"ugc_usage\": \"none/minimal/moderate/heavy\",\n    \"overall_grade\": \"A/B/C/D/F\"\n  },\n  \"ugc_opportunity\": {\n    \"score\": 1-10,\n    \"primary_angle\": \"one specific reason UGC would work for them - not generic\",\n    \"formats\": [\"pick 2-3 that actually fit, not all of them\"],\n    \"creator_profile\": \"specific - age range, gender, vibe, what they'd look like\",\n    \"platforms\": [\"pick 1-2 that matter most\"],\n    \"estimated_impact\": \"be honest and specific about what would change\"\n  },\n  \"improvements\": [\n    {\n      \"area\": \"one of: hooks/scripts/visuals/ctas/social-proof\",\n      \"current_state\": \"what they actually do right now - be specific\",\n      \"recommendation\": \"what to do instead - one clear sentence\",\n      \"example\": \"WRITE THE ACTUAL SCRIPT LINE or describe the exact visual. Not vague. Example: 'Camera on face, no makeup: Hey so I have really oily skin and I've tried literally everything. My friend told me to try [Product Name] and honestly? Look at my skin right now. It's been 3 weeks.'\",\n      \"expected_lift\": \"be honest - 'better engagement' is fine, don't make up percentages\"\n    }\n  ],\n  \"outreach\": {\n    \"subject_line\": \"short, specific, no buzzwords - like a real person wrote it\",\n    \"email_body\": \"Write like a real person. 2-3 short paragraphs max. Reference ONE specific thing you noticed about their brand. Don't oversell. End with asking for a quick chat, not 'book a free strategy call'. No 'Dear [Contact Name]' - use 'Hey' or 'Hi'.\",\n    \"instagram_dm\": \"2 sentences max. Casual. Like you're DMing a brand you actually follow.\",\n    \"whatsapp_message\": \"2 sentences. Get to the point.\",\n    \"key_stat\": \"one honest, specific observation about their brand - not a made-up industry stat\"\n  }\n}`;\n\nreturn [{\n  json: {\n    ...data,\n    requestBody: {\n      systemInstruction: { parts: [{ text: systemPrompt }] },\n      contents: [{ role: 'user', parts: [{ text: userPrompt }] }],\n      generationConfig: {\n        temperature: 0.8,\n        maxOutputTokens: 8192\n      }\n    }\n  }\n}];"
+      },
+      "id": "f1a00001-0000-0000-0000-000000000004",
+      "name": "ctd-build-prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [860, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.requestBody) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "f1a00001-0000-0000-0000-000000000005",
+      "name": "ctd-gemini",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1080, 300],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "rIL63TG4xfMQL8uJ",
+          "name": "Cosmisk AI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const originalData = $('ctd-build-prompt').first().json;\nconst geminiText = $input.first().json.candidates?.[0]?.content?.parts?.[0]?.text || '';\n\n// Robust JSON extraction - strip markdown fences\nlet cleaned = geminiText;\n// Remove leading ```json or ``` \nif (cleaned.trimStart().startsWith('`')) {\n  const firstNewline = cleaned.indexOf('\\n');\n  if (firstNewline > -1) cleaned = cleaned.substring(firstNewline + 1);\n}\n// Remove trailing ```\nconst lastBacktick = cleaned.lastIndexOf('`');\nif (lastBacktick > -1 && cleaned.substring(lastBacktick).trim().match(/^`{1,3}\\s*$/)) {\n  cleaned = cleaned.substring(0, lastBacktick);\n}\ncleaned = cleaned.trim();\n\n// Parse JSON\nlet teardown = {};\ntry {\n  teardown = JSON.parse(cleaned);\n} catch (e) {\n  // Try extracting the largest JSON object\n  const match = cleaned.match(/\\{[\\s\\S]*\\}/);\n  if (match) {\n    try { teardown = JSON.parse(match[0]); } catch (e2) {\n      // Truncated JSON - try to salvage by closing brackets\n      let salvage = match[0];\n      let openBraces = (salvage.match(/\\{/g) || []).length;\n      let closeBraces = (salvage.match(/\\}/g) || []).length;\n      let openBrackets = (salvage.match(/\\[/g) || []).length;\n      let closeBrackets = (salvage.match(/\\]/g) || []).length;\n      // Remove trailing comma or incomplete value\n      salvage = salvage.replace(/,\\s*$/, '');\n      salvage = salvage.replace(/,\\s*\"[^\"]*\"?\\s*$/, '');\n      salvage = salvage.replace(/:\\s*\"[^\"]*$/, ': \"...\"');\n      // Close brackets\n      for (let i = 0; i < openBrackets - closeBrackets; i++) salvage += ']';\n      for (let i = 0; i < openBraces - closeBraces; i++) salvage += '}';\n      try { teardown = JSON.parse(salvage); } catch(e3) {\n        teardown = { error: 'Parse failed', raw: geminiText.substring(0, 2000) };\n      }\n    }\n  } else {\n    teardown = { error: 'No JSON found', raw: geminiText.substring(0, 2000) };\n  }\n}\n\nconst overview = teardown.brand_overview || {};\nconst assessment = teardown.creative_assessment || {};\nconst opportunity = teardown.ugc_opportunity || {};\nconst improvements = teardown.improvements || [];\nconst outreach = teardown.outreach || {};\n\n// Build human-readable notes for Airtable\nconst notesLines = [\n  '=== CREATIVE TEAR-DOWN ===',\n  `Brand: ${overview.name || originalData.company_name} | Industry: ${overview.industry || originalData.industry || 'N/A'}`,\n  `Grade: ${assessment.overall_grade || 'N/A'} | UGC Score: ${opportunity.score || 'N/A'}/10`,\n  `Products: ${(overview.products || []).join(', ')}`,\n  `Target: ${overview.target_audience || 'N/A'}`,\n  `Positioning: ${overview.positioning || 'N/A'}`,\n  '',\n  `STRENGTHS: ${(assessment.strengths || []).join(' | ')}`,\n  `WEAKNESSES: ${(assessment.weaknesses || []).join(' | ')}`,\n  '',\n  'UGC OPPORTUNITY:',\n  `  Angle: ${opportunity.primary_angle || 'N/A'}`,\n  `  Formats: ${(opportunity.formats || []).join(', ')}`,\n  `  Creator: ${opportunity.creator_profile || 'N/A'}`,\n  `  Platforms: ${(opportunity.platforms || []).join(', ')}`,\n  `  Impact: ${opportunity.estimated_impact || 'N/A'}`,\n  '',\n  'IMPROVEMENTS:'\n];\n\nfor (let i = 0; i < improvements.length; i++) {\n  const imp = improvements[i];\n  notesLines.push(`${i+1}. ${(imp.area || '').toUpperCase()}`);\n  notesLines.push(`   Now: ${imp.current_state || 'N/A'}`);\n  notesLines.push(`   Do: ${imp.recommendation || 'N/A'}`);\n  notesLines.push(`   Ex: ${imp.example || 'N/A'}`);\n  notesLines.push(`   Lift: ${imp.expected_lift || 'N/A'}`);\n}\n\nnotesLines.push('');\nnotesLines.push('=== OUTREACH ===');\nnotesLines.push(`Subject: ${outreach.subject_line || 'N/A'}`);\nnotesLines.push(`Key Stat: ${outreach.key_stat || 'N/A'}`);\nnotesLines.push('');\nnotesLines.push('EMAIL:');\nnotesLines.push(outreach.email_body || 'N/A');\nnotesLines.push('');\nnotesLines.push('INSTAGRAM DM:');\nnotesLines.push(outreach.instagram_dm || 'N/A');\nnotesLines.push('');\nnotesLines.push('WHATSAPP:');\nnotesLines.push(outreach.whatsapp_message || 'N/A');\n\nconst notesText = notesLines.join('\\n');\n\n// Build Slack message\nconst slackLines = [\n  `*Creative Tear-Down: ${overview.name || originalData.company_name}*`,\n  `Industry: ${overview.industry || 'N/A'} | Grade: *${assessment.overall_grade || 'N/A'}* | UGC Score: *${opportunity.score || 'N/A'}/10*`,\n  '',\n  `*Strengths:* ${(assessment.strengths || []).slice(0, 3).join(', ')}`,\n  `*Weaknesses:* ${(assessment.weaknesses || []).slice(0, 3).join(', ')}`,\n  '',\n  '*Top Improvements:*'\n];\nfor (let i = 0; i < Math.min(improvements.length, 3); i++) {\n  slackLines.push(`>${i+1}. *${improvements[i].area || ''}*: ${improvements[i].recommendation || ''}`);\n}\nslackLines.push('');\nslackLines.push(`*Outreach Subject:* ${outreach.subject_line || 'N/A'}`);\nslackLines.push(`*Key Stat:* ${outreach.key_stat || 'N/A'}`);\nslackLines.push('');\nslackLines.push(`_Lead: ${originalData.lead_id || 'no ID'} | Tear-down stored on record_`);\n\nreturn [{\n  json: {\n    lead_id: originalData.lead_id || '',\n    company_name: originalData.company_name,\n    teardown_json: JSON.stringify(teardown),\n    notes_text: notesText,\n    slack_message: slackLines.join('\\n'),\n    outreach_email: outreach.email_body || '',\n    outreach_subject: outreach.subject_line || '',\n    outreach_dm: outreach.instagram_dm || '',\n    outreach_whatsapp: outreach.whatsapp_message || '',\n    ugc_score: opportunity.score || 0\n  }\n}];"
+      },
+      "id": "f1a00001-0000-0000-0000-000000000006",
+      "name": "ctd-parse-results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1300, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "cond-lead-id",
+              "leftValue": "={{ $json.lead_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f1a00001-0000-0000-0000-000000000007",
+      "name": "ctd-if-has-lead",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1520, 200]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tbl6qih4ODd7qKFZ1/{{ $json.lead_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ fields: { notes: $json.notes_text } }) }}",
+        "options": {}
+      },
+      "id": "f1a00001-0000-0000-0000-000000000008",
+      "name": "ctd-update-lead",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1740, 200],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ JSON.stringify({ success: true, company: $json.company_name, ugc_score: $json.ugc_score, outreach_subject: $json.outreach_subject, teardown: JSON.parse($json.teardown_json || '{}') }) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "f1a00001-0000-0000-0000-000000000009",
+      "name": "ctd-respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1520, 400]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0AHQUBGR32",
+          "mode": "id"
+        },
+        "text": "={{ $json.slack_message }}",
+        "otherOptions": {}
+      },
+      "id": "f1a00001-0000-0000-0000-00000000000a",
+      "name": "ctd-slack",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [1520, 550],
+      "credentials": {
+        "slackApi": {
+          "id": "5Q37UpOjGx4YsbyC",
+          "name": "Slack account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblGhzSJ5RXWDS8h8",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "airtableTokenApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ records: [{ fields: { event_type: 'creative_teardown_complete', source: 'creative_teardown_engine', details: JSON.stringify({ company: $json.company_name, lead_id: $json.lead_id, ugc_score: $json.ugc_score }), status: 'unprocessed', created_at: new Date().toISOString() } }] }) }}",
+        "options": {}
+      },
+      "id": "f1a00001-0000-0000-0000-00000000000b",
+      "name": "ctd-write-event",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1520, 100],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "WelvlJEjoHaI3l9G",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "content": "## Creative Tear-Down Engine\n\n**Webhook:** POST /creative-teardown\n**Body:** { company_name, website, industry?, contact_name?, lead_id?, notes? }\n\n**Flow:**\n1. Parse request\n2. SerpAPI: search website + ads + social (3 searches)\n3. Gemini 2.5 Flash: comprehensive creative analysis\n4. Parse results + build outreach messages\n5. Update lead in Airtable + Slack + Event Bus\n6. **NEW:** Extract generalizable learnings → dedup → write to System_Learnings table\n\n**Auto-triggered by:**\n- Ad Library Scanner (new brands found)\n- Prospect Finder (new prospects found)\n\n**Output:** Structured tear-down with:\n- Brand overview + creative assessment + grade\n- UGC opportunity score (1-10)\n- 3-5 specific improvements with examples\n- Ready-to-send email, DM, and WhatsApp outreach\n- System_Learnings write-back (generalizable insights)",
+        "width": 420,
+        "height": 420
+      },
+      "id": "f1a00001-0000-0000-0000-00000000000c",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [200, 480]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\n\n// Skip if tear-down had errors\nif (!data.teardown_json || data.teardown_json.includes('\"error\"')) {\n  return [{ json: { learningsCount: 0 } }];\n}\n\nlet teardown = {};\ntry { teardown = JSON.parse(data.teardown_json); } catch(e) {\n  return [{ json: { learningsCount: 0 } }];\n}\n\nconst overview = teardown.brand_overview || {};\nconst assessment = teardown.creative_assessment || {};\nconst opportunity = teardown.ugc_opportunity || {};\nconst improvements = teardown.improvements || [];\n\nconst systemPrompt = `You extract GENERALIZABLE creative strategy learnings from brand tear-down analyses. These learnings will be used by AI agents writing UGC ad scripts, outreach messages, and content strategies.\n\nCRITICAL: Only extract insights that GENERALIZE beyond this specific brand. \"Brand X has weak CTAs\" is NOT generalizable. \"D2C skincare brands that use question hooks get higher engagement than statement hooks\" IS generalizable.\n\nCategories:\n- hook_patterns: What hook styles/structures work or fail for certain industries/audiences\n- creative_strategy: Broader creative approach insights (UGC vs polished, testimonial vs demo, etc.)\n- industry_trend: Patterns you see in how brands in this industry market\n- audience_insight: What certain audience segments respond to`;\n\nconst userPrompt = `TEAR-DOWN DATA:\n\nBrand: ${overview.name || data.company_name}\nIndustry: ${overview.industry || 'Unknown'}\nAudience: ${overview.target_audience || 'Unknown'}\nPositioning: ${overview.positioning || 'Unknown'}\nProducts: ${(overview.products || []).join(', ')}\n\nCreative Grade: ${assessment.overall_grade || 'N/A'}\nHook Effectiveness: ${assessment.hook_effectiveness || 'N/A'}\nCTA Clarity: ${assessment.cta_clarity || 'N/A'}\nSocial Proof: ${assessment.social_proof_usage || 'N/A'}\nUGC Usage: ${assessment.ugc_usage || 'N/A'}\nUGC Score: ${opportunity.score || 'N/A'}/10\n\nStrengths: ${(assessment.strengths || []).join(' | ')}\nWeaknesses: ${(assessment.weaknesses || []).join(' | ')}\n\nUGC Angle: ${opportunity.primary_angle || 'N/A'}\nCreator Profile: ${opportunity.creator_profile || 'N/A'}\n\nImprovements Found:\n${improvements.map((imp, i) => `${i+1}. ${imp.area}: Current: ${imp.current_state} -> Recommended: ${imp.recommendation}`).join('\\n')}\n\n---\n\nExtract 1-3 GENERALIZABLE learnings. For each:\n- Title: One sentence, specific pattern (e.g., \"Direct-to-camera hooks outperform text overlay hooks for supplement brands\")\n- Category: hook_patterns | creative_strategy | industry_trend | audience_insight\n- Insight: 2-3 sentences explaining the pattern and why it works\n- Evidence: Reference the specific brand data that supports this (brand name, grade, scores)\n- Confidence: 0.5-0.8 (single brand = lower confidence, obvious pattern = higher)\n\nReturn ONLY valid JSON (no markdown fences):\n{\n  \"learnings\": [\n    {\n      \"title\": \"...\",\n      \"category\": \"...\",\n      \"insight\": \"...\",\n      \"evidence\": \"...\",\n      \"confidence\": 0.6\n    }\n  ]\n}\n\nIf nothing generalizable, return: { \"learnings\": [] }`;\n\nconst requestBody = {\n  systemInstruction: { parts: [{ text: systemPrompt }] },\n  contents: [{ role: 'user', parts: [{ text: userPrompt }] }],\n  generationConfig: { temperature: 0.3, maxOutputTokens: 2048, thinkingConfig: { thinkingBudget: 0 } }\n};\n\nreturn [{ json: { ...data, learningRequestBody: JSON.stringify(requestBody) } }];"
+      },
+      "id": "ctd-00000020",
+      "name": "ctd-build-learning-prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 600],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.learningRequestBody }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "ctd-00000021",
+      "name": "ctd-gemini-learnings",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 600],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "rIL63TG4xfMQL8uJ",
+          "name": "Cosmisk AI"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblAfe1LYh8kHPVbP",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "filterByFormula",
+              "value": "AND({active}=TRUE(),{source_agent}=\"creative_teardown\")"
+            },
+            {
+              "name": "maxRecords",
+              "value": "50"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ctd-00000022",
+      "name": "ctd-fetch-existing-learnings",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 700],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "a0TTu3NVsuJUEbct",
+          "name": "Airtable PAT Header"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const upstreamData = $('ctd-build-learning-prompt').first().json;\n\n// If upstream returned learningsCount: 0, skip\nif (upstreamData.learningsCount === 0) {\n  return [{ json: { learningsCount: 0 } }];\n}\n\nconst geminiResp = $('ctd-gemini-learnings').first().json;\nconst geminiText = geminiResp.candidates?.[0]?.content?.parts?.[0]?.text || '';\nlet cleaned = geminiText.replace(/^```json\\s*/i, '').replace(/^```\\s*/m, '').replace(/\\s*```\\s*$/m, '').trim();\n\nlet parsed = { learnings: [] };\ntry {\n  parsed = JSON.parse(cleaned);\n} catch(e) {\n  const match = cleaned.match(/\\{[\\s\\S]*\\}/);\n  if (match) {\n    try { parsed = JSON.parse(match[0]); } catch(e2) {}\n  }\n}\n\nconst newLearnings = parsed.learnings || [];\nif (newLearnings.length === 0) {\n  return [{ json: { learningsCount: 0 } }];\n}\n\n// Get existing learnings for dedup\nconst existingResp = $input.first().json;\nconst existing = (existingResp.records || []).map(r => ({\n  title: (r.fields?.title || '').toLowerCase(),\n  insight: (r.fields?.insight || '').toLowerCase()\n}));\n\n// Dedup: >50% word overlap\nconst deduped = newLearnings.filter(nl => {\n  const nlWords = (nl.title + ' ' + nl.insight).toLowerCase().split(/\\s+/);\n  for (const ex of existing) {\n    const exWords = (ex.title + ' ' + ex.insight).split(/\\s+/);\n    const overlap = nlWords.filter(w => w.length > 3 && exWords.includes(w)).length;\n    const ratio = overlap / Math.max(nlWords.length, 1);\n    if (ratio > 0.5) return false;\n  }\n  return true;\n});\n\nif (deduped.length === 0) {\n  return [{ json: { learningsCount: 0 } }];\n}\n\nconst records = deduped.slice(0, 3).map(l => ({\n  fields: {\n    title: l.title,\n    source_agent: 'creative_teardown',\n    category: l.category || 'creative_strategy',\n    insight: l.insight,\n    evidence: '[Tear-down: ' + (upstreamData.company_name || 'Unknown') + '] ' + (l.evidence || ''),\n    confidence: Math.min(Math.max(l.confidence || 0.6, 0.3), 0.9),\n    active: true,\n    created_at: new Date().toISOString()\n  }\n}));\n\nreturn [{ json: {\n  learningsCount: records.length,\n  airtable_body: JSON.stringify({ records })\n}}];"
+      },
+      "id": "ctd-00000023",
+      "name": "ctd-dedup-learnings",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 700],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "cond-has-learnings",
+              "leftValue": "={{ $json.learningsCount }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "larger"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "ctd-00000024",
+      "name": "ctd-if-has-learnings",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2000, 700],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblAfe1LYh8kHPVbP",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.airtable_body }}",
+        "options": {}
+      },
+      "id": "ctd-00000025",
+      "name": "ctd-write-learnings",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2220, 700],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "a0TTu3NVsuJUEbct",
+          "name": "Airtable PAT Header"
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "ctd-webhook": {
+      "main": [
+        [
+          {
+            "node": "ctd-parse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ctd-parse": {
+      "main": [
+        [
+          {
+            "node": "ctd-search-brand",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ctd-search-brand": {
+      "main": [
+        [
+          {
+            "node": "ctd-build-prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ctd-build-prompt": {
+      "main": [
+        [
+          {
+            "node": "ctd-gemini",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ctd-gemini": {
+      "main": [
+        [
+          {
+            "node": "ctd-parse-results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ctd-parse-results": {
+      "main": [
+        [
+          {
+            "node": "ctd-if-has-lead",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "ctd-respond",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "ctd-slack",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "ctd-write-event",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "ctd-build-learning-prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ctd-if-has-lead": {
+      "main": [
+        [
+          {
+            "node": "ctd-update-lead",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "ctd-build-learning-prompt": {
+      "main": [
+        [
+          {
+            "node": "ctd-gemini-learnings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ctd-gemini-learnings": {
+      "main": [
+        [
+          {
+            "node": "ctd-fetch-existing-learnings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ctd-fetch-existing-learnings": {
+      "main": [
+        [
+          {
+            "node": "ctd-dedup-learnings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ctd-dedup-learnings": {
+      "main": [
+        [
+          {
+            "node": "ctd-if-has-learnings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ctd-if-has-learnings": {
+      "main": [
+        [
+          {
+            "node": "ctd-write-learnings",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null
+}

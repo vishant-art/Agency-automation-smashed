@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-02-24T19:55:43.071Z",
+  "updatedAt": "2026-02-27T08:03:17.672Z",
   "createdAt": "2026-02-24T19:06:46.499Z",
   "id": "jOhzPZTA86SexCXp",
   "name": "Outreach Automation",
@@ -96,7 +96,31 @@
     },
     {
       "parameters": {
-        "jsCode": "const prospect = $('out-validate-prospect').first().json;\nconst recordId = $json.id || 'unknown';\n\nconst systemPrompt = `You are a sales research assistant for Cosmisk, a UGC (User Generated Content) agency in India. Your job is to research a prospect brand and draft a compelling, personalized outreach message.\n\nThe message should:\n- Be concise (3-4 sentences max for DM, 5-6 for email)\n- Reference something specific about their brand/content\n- Highlight how UGC can help their specific business\n- Include a soft CTA (offer a free strategy call or sample script)\n- Sound human, not salesy\n- Match the platform tone (Instagram DM = casual, Email = slightly more formal, LinkedIn = professional)`;\n\nconst userPrompt = `Research and draft an outreach message for:\n\nCompany: ${prospect.company}\nContact: ${prospect.contact}\nPlatform: ${prospect.platform}\nProfile/Website: ${prospect.profileUrl || 'not provided'}\nIndustry: ${prospect.industry || 'not specified'}\n\nDraft the outreach message for ${prospect.platform}. Also provide:\n1. A brief research summary (2-3 bullet points about the brand)\n2. The outreach message\n3. A suggested follow-up message (for 3 days later)\n\nFormat as JSON:\n{\n  \"research\": \"bullet points about the brand\",\n  \"message\": \"the outreach message\",\n  \"follow_up\": \"the follow-up message\",\n  \"subject_line\": \"email subject if platform is email, otherwise null\"\n}`;\n\nreturn [{ json: { systemPrompt, userPrompt, recordId, prospect } }];"
+        "method": "GET",
+        "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblAfe1LYh8kHPVbP?filterByFormula={{ encodeURIComponent(\"AND({active}=TRUE(),OR({category}='outreach_effectiveness',{category}='industry_trend',{category}='audience_insight'))\") }}&sort%5B0%5D%5Bfield%5D=confidence&sort%5B0%5D%5Bdirection%5D=desc&maxRecords=10",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        910,
+        250
+      ],
+      "id": "out-fetch-learnings",
+      "name": "out-fetch-learnings",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "a0TTu3NVsuJUEbct",
+          "name": "Airtable Personal Access Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Collect inputs from both parallel branches\nconst prospectData = $('out-validate-prospect').first().json;\nconst recordId = $('out-create-prospect').first().json.id || 'unknown';\n\n// Parse system learnings (may have failed gracefully)\nlet learningsText = '';\ntry {\n  const learningsResp = $('out-fetch-learnings').first().json;\n  const records = learningsResp.records || [];\n  if (records.length > 0) {\n    learningsText = '\\n\\n## SYSTEM LEARNINGS (what has worked in past outreach)\\n';\n    for (const rec of records) {\n      const f = rec.fields || {};\n      learningsText += `- [${f.category || 'general'}] ${f.learning || f.insight || f.description || JSON.stringify(f)}\\n`;\n    }\n  }\n} catch (e) {\n  learningsText = '';\n}\n\nconst systemPrompt = `You are Cosmisk's outreach copywriter. Cosmisk is a UGC agency in India offering UGC ads, AI-generated ads, mashup ads, media buying, and ad account audits.\n\nYou write cold outreach messages that get replies. You NEVER write generic, spammy messages.\n\nABSOLUTE BANS \u2014 never use these phrases:\n- \"I hope this email finds you well\"\n- \"I came across your company\"\n- \"I'd love to connect\"\n- \"Let's schedule a quick call\"\n- \"synergy\"\n- \"game-changer\"\n- \"best-in-class\"\n\nRULES:\n1. Open with something SPECIFIC about THEIR business (a recent ad they ran, their industry challenge, their growth stage, a specific product they sell)\n2. Each message MUST be under 150 words\n3. CTA must be a SPECIFIC question, not a generic \"let's chat\"\n4. Subject line must create curiosity without clickbait\n5. Match platform tone: Instagram DM = casual, Email = slightly formal, LinkedIn = professional\n${learningsText}`;\n\nconst userPrompt = `Generate 3 DISTINCT outreach messages for this prospect. Each takes a completely different angle:\n\n**Prospect Details:**\n- Company: ${prospectData.company}\n- Contact: ${prospectData.contact}\n- Platform: ${prospectData.platform}\n- Profile/Website: ${prospectData.profileUrl || 'not provided'}\n- Industry: ${prospectData.industry || 'not specified'}\n\n**Message A \u2014 Pain-Point Focused:**\nIdentify their most likely pain point based on their industry and size. Show how UGC/AI ads specifically solve THAT problem. Be empathetic, not pushy.\n\n**Message B \u2014 Results-Focused:**\nLead with a specific number or case study result (e.g., \"We helped a ${prospectData.industry || 'similar'} brand cut CAC by 40% with UGC\"). Back it with social proof.\n\n**Message C \u2014 Curiosity-Focused:**\nIntriguing hook that makes them want to reply. Minimal pitch. Create an open loop. Ask a question that's hard to ignore.\n\nFor EACH message, also provide:\n- subject_line (for email) or hook_line (for DM)\n- brief research note about the brand (1-2 sentences of what you found/inferred)\n\nReturn as JSON:\n{\n  \"messages\": [\n    {\n      \"angle\": \"pain_point\",\n      \"subject_line\": \"...\",\n      \"body\": \"...\",\n      \"research_note\": \"...\"\n    },\n    {\n      \"angle\": \"results\",\n      \"subject_line\": \"...\",\n      \"body\": \"...\",\n      \"research_note\": \"...\"\n    },\n    {\n      \"angle\": \"curiosity\",\n      \"subject_line\": \"...\",\n      \"body\": \"...\",\n      \"research_note\": \"...\"\n    }\n  ]\n}`;\n\nreturn [{ json: { systemPrompt, userPrompt, recordId, prospect: prospectData } }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -104,8 +128,8 @@
         1130,
         100
       ],
-      "id": "df2a176f-cb4a-4946-8a9e-96f516b14a5d",
-      "name": "out-build-research-prompt"
+      "id": "out-build-3msg-prompt",
+      "name": "out-build-3msg-prompt"
     },
     {
       "parameters": {
@@ -115,7 +139,7 @@
         "nodeCredentialType": "googlePalmApi",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ systemInstruction: { parts: [{ text: $json.systemPrompt }] }, contents: [{ role: 'user', parts: [{ text: $json.userPrompt }] }], generationConfig: { temperature: 0.7, maxOutputTokens: 2048 } }) }}",
+        "jsonBody": "={{ JSON.stringify({ systemInstruction: { parts: [{ text: $json.systemPrompt }] }, contents: [{ role: 'user', parts: [{ text: $json.userPrompt }] }], generationConfig: { temperature: 0.7, maxOutputTokens: 4096 } }) }}",
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
@@ -124,8 +148,8 @@
         1350,
         100
       ],
-      "id": "c2ed4455-0d24-48dd-8449-92b998697994",
-      "name": "out-gemini-research",
+      "id": "out-gemini-3msgs",
+      "name": "out-gemini-3msgs",
       "credentials": {
         "googlePalmApi": {
           "id": "rIL63TG4xfMQL8uJ",
@@ -136,7 +160,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const geminiResult = $json;\nconst prev = $('out-build-research-prompt').first().json;\nconst recordId = prev.recordId;\nconst prospect = prev.prospect;\n\nlet research = '';\nlet message = '';\nlet followUp = '';\nlet subjectLine = '';\n\ntry {\n  const text = geminiResult?.candidates?.[0]?.content?.parts?.[0]?.text || '';\n  const jsonMatch = text.match(/\\{[\\s\\S]*\\}/);\n  if (jsonMatch) {\n    const parsed = JSON.parse(jsonMatch[0]);\n    research = parsed.research || '';\n    message = parsed.message || '';\n    followUp = parsed.follow_up || '';\n    subjectLine = parsed.subject_line || '';\n  } else {\n    message = text;\n  }\n} catch (e) {\n  message = `Hi ${prospect.contact || 'there'}, I came across ${prospect.company || 'your brand'} and love what you're doing. We help brands like yours create authentic UGC content that drives real results. Would you be open to a quick 15-min call to explore how we could help?`;\n  followUp = `Hey ${prospect.contact || 'there'}, just following up on my earlier message. We recently helped a ${prospect.industry || 'similar'} brand increase their ad performance by 40% with UGC. Happy to share the case study if you're interested!`;\n}\n\nconst notesUpdate = `\\n\\n--- AI Research ---\\n${research}\\n\\n--- Draft Message (${prospect.platform}) ---\\n${message}\\n\\n--- Follow-up Draft ---\\n${followUp}`;\n\nconst originalNotes = prospect.notes || `Platform: ${prospect.platform}\\nProfile: ${prospect.profileUrl || ''}\\nIndustry: ${prospect.industry || ''}`;\nconst fullNotes = originalNotes + notesUpdate;\nconst followUpDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];\n\nconst slackMsg = `:mag: *New Prospect Researched*\\n\\n` +\n  `*Company:* ${prospect.company}\\n` +\n  `*Contact:* ${prospect.contact}\\n` +\n  `*Platform:* ${prospect.platform}\\n` +\n  `*Profile:* ${prospect.profileUrl || 'N/A'}\\n\\n` +\n  `*Research:*\\n${research}\\n\\n` +\n  `*Draft Message:*\\n\\`\\`\\`${message}\\`\\`\\`\\n\\n` +\n  (subjectLine ? `*Subject:* ${subjectLine}\\n\\n` : '') +\n  `*Follow-up Draft:*\\n\\`\\`\\`${followUp}\\`\\`\\`\\n\\n` +\n  `_Copy the message above and send it on ${prospect.platform}. Then use /mark-outreach to update status._`;\n\nreturn [{ json: { recordId, slackMsg, prospect, patchBody: { fields: { notes: fullNotes, stage: 'contacted', next_follow_up: followUpDate } } } }];"
+        "jsCode": "const geminiResult = $json;\nconst prev = $('out-build-3msg-prompt').first().json;\n\nlet messages = [];\ntry {\n  const text = (geminiResult.candidates || [])[0]?.content?.parts?.[0]?.text || '';\n  let cleaned = text.replace(/^```json\\s*/i, '').replace(/^```\\s*/m, '').replace(/\\s*```\\s*$/m, '').trim();\n  const jsonMatch = cleaned.match(/\\{[\\s\\S]*\\}/);\n  if (jsonMatch) {\n    const parsed = JSON.parse(jsonMatch[0]);\n    messages = parsed.messages || [];\n  }\n  // Truncation fallback: extract individual message objects\n  if (messages.length === 0) {\n    const objRegex = /\\{[^{}]*\"angle\"\\s*:\\s*\"[^\"]+\"[^{}]*\"body\"\\s*:\\s*\"[^\"]*\"[^{}]*\\}/g;\n    const matches = cleaned.match(objRegex) || [];\n    for (const m of matches) {\n      try { messages.push(JSON.parse(m)); } catch (e) { /* skip */ }\n    }\n  }\n} catch (e) {\n  // Will fall through to fallback below\n}\n\nif (messages.length === 0) {\n  // Fallback: generate basic messages\n  const p = prev.prospect;\n  messages = [\n    {\n      angle: 'pain_point',\n      subject_line: `${p.company || 'Your brand'} + UGC`,\n      body: `Hi ${p.contact || 'there'}, most ${p.industry || 'D2C'} brands struggle with ad fatigue \u2014 the same creatives stop converting after 2-3 weeks. UGC solves this by giving you a constant stream of fresh, authentic content. We build UGC pipelines for brands like yours. What's your current biggest bottleneck with ad creatives?`,\n      research_note: 'Fallback \u2014 Gemini parse failed'\n    },\n    {\n      angle: 'results',\n      subject_line: `40% lower CAC for ${p.industry || 'brands'} like ${p.company || 'yours'}`,\n      body: `Hi ${p.contact || 'there'}, we recently helped a ${p.industry || 'similar'} brand cut their customer acquisition cost by 40% using UGC-first ad creatives. The key was matching creator style to their audience demographics. Would you be open to seeing the breakdown of how we did it?`,\n      research_note: 'Fallback \u2014 Gemini parse failed'\n    },\n    {\n      angle: 'curiosity',\n      subject_line: `Quick question about ${p.company || 'your'} ads`,\n      body: `Hi ${p.contact || 'there'}, I noticed something interesting about the ${p.industry || 'D2C'} ad landscape that directly relates to ${p.company || 'your brand'}. Are you currently running any creator-style content in your paid campaigns, or mostly polished brand creatives?`,\n      research_note: 'Fallback \u2014 Gemini parse failed'\n    }\n  ];\n}\n\nreturn [{ json: { messages, recordId: prev.recordId, prospect: prev.prospect } }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -144,8 +168,159 @@
         1570,
         100
       ],
-      "id": "3b68a3a9-6095-4bb6-916f-ecf6a6ade920",
-      "name": "out-parse-research"
+      "id": "out-parse-3msgs",
+      "name": "out-parse-3msgs"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $json;\nconst messages = data.messages;\nconst prospect = data.prospect;\n\nconst systemPrompt = `You are an expert outreach evaluator for Cosmisk, a UGC agency. You evaluate cold outreach messages with brutal honesty. Score STRICTLY \u2014 most messages should score 5-7, not 8-10.\n\nScore each message on these 5 criteria (1-10 each, 50 max):\n\n1. **personalization** \u2014 Does it reference something SPECIFIC about THEIR business? Generic industry mentions = 3-4. Specific product/campaign/metric = 7-8. Deep insight = 9-10.\n2. **value_clarity** \u2014 Is it immediately clear what they'd GET? Vague \"help your brand\" = 3-4. Specific outcome with numbers = 7-8.\n3. **brevity** \u2014 Is it under 150 words and scannable in 30 seconds? Over 150 = max 4. Under 100 with impact = 8-10.\n4. **cta_strength** \u2014 Is the CTA a specific question? Generic \"let's chat\" = 2-3. Specific question they want to answer = 7-8.\n5. **spam_avoidance** \u2014 Does it avoid spam triggers and sound human? Contains banned phrases or sounds like mass email = 1-3. Feels like a real person wrote it = 7-8.`;\n\nconst userPrompt = `Evaluate these 3 outreach messages for:\nCompany: ${prospect.company}\nContact: ${prospect.contact}\nPlatform: ${prospect.platform}\nIndustry: ${prospect.industry || 'unknown'}\n\n---\nMessage A (${messages[0]?.angle || 'pain_point'}):\nSubject: ${messages[0]?.subject_line || 'N/A'}\n${messages[0]?.body || 'N/A'}\n\n---\nMessage B (${messages[1]?.angle || 'results'}):\nSubject: ${messages[1]?.subject_line || 'N/A'}\n${messages[1]?.body || 'N/A'}\n\n---\nMessage C (${messages[2]?.angle || 'curiosity'}):\nSubject: ${messages[2]?.subject_line || 'N/A'}\n${messages[2]?.body || 'N/A'}\n\n---\n\nFor each message, return scores and a 1-sentence critique. Then pick the best one.\n\nReturn JSON:\n{\n  \"evaluations\": [\n    {\n      \"angle\": \"pain_point\",\n      \"personalization\": 7,\n      \"value_clarity\": 6,\n      \"brevity\": 8,\n      \"cta_strength\": 5,\n      \"spam_avoidance\": 7,\n      \"total\": 33,\n      \"critique\": \"...\"\n    },\n    { ... },\n    { ... }\n  ],\n  \"best_index\": 0,\n  \"best_angle\": \"pain_point\",\n  \"improvement_notes\": \"One sentence on what would make the best message even better\"\n}`;\n\nreturn [{ json: { systemPrompt, userPrompt, messages, recordId: data.recordId, prospect } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1790,
+        100
+      ],
+      "id": "out-build-eval-prompt",
+      "name": "out-build-eval-prompt"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ systemInstruction: { parts: [{ text: $json.systemPrompt }] }, contents: [{ role: 'user', parts: [{ text: $json.userPrompt }] }], generationConfig: { temperature: 0.2, maxOutputTokens: 3000 } }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2010,
+        100
+      ],
+      "id": "out-gemini-evaluate",
+      "name": "out-gemini-evaluate",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "rIL63TG4xfMQL8uJ",
+          "name": "Cosmisk AI"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const geminiResult = $json;\nconst prev = $('out-build-eval-prompt').first().json;\nconst messages = prev.messages;\n\nlet evaluation = null;\nlet bestIndex = 0;\nlet bestTotal = 0;\nlet improvementNotes = '';\nlet needsRetry = false;\n\ntry {\n  const text = (geminiResult.candidates || [])[0]?.content?.parts?.[0]?.text || '';\n  let cleaned = text.replace(/^```json\\s*/i, '').replace(/^```\\s*/m, '').replace(/\\s*```\\s*$/m, '').trim();\n  const jsonMatch = cleaned.match(/\\{[\\s\\S]*\\}/);\n  if (jsonMatch) {\n    evaluation = JSON.parse(jsonMatch[0]);\n  }\n} catch (e) {\n  // evaluation stays null\n}\n\nif (evaluation && evaluation.evaluations) {\n  // Find best message by total score\n  for (let i = 0; i < evaluation.evaluations.length; i++) {\n    const ev = evaluation.evaluations[i];\n    const total = ev.total || (ev.personalization + ev.value_clarity + ev.brevity + ev.cta_strength + ev.spam_avoidance) || 0;\n    if (total > bestTotal) {\n      bestTotal = total;\n      bestIndex = i;\n    }\n  }\n  improvementNotes = evaluation.improvement_notes || '';\n  needsRetry = bestTotal < 35;\n} else {\n  // Evaluation parse failed \u2014 use first message, no retry\n  bestIndex = 0;\n  bestTotal = 0;\n  needsRetry = false;\n}\n\nconst bestMessage = messages[bestIndex] || messages[0];\n\nreturn [{ json: {\n  needsRetry,\n  bestMessage,\n  bestIndex,\n  bestTotal,\n  improvementNotes,\n  evaluation,\n  messages,\n  recordId: prev.recordId,\n  prospect: prev.prospect\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2230,
+        100
+      ],
+      "id": "out-select-best",
+      "name": "out-select-best"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "retry-check",
+              "leftValue": "={{ $json.needsRetry }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2450,
+        100
+      ],
+      "id": "out-if-retry",
+      "name": "out-if-retry"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $('out-select-best').first().json;\nconst prospect = data.prospect;\nconst evaluation = data.evaluation;\nconst messages = data.messages;\nconst improvementNotes = data.improvementNotes;\n\n// Build critique summary from evaluation\nlet critiqueSummary = '';\nif (evaluation && evaluation.evaluations) {\n  critiqueSummary = evaluation.evaluations.map((ev, i) =>\n    `Message ${String.fromCharCode(65 + i)} (${ev.angle}): ${ev.total}/50 \u2014 ${ev.critique || 'No critique'}`\n  ).join('\\n');\n}\n\nconst systemPrompt = `You are Cosmisk's top outreach copywriter. A previous draft scored below 35/50. You must write a significantly better message.\n\nABSOLUTE BANS \u2014 never use these phrases:\n- \"I hope this email finds you well\"\n- \"I came across your company\"\n- \"I'd love to connect\"\n- \"Let's schedule a quick call\"\n- \"synergy\", \"game-changer\", \"best-in-class\"\n\nRULES:\n1. Open with something SPECIFIC about THEIR business\n2. Under 150 words\n3. CTA must be a SPECIFIC question\n4. Subject line must create curiosity without clickbait`;\n\nconst userPrompt = `Your previous 3 attempts all scored below the quality bar. Here's what the evaluator said:\n\n${critiqueSummary}\n\nImprovement direction: ${improvementNotes}\n\nNow write ONE final outreach message that fixes ALL the issues. Combine the best elements from all 3 angles.\n\nProspect:\n- Company: ${prospect.company}\n- Contact: ${prospect.contact}\n- Platform: ${prospect.platform}\n- Profile: ${prospect.profileUrl || 'not provided'}\n- Industry: ${prospect.industry || 'unknown'}\n\nReturn JSON:\n{\n  \"angle\": \"refined\",\n  \"subject_line\": \"...\",\n  \"body\": \"...\",\n  \"research_note\": \"...\"\n}`;\n\nreturn [{ json: { systemPrompt, userPrompt, recordId: data.recordId, prospect, messages } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2670,
+        0
+      ],
+      "id": "out-build-retry-prompt",
+      "name": "out-build-retry-prompt"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ systemInstruction: { parts: [{ text: $json.systemPrompt }] }, contents: [{ role: 'user', parts: [{ text: $json.userPrompt }] }], generationConfig: { temperature: 0.5, maxOutputTokens: 2048 } }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2890,
+        0
+      ],
+      "id": "out-gemini-retry",
+      "name": "out-gemini-retry",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "rIL63TG4xfMQL8uJ",
+          "name": "Cosmisk AI"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format output from retry path\nconst geminiResult = $json;\nconst prev = $('out-build-retry-prompt').first().json;\nconst prospect = prev.prospect;\nconst recordId = prev.recordId;\n\nlet bestMessage = null;\ntry {\n  const text = (geminiResult.candidates || [])[0]?.content?.parts?.[0]?.text || '';\n  let cleaned = text.replace(/^```json\\s*/i, '').replace(/^```\\s*/m, '').replace(/\\s*```\\s*$/m, '').trim();\n  const jsonMatch = cleaned.match(/\\{[\\s\\S]*\\}/);\n  if (jsonMatch) {\n    bestMessage = JSON.parse(jsonMatch[0]);\n  }\n} catch (e) { /* fallback below */ }\n\nif (!bestMessage || !bestMessage.body) {\n  bestMessage = prev.messages[0] || {\n    angle: 'fallback',\n    subject_line: `Quick question about ${prospect.company || 'your'} ads`,\n    body: `Hi ${prospect.contact || 'there'}, most ${prospect.industry || 'D2C'} brands struggle with ad fatigue. We build UGC pipelines that keep fresh creatives flowing. What's your current biggest bottleneck with ad creatives?`,\n    research_note: 'Retry parse failed, using best original draft'\n  };\n}\n\nconst research = bestMessage.research_note || '';\nconst message = bestMessage.body;\nconst subjectLine = bestMessage.subject_line || '';\n\n// Build follow-up (quick generation)\nconst followUp = `Hey ${prospect.contact || 'there'}, following up on my note about ${prospect.company ? prospect.company + \"'s\" : 'your'} ad strategy. Would a 2-min Loom walkthrough of what we'd do differently be helpful? No call needed.`;\n\nconst notesUpdate = `\\n\\n--- AI Research ---\\n${research}\\n\\n--- Draft Message (${prospect.platform}) [Agent: refined after retry] ---\\n${message}\\n\\n--- Follow-up Draft ---\\n${followUp}`;\n\nconst originalNotes = prospect.notes || `Platform: ${prospect.platform}\\nProfile: ${prospect.profileUrl || ''}\\nIndustry: ${prospect.industry || ''}`;\nconst fullNotes = originalNotes + notesUpdate;\nconst followUpDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];\n\nconst slackMsg = `:mag: *New Prospect Researched (Agent: Retry Path)*\\n\\n` +\n  `*Company:* ${prospect.company}\\n` +\n  `*Contact:* ${prospect.contact}\\n` +\n  `*Platform:* ${prospect.platform}\\n` +\n  `*Profile:* ${prospect.profileUrl || 'N/A'}\\n\\n` +\n  `*Research:*\\n${research}\\n\\n` +\n  `*Draft Message:*\\n\\`\\`\\`${message}\\`\\`\\`\\n\\n` +\n  (subjectLine ? `*Subject:* ${subjectLine}\\n\\n` : '') +\n  `*Follow-up Draft:*\\n\\`\\`\\`${followUp}\\`\\`\\`\\n\\n` +\n  `_Agent scored all 3 initial drafts below 35/50 and generated a refined version. Copy and send on ${prospect.platform}._`;\n\nreturn [{ json: { recordId, slackMsg, prospect, patchBody: { fields: { notes: fullNotes, stage: 'contacted', next_follow_up: followUpDate } } } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3110,
+        0
+      ],
+      "id": "out-format-retry",
+      "name": "out-format-retry"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format output from no-retry path (best of 3 messages)\nconst data = $('out-select-best').first().json;\nconst prospect = data.prospect;\nconst recordId = data.recordId;\nconst bestMessage = data.bestMessage;\nconst bestTotal = data.bestTotal;\nconst bestIndex = data.bestIndex;\n\nconst research = bestMessage.research_note || '';\nconst message = bestMessage.body;\nconst subjectLine = bestMessage.subject_line || '';\nconst angle = bestMessage.angle || 'unknown';\n\n// Build follow-up\nconst followUp = `Hey ${prospect.contact || 'there'}, following up on my note about ${prospect.company ? prospect.company + \"'s\" : 'your'} ad strategy. Would a 2-min Loom walkthrough of what we'd do differently be helpful? No call needed.`;\n\nconst notesUpdate = `\\n\\n--- AI Research ---\\n${research}\\n\\n--- Draft Message (${prospect.platform}) [Agent: ${angle}, scored ${bestTotal}/50] ---\\n${message}\\n\\n--- Follow-up Draft ---\\n${followUp}`;\n\nconst originalNotes = prospect.notes || `Platform: ${prospect.platform}\\nProfile: ${prospect.profileUrl || ''}\\nIndustry: ${prospect.industry || ''}`;\nconst fullNotes = originalNotes + notesUpdate;\nconst followUpDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];\n\nconst slackMsg = `:mag: *New Prospect Researched (Agent: ${angle} \u2014 ${bestTotal}/50)*\\n\\n` +\n  `*Company:* ${prospect.company}\\n` +\n  `*Contact:* ${prospect.contact}\\n` +\n  `*Platform:* ${prospect.platform}\\n` +\n  `*Profile:* ${prospect.profileUrl || 'N/A'}\\n\\n` +\n  `*Research:*\\n${research}\\n\\n` +\n  `*Draft Message:*\\n\\`\\`\\`${message}\\`\\`\\`\\n\\n` +\n  (subjectLine ? `*Subject:* ${subjectLine}\\n\\n` : '') +\n  `*Follow-up Draft:*\\n\\`\\`\\`${followUp}\\`\\`\\`\\n\\n` +\n  `_Agent selected best of 3 drafts (${angle} angle). Copy and send on ${prospect.platform}._`;\n\nreturn [{ json: { recordId, slackMsg, prospect, patchBody: { fields: { notes: fullNotes, stage: 'contacted', next_follow_up: followUpDate } } } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2670,
+        200
+      ],
+      "id": "out-format-best",
+      "name": "out-format-best"
     },
     {
       "parameters": {
@@ -161,7 +336,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1790,
+        3350,
         0
       ],
       "id": "2c91084a-f306-4d1c-a04c-53ff0f22fe0d",
@@ -182,13 +357,13 @@
           "value": "C0AHQUBGR32",
           "mode": "id"
         },
-        "text": "={{ $('out-parse-research').first().json.slackMsg }}",
+        "text": "={{ $json.slackMsg }}",
         "otherOptions": {}
       },
       "type": "n8n-nodes-base.slack",
       "typeVersion": 2.2,
       "position": [
-        1790,
+        3350,
         100
       ],
       "id": "ab797bff-30fe-47c9-80cb-4195e6d571fd",
@@ -204,7 +379,7 @@
     {
       "parameters": {
         "respondWith": "text",
-        "responseBody": "={{ JSON.stringify({ success: true, message: 'Prospect added and researched', record_id: $('out-parse-research').first().json.recordId }) }}",
+        "responseBody": "={{ JSON.stringify({ success: true, message: 'Prospect added and researched (agent pattern)', record_id: $json.recordId }) }}",
         "options": {
           "responseHeaders": {
             "entries": [
@@ -219,7 +394,7 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        1790,
+        3350,
         200
       ],
       "id": "38c4033b-3537-4a4a-b51e-46c31eb90e7e",
@@ -599,7 +774,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// ============================================================\n// Prepare batch research prompt for Gemini\n// Input: { leads: [{ record_id, company_name, website, industry, email, notes, source }] }\n// ============================================================\nconst body = $json.body || $json;\nconst leads = body.leads || [];\n\nif (leads.length === 0) {\n  return [{ json: { _skip: true, count: 0, slackMsg: '' } }];\n}\n\nconst systemPrompt = `You are a sales research assistant for Cosmisk, a UGC (User Generated Content) agency in India. For each prospect brand, provide:\n1. Brief research summary (2-3 bullet points about the brand)\n2. A personalized outreach message (3-4 sentences, reference something specific about their brand, highlight UGC value, soft CTA for a free strategy call)\n3. A follow-up message (for 3 days later, reference the first message)\n4. Best outreach platform (instagram_dm, email, linkedin, or whatsapp)\n\nSound human, not salesy. Be specific to each brand.\n\nReturn a JSON array where each element has:\n{\n  \"company_name\": \"exact company name from input\",\n  \"research\": \"bullet point research\",\n  \"message\": \"outreach message\",\n  \"follow_up\": \"follow-up message\",\n  \"platform\": \"best platform\",\n  \"subject_line\": \"email subject if platform is email, else null\"\n}`;\n\nconst leadsList = leads.map((l, i) =>\n  `${i + 1}. Company: ${l.company_name}\\n   Website: ${l.website || 'unknown'}\\n   Industry: ${l.industry || 'unknown'}\\n   Notes: ${(l.notes || '').substring(0, 300)}`\n).join('\\n\\n');\n\nconst userPrompt = `Research and draft outreach messages for these ${leads.length} prospects:\\n\\n${leadsList}\\n\\nReturn a JSON array with one object per prospect.`;\n\nreturn [{ json: {\n  systemPrompt,\n  userPrompt,\n  leads,\n  count: leads.length,\n  _skip: false\n} }];"
+        "jsCode": "// ============================================================\n// Prepare batch research prompt for Gemini\n// HYPER-PERSONALIZED: uses funding data, ad signals, industry context\n// ENHANCED: real portfolio data + same-industry client matching\n// ============================================================\nconst body = $json.body || $json;\nconst leads = body.leads || [];\n\nif (leads.length === 0) {\n  return [{ json: { _skip: true, count: 0, slackMsg: '' } }];\n}\n\n// \u2500\u2500 Industry \u2192 Client Mapping (real Cosmisk/Smashed portfolio) \u2500\u2500\nconst industryClients = {\n  'beauty': ['Suroskie (24 scripts R1)', 'Bare Anatomy', 'Sereko', 'Oziva', 'Sotrue', 'GlowVita', 'Exotic Flora', 'Kyari'],\n  'skincare': ['Suroskie (24 scripts R1)', 'Bare Anatomy', 'Sereko', 'Oziva', 'Sotrue', 'GlowVita'],\n  'jewelry': ['Elinor', 'Taahira Jewellery', 'Bling Queen', 'Krysstal', 'Helping Hands'],\n  'fashion': ['Suroskie', 'MNMLST', 'Bling Queen', 'Elinor'],\n  'fintech': ['Wint Wealth (5 rounds, 8 months)', 'Propelld', 'Fixed Income', 'Sahi Trading', 'TFI'],\n  'food': ['Cinnamon Kitchen', 'Being Bania', 'Goodbug'],\n  'health': ['MenoVeda', 'VARCOLEG CARE', 'Tribal Veda (4 rounds)', 'Goodbug'],\n  'wellness': ['MenoVeda', 'VARCOLEG CARE', 'Tribal Veda (4 rounds)', 'Goodbug'],\n  'fragrance': ['Ajmal Perfumes (2 rounds)', 'Oudarabia'],\n  'perfume': ['Ajmal Perfumes (2 rounds)', 'Oudarabia'],\n  'consumer': ['Frido (3 projects)', 'Coolnut', 'Cool Beds', 'FabPad', 'Handme', 'Wheelwash'],\n  'automotive': ['Wheelwash'],\n  'education': ['Edyoda (6 scripts)'],\n  'home': ['Exotic Flora', 'LABHAM HOME', 'Cool Beds'],\n  'kids': ['Tribe Kids', 'Brave Paws'],\n  'electronics': ['Coolnut', 'Ambrane India', 'Loop Earplugs'],\n  'default': ['Mamaearth', 'Ajmal Perfumes', 'Wint Wealth', 'Bare Anatomy']\n};\n\n// \u2500\u2500 Fuzzy-match lead fields to find same-industry clients \u2500\u2500\nfunction findIndustryClients(lead) {\n  const searchText = [\n    lead.industry || '',\n    lead.signal || '',\n    lead.notes || '',\n    lead.best_service || '',\n    lead.company_name || ''\n  ].join(' ').toLowerCase();\n\n  const matched = new Set();\n  for (const [key, clients] of Object.entries(industryClients)) {\n    if (key === 'default') continue;\n    if (searchText.includes(key)) {\n      clients.forEach(c => matched.add(c));\n    }\n  }\n  // If no matches, return default marquee names\n  if (matched.size === 0) {\n    industryClients['default'].forEach(c => matched.add(c));\n  }\n  return [...matched].slice(0, 6);\n}\n\n// \u2500\u2500 Build portfolio context per lead \u2500\u2500\nfunction buildPortfolioContext(lead) {\n  const sameIndustry = findIndustryClients(lead);\n  return `\n## PORTFOLIO PROOF POINTS (use these in the message \u2014 they are REAL)\n- 62 brands served across D2C Beauty, Jewelry, Fintech, Consumer Products, Perfumes, Wellness, Food, Education, Fashion\n- 33+ active creators on roster for UGC production\n- Standard delivery: 3 hooks per concept, multiple ad variations for A/B testing\n- Repeat clients demonstrate trust: Wint Wealth (5 rounds over 8 months), Tribal Veda (4 rounds), Suroskie (24 scripts in Round 1), Ajmal Perfumes (2 rounds), Frido (3 projects)\n- Upsell proof: Wint Wealth went from UGC ads to a Rs 4L/month organic content partnership\n- Notable names on our roster: Mamaearth, Canva, Ajmal Perfumes, Bare Anatomy, Oziva, Loop Earplugs\n\n## SAME-INDUSTRY EXPERIENCE FOR THIS LEAD\nClients in a similar space: ${sameIndustry.join(', ')}\n\n## OUTREACH RULES (CRITICAL \u2014 follow exactly)\n1. Reference our work with ${sameIndustry.slice(0, 3).join(', ')} when relevant \u2014 use ACTUAL client names from the list above\n2. For funded brands: mention we have scaled D2C brands from seed stage (like Basil, GoOAT) to Series A growth (like FableStreet, Rapidbox)\n3. For brands already running Meta ads: mention we helped Wint Wealth go from UGC ads to a Rs 4L/month organic content partnership\n4. For brands needing volume: mention Suroskie (24 scripts in Round 1) and our 3-hooks-per-concept standard\n5. NEVER fabricate client names or results. Only reference the clients listed in PORTFOLIO PROOF POINTS and SAME-INDUSTRY EXPERIENCE above.\n6. Pick 1-2 proof points most relevant to THIS lead \u2014 do not dump all stats into one message\n`;\n}\n\nconst systemPrompt = `You are a senior sales strategist for Cosmisk (also known as Smashed), a creative agency in India that specializes in:\n- UGC ads (creator-driven video content for Meta/Google paid ads)\n- AI-generated ads and mashup ads\n- Performance media buying (Meta + Google)\n- Ad account audits and creative strategy\n\n**YOUR TASK:** For each prospect, create HYPER-PERSONALIZED outreach using the specific data provided AND our real portfolio proof points.\n\n**PERSONALIZATION RULES (CRITICAL):**\n1. NEVER use generic phrases like \"love what you're doing\" or \"help brands like yours\"\n2. Reference SPECIFIC data: funding amount, number of ads running, specific products, competitor comparisons\n3. If they recently raised funding \u2192 reference the round, suggest they allocate creative budget NOW before scaling ads\n4. If they're running Meta ads \u2192 reference their ad volume, suggest UGC to improve ROAS/reduce creative fatigue\n5. If they appeared on Shark Tank \u2192 reference the episode/deal, suggest capitalizing on PR buzz with content\n6. If they're in skincare/beauty \u2192 reference the \"social proof\" angle, show how UGC converts 3-4x better than brand shots\n7. If they're in food/beverage \u2192 reference \"unboxing\" and \"taste test\" UGC formats\n8. If they're in fashion \u2192 reference \"try-on\" and \"outfit of the day\" UGC formats\n9. Include a SPECIFIC case study or client reference from the PORTFOLIO section \u2014 use REAL client names, never fabricated ones\n10. End with a soft CTA \u2014 offer a free creative audit or strategy session, not a \"call\"\n\n**TONE:** Confident but not pushy. Like a knowledgeable friend who has data to share. Short paragraphs. No corporate jargon.\n\nFor each prospect, return:\n{\n  \"company_name\": \"exact name\",\n  \"research\": \"3-4 bullet points of specific findings about this company\",\n  \"message\": \"The primary outreach message (4-6 sentences, hyper-personalized, references specific data AND real portfolio clients)\",\n  \"follow_up\": \"Follow-up message for 3 days later (2-3 sentences, adds new value \u2014 share a relevant case study or insight using a REAL client name)\",\n  \"platform\": \"instagram_dm | email | linkedin | whatsapp\",\n  \"subject_line\": \"email subject line if platform is email, else null\",\n  \"personalization_hooks\": [\"list of specific data points referenced in the message\"]\n}\n\nReturn a JSON array. No markdown wrapping.`;\n\nconst leadsList = leads.map((l, i) => {\n  const portfolioCtx = buildPortfolioContext(l);\n\n  let context = `${i + 1}. Company: ${l.company_name}`;\n  if (l.website) context += `\\n   Website: ${l.website}`;\n  if (l.industry) context += `\\n   Industry: ${l.industry}`;\n  if (l.notes) context += `\\n   Intel: ${l.notes.substring(0, 500)}`;\n  if (l.signal) context += `\\n   Discovery Signal: ${l.signal}`;\n  if (l.composite_score) context += `\\n   Lead Score: ${l.composite_score}/10`;\n  if (l.pitch_hook) context += `\\n   Suggested Hook: ${l.pitch_hook}`;\n  if (l.best_service) context += `\\n   Best Service Match: ${l.best_service}`;\n  if (l.suggested_platform) context += `\\n   Suggested Platform: ${l.suggested_platform}`;\n  context += `\\n${portfolioCtx}`;\n  return context;\n}).join('\\n\\n');\n\nconst userPrompt = `Research these ${leads.length} D2C/consumer brand prospects and create hyper-personalized outreach messages. Use the intel provided AND the portfolio proof points \u2014 do NOT generate generic templates. Each message MUST reference at least one real Cosmisk client by name.\\n\\n${leadsList}\\n\\nReturn a JSON array with one object per prospect. Make each message unique and data-driven.`;\n\nreturn [{ json: {\n  systemPrompt,\n  userPrompt,\n  leads,\n  count: leads.length,\n  _skip: false\n} }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -616,7 +791,7 @@
           "options": {
             "caseSensitive": true,
             "leftValue": "",
-            "typeValidation": "strict"
+            "typeValidation": "loose"
           },
           "conditions": [
             {
@@ -650,7 +825,7 @@
         "nodeCredentialType": "googlePalmApi",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ systemInstruction: { parts: [{ text: $json.systemPrompt }] }, contents: [{ role: 'user', parts: [{ text: $json.userPrompt }] }], generationConfig: { temperature: 0.7, maxOutputTokens: 4096 } }) }}",
+        "jsonBody": "={{ JSON.stringify({ systemInstruction: { parts: [{ text: $json.systemPrompt }] }, contents: [{ role: 'user', parts: [{ text: $json.userPrompt }] }], generationConfig: { temperature: 0.7, maxOutputTokens: 16000 } }) }}",
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
@@ -671,7 +846,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// ============================================================\n// Parse Gemini batch research results\n// Build: Airtable PATCH body, Slack summary, webhook response\n// ============================================================\nconst geminiResult = $json;\nconst prevData = $('Prep Batch Research').first().json;\nconst leads = prevData.leads || [];\n\nlet results = [];\nlet geminiOk = false;\n\ntry {\n  const text = (geminiResult.candidates || [])[0]?.content?.parts?.[0]?.text || '';\n  if (!text) throw new Error('No Gemini response');\n\n  let cleaned = text.replace(/```json\\s*/gi, '').replace(/```\\s*/gi, '').trim();\n  const arrMatch = cleaned.match(/\\[[\\s\\S]*\\]/);\n  if (arrMatch) {\n    results = JSON.parse(arrMatch[0]);\n    geminiOk = true;\n  }\n} catch (err) {\n  // Gemini failed \u2014 generate basic fallback messages\n}\n\n// Build Airtable batch PATCH and Slack message\nconst patchRecords = [];\nconst slackLines = [`:mag: *Outreach \u2014 ${leads.length} New Prospects Enriched*\\n`];\nconst followUpDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];\n\nfor (const lead of leads) {\n  const match = results.find(r =>\n    (r.company_name || '').toLowerCase().trim() === (lead.company_name || '').toLowerCase().trim()\n  );\n\n  let research = '';\n  let message = '';\n  let followUp = '';\n  let platform = 'email';\n  let subjectLine = '';\n\n  if (match) {\n    research = match.research || '';\n    message = match.message || '';\n    followUp = match.follow_up || '';\n    platform = match.platform || 'email';\n    subjectLine = match.subject_line || '';\n  } else {\n    // Fallback\n    message = `Hi there, I came across ${lead.company_name} and love what you're doing. We help brands like yours create authentic UGC content that drives real results. Would you be open to a quick 15-min call to explore how we could help?`;\n    followUp = `Hey, just following up on my earlier message about UGC for ${lead.company_name}. We recently helped a similar brand increase their ad performance by 40% with UGC. Happy to share the case study if you're interested!`;\n    research = 'Auto-generated fallback (Gemini did not return result for this lead)';\n  }\n\n  const notesAppend = `\\n\\n--- AI Research ---\\n${research}\\n\\n--- Draft Message (${platform}) ---\\n${message}\\n\\n--- Follow-up Draft ---\\n${followUp}`;\n  const fullNotes = (lead.notes || '') + notesAppend;\n\n  patchRecords.push({\n    id: lead.record_id,\n    fields: {\n      notes: fullNotes,\n      stage: 'contacted',\n      next_follow_up: followUpDate\n    }\n  });\n\n  slackLines.push(\n    `*${lead.company_name}*` +\n    (lead.industry ? ` (${lead.industry})` : '') +\n    `\\n  Platform: ${platform}` +\n    (subjectLine ? ` | Subject: ${subjectLine}` : '') +\n    `\\n  Message: \\\"${message.substring(0, 120)}...\\\"` +\n    `\\n  Follow-up scheduled: ${followUpDate}\\n`\n  );\n}\n\nslackLines.push(geminiOk\n  ? `_${results.length} prospects researched via Gemini. Copy messages from Airtable notes and send on respective platforms._`\n  : `_Gemini failed \u2014 fallback messages generated. Review and customize before sending._`\n);\n\nreturn [{ json: {\n  patchBody: JSON.stringify({ records: patchRecords }),\n  slackMsg: slackLines.join('\\n'),\n  count: patchRecords.length,\n  geminiOk\n} }];"
+        "jsCode": "// ============================================================\n// Parse Gemini batch research results\n// Build: Airtable PATCH body, Slack summary, webhook response\n// FIXED: geminiOk detection, removed stage field (causes select error)\n// ============================================================\nconst geminiResult = $json;\nconst prevData = $('Prep Batch Research').first().json;\nconst leads = prevData.leads || [];\n\nlet results = [];\nlet geminiOk = false;\n\ntry {\n  const text = (geminiResult.candidates || [])[0]?.content?.parts?.[0]?.text || '';\n  if (!text) throw new Error('No Gemini response');\n\n  // Strip markdown code fences (multiple patterns)\n  let cleaned = text\n    .replace(/^```json\\s*/i, '')\n    .replace(/^```\\s*/m, '')\n    .replace(/\\s*```\\s*$/m, '')\n    .trim();\n\n  // Try parsing as array\n  const arrMatch = cleaned.match(/\\[[\\s\\S]*\\]/);\n  if (arrMatch) {\n    try {\n      results = JSON.parse(arrMatch[0]);\n      geminiOk = true;\n    } catch (e) {\n      // Truncated JSON fallback \u2014 extract individual objects\n      const objPattern = /\\{[^{}]*\"company_name\"\\s*:\\s*\"[^\"]+\"[\\s\\S]*?\"platform\"\\s*:\\s*\"[^\"]+\"/g;\n      const matches = cleaned.match(objPattern) || [];\n      for (const m of matches) {\n        try {\n          // Close the object\n          const fixed = m + (m.endsWith('}') ? '' : '\"}');\n          results.push(JSON.parse(fixed));\n        } catch (e2) { /* skip */ }\n      }\n      if (results.length > 0) geminiOk = true;\n    }\n  }\n\n  // If still no results, try parsing as single object with array inside\n  if (results.length === 0) {\n    try {\n      const parsed = JSON.parse(cleaned);\n      if (Array.isArray(parsed)) {\n        results = parsed;\n        geminiOk = true;\n      } else if (parsed.results || parsed.prospects) {\n        results = parsed.results || parsed.prospects;\n        geminiOk = true;\n      }\n    } catch (e) { /* ignore */ }\n  }\n} catch (err) {\n  // Gemini completely failed\n}\n\n// Build Airtable batch PATCH and Slack message\nconst patchRecords = [];\nconst slackLines = [`:mag: *Outreach \u2014 ${leads.length} Prospects Researched & Messages Drafted*\\n`];\nconst followUpDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];\n\nfor (const lead of leads) {\n  // Match by company name (case-insensitive, trimmed)\n  const leadName = (lead.company_name || '').toLowerCase().trim();\n  const match = results.find(r =>\n    (r.company_name || '').toLowerCase().trim() === leadName\n  );\n\n  let research = '';\n  let message = '';\n  let followUp = '';\n  let platform = lead.suggested_platform || 'email';\n  let subjectLine = '';\n  let hooks = [];\n  let wasPersonalized = false;\n\n  if (match) {\n    research = Array.isArray(match.research) ? match.research.join('\\n') : (match.research || '');\n    message = match.message || '';\n    followUp = match.follow_up || '';\n    platform = match.platform || platform;\n    subjectLine = match.subject_line || '';\n    hooks = match.personalization_hooks || [];\n    wasPersonalized = true;\n  }\n  \n  // Only use fallback if Gemini completely failed\n  if (!message) {\n    const hook = lead.pitch_hook || '';\n    message = hook || `Hi, I noticed ${lead.company_name} is growing fast. We specialize in UGC ads that help consumer brands scale their paid media. Would you be open to a free creative audit?`;\n    followUp = `Following up \u2014 we just published a case study on how UGC reduced CPA by 40% for a brand in your space. Happy to share if helpful.`;\n    research = 'Gemini did not return a result for this company';\n  }\n\n  // Build enriched notes (append to existing)\n  const notesAppend = `\\n\\n--- AI Research (${geminiOk ? 'Gemini' : 'fallback'}) ---\\n${research}\\n\\n--- Draft Outreach (${platform}) ---\\n${subjectLine ? 'Subject: ' + subjectLine + '\\n' : ''}${message}\\n\\n--- Follow-up Draft ---\\n${followUp}${hooks.length ? '\\n\\nPersonalization hooks: ' + hooks.join(', ') : ''}`;\n  const fullNotes = (lead.notes || '') + notesAppend;\n\n  // DO NOT set stage \u2014 stage changes when outreach is actually sent\n  patchRecords.push({\n    id: lead.record_id,\n    fields: {\n      notes: fullNotes,\n      next_follow_up: followUpDate\n    }\n  });\n\n  const personalBadge = wasPersonalized ? ':sparkles:' : ':warning:';\n  slackLines.push(\n    `${personalBadge} *${lead.company_name}*` +\n    (lead.industry ? ` (${lead.industry})` : '') +\n    `\\n  Platform: ${platform}` +\n    (subjectLine ? ` | Subject: _${subjectLine}_` : '') +\n    `\\n  Message: \"${message.substring(0, 150)}...\"` +\n    (hooks.length ? `\\n  :dart: Hooks: ${hooks.join(', ')}` : '') +\n    `\\n  Follow-up: ${followUpDate}\\n`\n  );\n}\n\nslackLines.push(geminiOk\n  ? `\\n:white_check_mark: _${results.length} prospects researched via Gemini. Messages in Airtable notes \u2014 review, customize, and send._`\n  : `\\n:warning: _Gemini failed \u2014 fallback messages used. Review and heavily customize before sending._`\n);\n\nreturn [{ json: {\n  patchBody: JSON.stringify({ records: patchRecords }),\n  slackMsg: slackLines.join('\\n'),\n  count: patchRecords.length,\n  geminiOk,\n  enriched: true\n} }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -704,7 +879,7 @@
       "credentials": {
         "airtableTokenApi": {
           "id": "WelvlJEjoHaI3l9G",
-          "name": "Airtable account"
+          "name": "Airtable Personal Access Token account"
         }
       },
       "onError": "continueRegularOutput"
@@ -758,7 +933,7 @@
       "credentials": {
         "airtableTokenApi": {
           "id": "WelvlJEjoHaI3l9G",
-          "name": "Airtable account"
+          "name": "Airtable Personal Access Token account"
         }
       },
       "onError": "continueRegularOutput"
@@ -839,7 +1014,7 @@
       "main": [
         [
           {
-            "node": "out-create-prospect",
+            "node": "out-fetch-learnings",
             "type": "main",
             "index": 0
           }
@@ -853,40 +1028,156 @@
         ]
       ]
     },
+    "out-fetch-learnings": {
+      "main": [
+        [
+          {
+            "node": "out-create-prospect",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "out-create-prospect": {
       "main": [
         [
           {
-            "node": "out-build-research-prompt",
+            "node": "out-build-3msg-prompt",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "out-build-research-prompt": {
+    "out-build-3msg-prompt": {
       "main": [
         [
           {
-            "node": "out-gemini-research",
+            "node": "out-gemini-3msgs",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "out-gemini-research": {
+    "out-gemini-3msgs": {
       "main": [
         [
           {
-            "node": "out-parse-research",
+            "node": "out-parse-3msgs",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "out-parse-research": {
+    "out-parse-3msgs": {
+      "main": [
+        [
+          {
+            "node": "out-build-eval-prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "out-build-eval-prompt": {
+      "main": [
+        [
+          {
+            "node": "out-gemini-evaluate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "out-gemini-evaluate": {
+      "main": [
+        [
+          {
+            "node": "out-select-best",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "out-select-best": {
+      "main": [
+        [
+          {
+            "node": "out-if-retry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "out-if-retry": {
+      "main": [
+        [
+          {
+            "node": "out-build-retry-prompt",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "out-format-best",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "out-build-retry-prompt": {
+      "main": [
+        [
+          {
+            "node": "out-gemini-retry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "out-gemini-retry": {
+      "main": [
+        [
+          {
+            "node": "out-format-retry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "out-format-retry": {
+      "main": [
+        [
+          {
+            "node": "out-update-prospect",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "out-slack-prospect",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "out-respond-success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "out-format-best": {
       "main": [
         [
           {
@@ -1137,10 +1428,10 @@
   },
   "meta": null,
   "pinData": null,
-  "versionId": "c9112e22-e5ef-4093-a707-9aa907b61af0",
-  "activeVersionId": "c9112e22-e5ef-4093-a707-9aa907b61af0",
-  "versionCounter": 15,
-  "triggerCount": 3,
+  "versionId": "05e09f8d-a934-41d3-8888-7d5a4f59283f",
+  "activeVersionId": "05e09f8d-a934-41d3-8888-7d5a4f59283f",
+  "versionCounter": 40,
+  "triggerCount": 4,
   "shared": [
     {
       "updatedAt": "2026-02-24T19:06:46.501Z",
@@ -1164,7 +1455,7 @@
             "userId": "ed50a507-d93d-45c3-9412-d80babb81dd0",
             "projectId": "AD8mXtbIf5cdYNIV",
             "user": {
-              "updatedAt": "2026-02-24T18:32:01.000Z",
+              "updatedAt": "2026-02-26T21:47:48.000Z",
               "createdAt": "2026-01-26T04:34:34.578Z",
               "id": "ed50a507-d93d-45c3-9412-d80babb81dd0",
               "email": "senseinfotechno@gmail.com",
@@ -1191,7 +1482,7 @@
               },
               "disabled": false,
               "mfaEnabled": false,
-              "lastActiveAt": "2026-02-24",
+              "lastActiveAt": "2026-02-26",
               "isPending": false
             }
           }
@@ -1201,9 +1492,9 @@
   ],
   "tags": [],
   "activeVersion": {
-    "updatedAt": "2026-02-24T19:55:43.073Z",
-    "createdAt": "2026-02-24T19:55:43.073Z",
-    "versionId": "c9112e22-e5ef-4093-a707-9aa907b61af0",
+    "updatedAt": "2026-02-27T08:03:17.673Z",
+    "createdAt": "2026-02-27T08:03:17.673Z",
+    "versionId": "05e09f8d-a934-41d3-8888-7d5a4f59283f",
     "workflowId": "jOhzPZTA86SexCXp",
     "nodes": [
       {
@@ -1295,7 +1586,31 @@
       },
       {
         "parameters": {
-          "jsCode": "const prospect = $('out-validate-prospect').first().json;\nconst recordId = $json.id || 'unknown';\n\nconst systemPrompt = `You are a sales research assistant for Cosmisk, a UGC (User Generated Content) agency in India. Your job is to research a prospect brand and draft a compelling, personalized outreach message.\n\nThe message should:\n- Be concise (3-4 sentences max for DM, 5-6 for email)\n- Reference something specific about their brand/content\n- Highlight how UGC can help their specific business\n- Include a soft CTA (offer a free strategy call or sample script)\n- Sound human, not salesy\n- Match the platform tone (Instagram DM = casual, Email = slightly more formal, LinkedIn = professional)`;\n\nconst userPrompt = `Research and draft an outreach message for:\n\nCompany: ${prospect.company}\nContact: ${prospect.contact}\nPlatform: ${prospect.platform}\nProfile/Website: ${prospect.profileUrl || 'not provided'}\nIndustry: ${prospect.industry || 'not specified'}\n\nDraft the outreach message for ${prospect.platform}. Also provide:\n1. A brief research summary (2-3 bullet points about the brand)\n2. The outreach message\n3. A suggested follow-up message (for 3 days later)\n\nFormat as JSON:\n{\n  \"research\": \"bullet points about the brand\",\n  \"message\": \"the outreach message\",\n  \"follow_up\": \"the follow-up message\",\n  \"subject_line\": \"email subject if platform is email, otherwise null\"\n}`;\n\nreturn [{ json: { systemPrompt, userPrompt, recordId, prospect } }];"
+          "method": "GET",
+          "url": "=https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblAfe1LYh8kHPVbP?filterByFormula={{ encodeURIComponent(\"AND({active}=TRUE(),OR({category}='outreach_effectiveness',{category}='industry_trend',{category}='audience_insight'))\") }}&sort%5B0%5D%5Bfield%5D=confidence&sort%5B0%5D%5Bdirection%5D=desc&maxRecords=10",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          910,
+          250
+        ],
+        "id": "out-fetch-learnings",
+        "name": "out-fetch-learnings",
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "a0TTu3NVsuJUEbct",
+            "name": "Airtable Personal Access Token account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "// Collect inputs from both parallel branches\nconst prospectData = $('out-validate-prospect').first().json;\nconst recordId = $('out-create-prospect').first().json.id || 'unknown';\n\n// Parse system learnings (may have failed gracefully)\nlet learningsText = '';\ntry {\n  const learningsResp = $('out-fetch-learnings').first().json;\n  const records = learningsResp.records || [];\n  if (records.length > 0) {\n    learningsText = '\\n\\n## SYSTEM LEARNINGS (what has worked in past outreach)\\n';\n    for (const rec of records) {\n      const f = rec.fields || {};\n      learningsText += `- [${f.category || 'general'}] ${f.learning || f.insight || f.description || JSON.stringify(f)}\\n`;\n    }\n  }\n} catch (e) {\n  learningsText = '';\n}\n\nconst systemPrompt = `You are Cosmisk's outreach copywriter. Cosmisk is a UGC agency in India offering UGC ads, AI-generated ads, mashup ads, media buying, and ad account audits.\n\nYou write cold outreach messages that get replies. You NEVER write generic, spammy messages.\n\nABSOLUTE BANS \u2014 never use these phrases:\n- \"I hope this email finds you well\"\n- \"I came across your company\"\n- \"I'd love to connect\"\n- \"Let's schedule a quick call\"\n- \"synergy\"\n- \"game-changer\"\n- \"best-in-class\"\n\nRULES:\n1. Open with something SPECIFIC about THEIR business (a recent ad they ran, their industry challenge, their growth stage, a specific product they sell)\n2. Each message MUST be under 150 words\n3. CTA must be a SPECIFIC question, not a generic \"let's chat\"\n4. Subject line must create curiosity without clickbait\n5. Match platform tone: Instagram DM = casual, Email = slightly formal, LinkedIn = professional\n${learningsText}`;\n\nconst userPrompt = `Generate 3 DISTINCT outreach messages for this prospect. Each takes a completely different angle:\n\n**Prospect Details:**\n- Company: ${prospectData.company}\n- Contact: ${prospectData.contact}\n- Platform: ${prospectData.platform}\n- Profile/Website: ${prospectData.profileUrl || 'not provided'}\n- Industry: ${prospectData.industry || 'not specified'}\n\n**Message A \u2014 Pain-Point Focused:**\nIdentify their most likely pain point based on their industry and size. Show how UGC/AI ads specifically solve THAT problem. Be empathetic, not pushy.\n\n**Message B \u2014 Results-Focused:**\nLead with a specific number or case study result (e.g., \"We helped a ${prospectData.industry || 'similar'} brand cut CAC by 40% with UGC\"). Back it with social proof.\n\n**Message C \u2014 Curiosity-Focused:**\nIntriguing hook that makes them want to reply. Minimal pitch. Create an open loop. Ask a question that's hard to ignore.\n\nFor EACH message, also provide:\n- subject_line (for email) or hook_line (for DM)\n- brief research note about the brand (1-2 sentences of what you found/inferred)\n\nReturn as JSON:\n{\n  \"messages\": [\n    {\n      \"angle\": \"pain_point\",\n      \"subject_line\": \"...\",\n      \"body\": \"...\",\n      \"research_note\": \"...\"\n    },\n    {\n      \"angle\": \"results\",\n      \"subject_line\": \"...\",\n      \"body\": \"...\",\n      \"research_note\": \"...\"\n    },\n    {\n      \"angle\": \"curiosity\",\n      \"subject_line\": \"...\",\n      \"body\": \"...\",\n      \"research_note\": \"...\"\n    }\n  ]\n}`;\n\nreturn [{ json: { systemPrompt, userPrompt, recordId, prospect: prospectData } }];"
         },
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
@@ -1303,8 +1618,8 @@
           1130,
           100
         ],
-        "id": "df2a176f-cb4a-4946-8a9e-96f516b14a5d",
-        "name": "out-build-research-prompt"
+        "id": "out-build-3msg-prompt",
+        "name": "out-build-3msg-prompt"
       },
       {
         "parameters": {
@@ -1314,7 +1629,7 @@
           "nodeCredentialType": "googlePalmApi",
           "sendBody": true,
           "specifyBody": "json",
-          "jsonBody": "={{ JSON.stringify({ systemInstruction: { parts: [{ text: $json.systemPrompt }] }, contents: [{ role: 'user', parts: [{ text: $json.userPrompt }] }], generationConfig: { temperature: 0.7, maxOutputTokens: 2048 } }) }}",
+          "jsonBody": "={{ JSON.stringify({ systemInstruction: { parts: [{ text: $json.systemPrompt }] }, contents: [{ role: 'user', parts: [{ text: $json.userPrompt }] }], generationConfig: { temperature: 0.7, maxOutputTokens: 4096 } }) }}",
           "options": {}
         },
         "type": "n8n-nodes-base.httpRequest",
@@ -1323,8 +1638,8 @@
           1350,
           100
         ],
-        "id": "c2ed4455-0d24-48dd-8449-92b998697994",
-        "name": "out-gemini-research",
+        "id": "out-gemini-3msgs",
+        "name": "out-gemini-3msgs",
         "credentials": {
           "googlePalmApi": {
             "id": "rIL63TG4xfMQL8uJ",
@@ -1335,7 +1650,7 @@
       },
       {
         "parameters": {
-          "jsCode": "const geminiResult = $json;\nconst prev = $('out-build-research-prompt').first().json;\nconst recordId = prev.recordId;\nconst prospect = prev.prospect;\n\nlet research = '';\nlet message = '';\nlet followUp = '';\nlet subjectLine = '';\n\ntry {\n  const text = geminiResult?.candidates?.[0]?.content?.parts?.[0]?.text || '';\n  const jsonMatch = text.match(/\\{[\\s\\S]*\\}/);\n  if (jsonMatch) {\n    const parsed = JSON.parse(jsonMatch[0]);\n    research = parsed.research || '';\n    message = parsed.message || '';\n    followUp = parsed.follow_up || '';\n    subjectLine = parsed.subject_line || '';\n  } else {\n    message = text;\n  }\n} catch (e) {\n  message = `Hi ${prospect.contact || 'there'}, I came across ${prospect.company || 'your brand'} and love what you're doing. We help brands like yours create authentic UGC content that drives real results. Would you be open to a quick 15-min call to explore how we could help?`;\n  followUp = `Hey ${prospect.contact || 'there'}, just following up on my earlier message. We recently helped a ${prospect.industry || 'similar'} brand increase their ad performance by 40% with UGC. Happy to share the case study if you're interested!`;\n}\n\nconst notesUpdate = `\\n\\n--- AI Research ---\\n${research}\\n\\n--- Draft Message (${prospect.platform}) ---\\n${message}\\n\\n--- Follow-up Draft ---\\n${followUp}`;\n\nconst originalNotes = prospect.notes || `Platform: ${prospect.platform}\\nProfile: ${prospect.profileUrl || ''}\\nIndustry: ${prospect.industry || ''}`;\nconst fullNotes = originalNotes + notesUpdate;\nconst followUpDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];\n\nconst slackMsg = `:mag: *New Prospect Researched*\\n\\n` +\n  `*Company:* ${prospect.company}\\n` +\n  `*Contact:* ${prospect.contact}\\n` +\n  `*Platform:* ${prospect.platform}\\n` +\n  `*Profile:* ${prospect.profileUrl || 'N/A'}\\n\\n` +\n  `*Research:*\\n${research}\\n\\n` +\n  `*Draft Message:*\\n\\`\\`\\`${message}\\`\\`\\`\\n\\n` +\n  (subjectLine ? `*Subject:* ${subjectLine}\\n\\n` : '') +\n  `*Follow-up Draft:*\\n\\`\\`\\`${followUp}\\`\\`\\`\\n\\n` +\n  `_Copy the message above and send it on ${prospect.platform}. Then use /mark-outreach to update status._`;\n\nreturn [{ json: { recordId, slackMsg, prospect, patchBody: { fields: { notes: fullNotes, stage: 'contacted', next_follow_up: followUpDate } } } }];"
+          "jsCode": "const geminiResult = $json;\nconst prev = $('out-build-3msg-prompt').first().json;\n\nlet messages = [];\ntry {\n  const text = (geminiResult.candidates || [])[0]?.content?.parts?.[0]?.text || '';\n  let cleaned = text.replace(/^```json\\s*/i, '').replace(/^```\\s*/m, '').replace(/\\s*```\\s*$/m, '').trim();\n  const jsonMatch = cleaned.match(/\\{[\\s\\S]*\\}/);\n  if (jsonMatch) {\n    const parsed = JSON.parse(jsonMatch[0]);\n    messages = parsed.messages || [];\n  }\n  // Truncation fallback: extract individual message objects\n  if (messages.length === 0) {\n    const objRegex = /\\{[^{}]*\"angle\"\\s*:\\s*\"[^\"]+\"[^{}]*\"body\"\\s*:\\s*\"[^\"]*\"[^{}]*\\}/g;\n    const matches = cleaned.match(objRegex) || [];\n    for (const m of matches) {\n      try { messages.push(JSON.parse(m)); } catch (e) { /* skip */ }\n    }\n  }\n} catch (e) {\n  // Will fall through to fallback below\n}\n\nif (messages.length === 0) {\n  // Fallback: generate basic messages\n  const p = prev.prospect;\n  messages = [\n    {\n      angle: 'pain_point',\n      subject_line: `${p.company || 'Your brand'} + UGC`,\n      body: `Hi ${p.contact || 'there'}, most ${p.industry || 'D2C'} brands struggle with ad fatigue \u2014 the same creatives stop converting after 2-3 weeks. UGC solves this by giving you a constant stream of fresh, authentic content. We build UGC pipelines for brands like yours. What's your current biggest bottleneck with ad creatives?`,\n      research_note: 'Fallback \u2014 Gemini parse failed'\n    },\n    {\n      angle: 'results',\n      subject_line: `40% lower CAC for ${p.industry || 'brands'} like ${p.company || 'yours'}`,\n      body: `Hi ${p.contact || 'there'}, we recently helped a ${p.industry || 'similar'} brand cut their customer acquisition cost by 40% using UGC-first ad creatives. The key was matching creator style to their audience demographics. Would you be open to seeing the breakdown of how we did it?`,\n      research_note: 'Fallback \u2014 Gemini parse failed'\n    },\n    {\n      angle: 'curiosity',\n      subject_line: `Quick question about ${p.company || 'your'} ads`,\n      body: `Hi ${p.contact || 'there'}, I noticed something interesting about the ${p.industry || 'D2C'} ad landscape that directly relates to ${p.company || 'your brand'}. Are you currently running any creator-style content in your paid campaigns, or mostly polished brand creatives?`,\n      research_note: 'Fallback \u2014 Gemini parse failed'\n    }\n  ];\n}\n\nreturn [{ json: { messages, recordId: prev.recordId, prospect: prev.prospect } }];"
         },
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
@@ -1343,8 +1658,159 @@
           1570,
           100
         ],
-        "id": "3b68a3a9-6095-4bb6-916f-ecf6a6ade920",
-        "name": "out-parse-research"
+        "id": "out-parse-3msgs",
+        "name": "out-parse-3msgs"
+      },
+      {
+        "parameters": {
+          "jsCode": "const data = $json;\nconst messages = data.messages;\nconst prospect = data.prospect;\n\nconst systemPrompt = `You are an expert outreach evaluator for Cosmisk, a UGC agency. You evaluate cold outreach messages with brutal honesty. Score STRICTLY \u2014 most messages should score 5-7, not 8-10.\n\nScore each message on these 5 criteria (1-10 each, 50 max):\n\n1. **personalization** \u2014 Does it reference something SPECIFIC about THEIR business? Generic industry mentions = 3-4. Specific product/campaign/metric = 7-8. Deep insight = 9-10.\n2. **value_clarity** \u2014 Is it immediately clear what they'd GET? Vague \"help your brand\" = 3-4. Specific outcome with numbers = 7-8.\n3. **brevity** \u2014 Is it under 150 words and scannable in 30 seconds? Over 150 = max 4. Under 100 with impact = 8-10.\n4. **cta_strength** \u2014 Is the CTA a specific question? Generic \"let's chat\" = 2-3. Specific question they want to answer = 7-8.\n5. **spam_avoidance** \u2014 Does it avoid spam triggers and sound human? Contains banned phrases or sounds like mass email = 1-3. Feels like a real person wrote it = 7-8.`;\n\nconst userPrompt = `Evaluate these 3 outreach messages for:\nCompany: ${prospect.company}\nContact: ${prospect.contact}\nPlatform: ${prospect.platform}\nIndustry: ${prospect.industry || 'unknown'}\n\n---\nMessage A (${messages[0]?.angle || 'pain_point'}):\nSubject: ${messages[0]?.subject_line || 'N/A'}\n${messages[0]?.body || 'N/A'}\n\n---\nMessage B (${messages[1]?.angle || 'results'}):\nSubject: ${messages[1]?.subject_line || 'N/A'}\n${messages[1]?.body || 'N/A'}\n\n---\nMessage C (${messages[2]?.angle || 'curiosity'}):\nSubject: ${messages[2]?.subject_line || 'N/A'}\n${messages[2]?.body || 'N/A'}\n\n---\n\nFor each message, return scores and a 1-sentence critique. Then pick the best one.\n\nReturn JSON:\n{\n  \"evaluations\": [\n    {\n      \"angle\": \"pain_point\",\n      \"personalization\": 7,\n      \"value_clarity\": 6,\n      \"brevity\": 8,\n      \"cta_strength\": 5,\n      \"spam_avoidance\": 7,\n      \"total\": 33,\n      \"critique\": \"...\"\n    },\n    { ... },\n    { ... }\n  ],\n  \"best_index\": 0,\n  \"best_angle\": \"pain_point\",\n  \"improvement_notes\": \"One sentence on what would make the best message even better\"\n}`;\n\nreturn [{ json: { systemPrompt, userPrompt, messages, recordId: data.recordId, prospect } }];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1790,
+          100
+        ],
+        "id": "out-build-eval-prompt",
+        "name": "out-build-eval-prompt"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "googlePalmApi",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ systemInstruction: { parts: [{ text: $json.systemPrompt }] }, contents: [{ role: 'user', parts: [{ text: $json.userPrompt }] }], generationConfig: { temperature: 0.2, maxOutputTokens: 3000 } }) }}",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          2010,
+          100
+        ],
+        "id": "out-gemini-evaluate",
+        "name": "out-gemini-evaluate",
+        "credentials": {
+          "googlePalmApi": {
+            "id": "rIL63TG4xfMQL8uJ",
+            "name": "Cosmisk AI"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "const geminiResult = $json;\nconst prev = $('out-build-eval-prompt').first().json;\nconst messages = prev.messages;\n\nlet evaluation = null;\nlet bestIndex = 0;\nlet bestTotal = 0;\nlet improvementNotes = '';\nlet needsRetry = false;\n\ntry {\n  const text = (geminiResult.candidates || [])[0]?.content?.parts?.[0]?.text || '';\n  let cleaned = text.replace(/^```json\\s*/i, '').replace(/^```\\s*/m, '').replace(/\\s*```\\s*$/m, '').trim();\n  const jsonMatch = cleaned.match(/\\{[\\s\\S]*\\}/);\n  if (jsonMatch) {\n    evaluation = JSON.parse(jsonMatch[0]);\n  }\n} catch (e) {\n  // evaluation stays null\n}\n\nif (evaluation && evaluation.evaluations) {\n  // Find best message by total score\n  for (let i = 0; i < evaluation.evaluations.length; i++) {\n    const ev = evaluation.evaluations[i];\n    const total = ev.total || (ev.personalization + ev.value_clarity + ev.brevity + ev.cta_strength + ev.spam_avoidance) || 0;\n    if (total > bestTotal) {\n      bestTotal = total;\n      bestIndex = i;\n    }\n  }\n  improvementNotes = evaluation.improvement_notes || '';\n  needsRetry = bestTotal < 35;\n} else {\n  // Evaluation parse failed \u2014 use first message, no retry\n  bestIndex = 0;\n  bestTotal = 0;\n  needsRetry = false;\n}\n\nconst bestMessage = messages[bestIndex] || messages[0];\n\nreturn [{ json: {\n  needsRetry,\n  bestMessage,\n  bestIndex,\n  bestTotal,\n  improvementNotes,\n  evaluation,\n  messages,\n  recordId: prev.recordId,\n  prospect: prev.prospect\n} }];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2230,
+          100
+        ],
+        "id": "out-select-best",
+        "name": "out-select-best"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "loose"
+            },
+            "conditions": [
+              {
+                "id": "retry-check",
+                "leftValue": "={{ $json.needsRetry }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "equals"
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          2450,
+          100
+        ],
+        "id": "out-if-retry",
+        "name": "out-if-retry"
+      },
+      {
+        "parameters": {
+          "jsCode": "const data = $('out-select-best').first().json;\nconst prospect = data.prospect;\nconst evaluation = data.evaluation;\nconst messages = data.messages;\nconst improvementNotes = data.improvementNotes;\n\n// Build critique summary from evaluation\nlet critiqueSummary = '';\nif (evaluation && evaluation.evaluations) {\n  critiqueSummary = evaluation.evaluations.map((ev, i) =>\n    `Message ${String.fromCharCode(65 + i)} (${ev.angle}): ${ev.total}/50 \u2014 ${ev.critique || 'No critique'}`\n  ).join('\\n');\n}\n\nconst systemPrompt = `You are Cosmisk's top outreach copywriter. A previous draft scored below 35/50. You must write a significantly better message.\n\nABSOLUTE BANS \u2014 never use these phrases:\n- \"I hope this email finds you well\"\n- \"I came across your company\"\n- \"I'd love to connect\"\n- \"Let's schedule a quick call\"\n- \"synergy\", \"game-changer\", \"best-in-class\"\n\nRULES:\n1. Open with something SPECIFIC about THEIR business\n2. Under 150 words\n3. CTA must be a SPECIFIC question\n4. Subject line must create curiosity without clickbait`;\n\nconst userPrompt = `Your previous 3 attempts all scored below the quality bar. Here's what the evaluator said:\n\n${critiqueSummary}\n\nImprovement direction: ${improvementNotes}\n\nNow write ONE final outreach message that fixes ALL the issues. Combine the best elements from all 3 angles.\n\nProspect:\n- Company: ${prospect.company}\n- Contact: ${prospect.contact}\n- Platform: ${prospect.platform}\n- Profile: ${prospect.profileUrl || 'not provided'}\n- Industry: ${prospect.industry || 'unknown'}\n\nReturn JSON:\n{\n  \"angle\": \"refined\",\n  \"subject_line\": \"...\",\n  \"body\": \"...\",\n  \"research_note\": \"...\"\n}`;\n\nreturn [{ json: { systemPrompt, userPrompt, recordId: data.recordId, prospect, messages } }];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2670,
+          0
+        ],
+        "id": "out-build-retry-prompt",
+        "name": "out-build-retry-prompt"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "googlePalmApi",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ systemInstruction: { parts: [{ text: $json.systemPrompt }] }, contents: [{ role: 'user', parts: [{ text: $json.userPrompt }] }], generationConfig: { temperature: 0.5, maxOutputTokens: 2048 } }) }}",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          2890,
+          0
+        ],
+        "id": "out-gemini-retry",
+        "name": "out-gemini-retry",
+        "credentials": {
+          "googlePalmApi": {
+            "id": "rIL63TG4xfMQL8uJ",
+            "name": "Cosmisk AI"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "// Format output from retry path\nconst geminiResult = $json;\nconst prev = $('out-build-retry-prompt').first().json;\nconst prospect = prev.prospect;\nconst recordId = prev.recordId;\n\nlet bestMessage = null;\ntry {\n  const text = (geminiResult.candidates || [])[0]?.content?.parts?.[0]?.text || '';\n  let cleaned = text.replace(/^```json\\s*/i, '').replace(/^```\\s*/m, '').replace(/\\s*```\\s*$/m, '').trim();\n  const jsonMatch = cleaned.match(/\\{[\\s\\S]*\\}/);\n  if (jsonMatch) {\n    bestMessage = JSON.parse(jsonMatch[0]);\n  }\n} catch (e) { /* fallback below */ }\n\nif (!bestMessage || !bestMessage.body) {\n  bestMessage = prev.messages[0] || {\n    angle: 'fallback',\n    subject_line: `Quick question about ${prospect.company || 'your'} ads`,\n    body: `Hi ${prospect.contact || 'there'}, most ${prospect.industry || 'D2C'} brands struggle with ad fatigue. We build UGC pipelines that keep fresh creatives flowing. What's your current biggest bottleneck with ad creatives?`,\n    research_note: 'Retry parse failed, using best original draft'\n  };\n}\n\nconst research = bestMessage.research_note || '';\nconst message = bestMessage.body;\nconst subjectLine = bestMessage.subject_line || '';\n\n// Build follow-up (quick generation)\nconst followUp = `Hey ${prospect.contact || 'there'}, following up on my note about ${prospect.company ? prospect.company + \"'s\" : 'your'} ad strategy. Would a 2-min Loom walkthrough of what we'd do differently be helpful? No call needed.`;\n\nconst notesUpdate = `\\n\\n--- AI Research ---\\n${research}\\n\\n--- Draft Message (${prospect.platform}) [Agent: refined after retry] ---\\n${message}\\n\\n--- Follow-up Draft ---\\n${followUp}`;\n\nconst originalNotes = prospect.notes || `Platform: ${prospect.platform}\\nProfile: ${prospect.profileUrl || ''}\\nIndustry: ${prospect.industry || ''}`;\nconst fullNotes = originalNotes + notesUpdate;\nconst followUpDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];\n\nconst slackMsg = `:mag: *New Prospect Researched (Agent: Retry Path)*\\n\\n` +\n  `*Company:* ${prospect.company}\\n` +\n  `*Contact:* ${prospect.contact}\\n` +\n  `*Platform:* ${prospect.platform}\\n` +\n  `*Profile:* ${prospect.profileUrl || 'N/A'}\\n\\n` +\n  `*Research:*\\n${research}\\n\\n` +\n  `*Draft Message:*\\n\\`\\`\\`${message}\\`\\`\\`\\n\\n` +\n  (subjectLine ? `*Subject:* ${subjectLine}\\n\\n` : '') +\n  `*Follow-up Draft:*\\n\\`\\`\\`${followUp}\\`\\`\\`\\n\\n` +\n  `_Agent scored all 3 initial drafts below 35/50 and generated a refined version. Copy and send on ${prospect.platform}._`;\n\nreturn [{ json: { recordId, slackMsg, prospect, patchBody: { fields: { notes: fullNotes, stage: 'contacted', next_follow_up: followUpDate } } } }];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          3110,
+          0
+        ],
+        "id": "out-format-retry",
+        "name": "out-format-retry"
+      },
+      {
+        "parameters": {
+          "jsCode": "// Format output from no-retry path (best of 3 messages)\nconst data = $('out-select-best').first().json;\nconst prospect = data.prospect;\nconst recordId = data.recordId;\nconst bestMessage = data.bestMessage;\nconst bestTotal = data.bestTotal;\nconst bestIndex = data.bestIndex;\n\nconst research = bestMessage.research_note || '';\nconst message = bestMessage.body;\nconst subjectLine = bestMessage.subject_line || '';\nconst angle = bestMessage.angle || 'unknown';\n\n// Build follow-up\nconst followUp = `Hey ${prospect.contact || 'there'}, following up on my note about ${prospect.company ? prospect.company + \"'s\" : 'your'} ad strategy. Would a 2-min Loom walkthrough of what we'd do differently be helpful? No call needed.`;\n\nconst notesUpdate = `\\n\\n--- AI Research ---\\n${research}\\n\\n--- Draft Message (${prospect.platform}) [Agent: ${angle}, scored ${bestTotal}/50] ---\\n${message}\\n\\n--- Follow-up Draft ---\\n${followUp}`;\n\nconst originalNotes = prospect.notes || `Platform: ${prospect.platform}\\nProfile: ${prospect.profileUrl || ''}\\nIndustry: ${prospect.industry || ''}`;\nconst fullNotes = originalNotes + notesUpdate;\nconst followUpDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];\n\nconst slackMsg = `:mag: *New Prospect Researched (Agent: ${angle} \u2014 ${bestTotal}/50)*\\n\\n` +\n  `*Company:* ${prospect.company}\\n` +\n  `*Contact:* ${prospect.contact}\\n` +\n  `*Platform:* ${prospect.platform}\\n` +\n  `*Profile:* ${prospect.profileUrl || 'N/A'}\\n\\n` +\n  `*Research:*\\n${research}\\n\\n` +\n  `*Draft Message:*\\n\\`\\`\\`${message}\\`\\`\\`\\n\\n` +\n  (subjectLine ? `*Subject:* ${subjectLine}\\n\\n` : '') +\n  `*Follow-up Draft:*\\n\\`\\`\\`${followUp}\\`\\`\\`\\n\\n` +\n  `_Agent selected best of 3 drafts (${angle} angle). Copy and send on ${prospect.platform}._`;\n\nreturn [{ json: { recordId, slackMsg, prospect, patchBody: { fields: { notes: fullNotes, stage: 'contacted', next_follow_up: followUpDate } } } }];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2670,
+          200
+        ],
+        "id": "out-format-best",
+        "name": "out-format-best"
       },
       {
         "parameters": {
@@ -1360,7 +1826,7 @@
         "type": "n8n-nodes-base.httpRequest",
         "typeVersion": 4.2,
         "position": [
-          1790,
+          3350,
           0
         ],
         "id": "2c91084a-f306-4d1c-a04c-53ff0f22fe0d",
@@ -1381,13 +1847,13 @@
             "value": "C0AHQUBGR32",
             "mode": "id"
           },
-          "text": "={{ $('out-parse-research').first().json.slackMsg }}",
+          "text": "={{ $json.slackMsg }}",
           "otherOptions": {}
         },
         "type": "n8n-nodes-base.slack",
         "typeVersion": 2.2,
         "position": [
-          1790,
+          3350,
           100
         ],
         "id": "ab797bff-30fe-47c9-80cb-4195e6d571fd",
@@ -1403,7 +1869,7 @@
       {
         "parameters": {
           "respondWith": "text",
-          "responseBody": "={{ JSON.stringify({ success: true, message: 'Prospect added and researched', record_id: $('out-parse-research').first().json.recordId }) }}",
+          "responseBody": "={{ JSON.stringify({ success: true, message: 'Prospect added and researched (agent pattern)', record_id: $json.recordId }) }}",
           "options": {
             "responseHeaders": {
               "entries": [
@@ -1418,7 +1884,7 @@
         "type": "n8n-nodes-base.respondToWebhook",
         "typeVersion": 1.1,
         "position": [
-          1790,
+          3350,
           200
         ],
         "id": "38c4033b-3537-4a4a-b51e-46c31eb90e7e",
@@ -1778,6 +2244,237 @@
           }
         },
         "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "path": "enrich-leads",
+          "httpMethod": "POST",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          250,
+          1100
+        ],
+        "id": "out-webhook-enrich",
+        "name": "Webhook -- Enrich Leads",
+        "webhookId": "enrich-leads"
+      },
+      {
+        "parameters": {
+          "jsCode": "// ============================================================\n// Prepare batch research prompt for Gemini\n// HYPER-PERSONALIZED: uses funding data, ad signals, industry context\n// ENHANCED: real portfolio data + same-industry client matching\n// ============================================================\nconst body = $json.body || $json;\nconst leads = body.leads || [];\n\nif (leads.length === 0) {\n  return [{ json: { _skip: true, count: 0, slackMsg: '' } }];\n}\n\n// \u2500\u2500 Industry \u2192 Client Mapping (real Cosmisk/Smashed portfolio) \u2500\u2500\nconst industryClients = {\n  'beauty': ['Suroskie (24 scripts R1)', 'Bare Anatomy', 'Sereko', 'Oziva', 'Sotrue', 'GlowVita', 'Exotic Flora', 'Kyari'],\n  'skincare': ['Suroskie (24 scripts R1)', 'Bare Anatomy', 'Sereko', 'Oziva', 'Sotrue', 'GlowVita'],\n  'jewelry': ['Elinor', 'Taahira Jewellery', 'Bling Queen', 'Krysstal', 'Helping Hands'],\n  'fashion': ['Suroskie', 'MNMLST', 'Bling Queen', 'Elinor'],\n  'fintech': ['Wint Wealth (5 rounds, 8 months)', 'Propelld', 'Fixed Income', 'Sahi Trading', 'TFI'],\n  'food': ['Cinnamon Kitchen', 'Being Bania', 'Goodbug'],\n  'health': ['MenoVeda', 'VARCOLEG CARE', 'Tribal Veda (4 rounds)', 'Goodbug'],\n  'wellness': ['MenoVeda', 'VARCOLEG CARE', 'Tribal Veda (4 rounds)', 'Goodbug'],\n  'fragrance': ['Ajmal Perfumes (2 rounds)', 'Oudarabia'],\n  'perfume': ['Ajmal Perfumes (2 rounds)', 'Oudarabia'],\n  'consumer': ['Frido (3 projects)', 'Coolnut', 'Cool Beds', 'FabPad', 'Handme', 'Wheelwash'],\n  'automotive': ['Wheelwash'],\n  'education': ['Edyoda (6 scripts)'],\n  'home': ['Exotic Flora', 'LABHAM HOME', 'Cool Beds'],\n  'kids': ['Tribe Kids', 'Brave Paws'],\n  'electronics': ['Coolnut', 'Ambrane India', 'Loop Earplugs'],\n  'default': ['Mamaearth', 'Ajmal Perfumes', 'Wint Wealth', 'Bare Anatomy']\n};\n\n// \u2500\u2500 Fuzzy-match lead fields to find same-industry clients \u2500\u2500\nfunction findIndustryClients(lead) {\n  const searchText = [\n    lead.industry || '',\n    lead.signal || '',\n    lead.notes || '',\n    lead.best_service || '',\n    lead.company_name || ''\n  ].join(' ').toLowerCase();\n\n  const matched = new Set();\n  for (const [key, clients] of Object.entries(industryClients)) {\n    if (key === 'default') continue;\n    if (searchText.includes(key)) {\n      clients.forEach(c => matched.add(c));\n    }\n  }\n  // If no matches, return default marquee names\n  if (matched.size === 0) {\n    industryClients['default'].forEach(c => matched.add(c));\n  }\n  return [...matched].slice(0, 6);\n}\n\n// \u2500\u2500 Build portfolio context per lead \u2500\u2500\nfunction buildPortfolioContext(lead) {\n  const sameIndustry = findIndustryClients(lead);\n  return `\n## PORTFOLIO PROOF POINTS (use these in the message \u2014 they are REAL)\n- 62 brands served across D2C Beauty, Jewelry, Fintech, Consumer Products, Perfumes, Wellness, Food, Education, Fashion\n- 33+ active creators on roster for UGC production\n- Standard delivery: 3 hooks per concept, multiple ad variations for A/B testing\n- Repeat clients demonstrate trust: Wint Wealth (5 rounds over 8 months), Tribal Veda (4 rounds), Suroskie (24 scripts in Round 1), Ajmal Perfumes (2 rounds), Frido (3 projects)\n- Upsell proof: Wint Wealth went from UGC ads to a Rs 4L/month organic content partnership\n- Notable names on our roster: Mamaearth, Canva, Ajmal Perfumes, Bare Anatomy, Oziva, Loop Earplugs\n\n## SAME-INDUSTRY EXPERIENCE FOR THIS LEAD\nClients in a similar space: ${sameIndustry.join(', ')}\n\n## OUTREACH RULES (CRITICAL \u2014 follow exactly)\n1. Reference our work with ${sameIndustry.slice(0, 3).join(', ')} when relevant \u2014 use ACTUAL client names from the list above\n2. For funded brands: mention we have scaled D2C brands from seed stage (like Basil, GoOAT) to Series A growth (like FableStreet, Rapidbox)\n3. For brands already running Meta ads: mention we helped Wint Wealth go from UGC ads to a Rs 4L/month organic content partnership\n4. For brands needing volume: mention Suroskie (24 scripts in Round 1) and our 3-hooks-per-concept standard\n5. NEVER fabricate client names or results. Only reference the clients listed in PORTFOLIO PROOF POINTS and SAME-INDUSTRY EXPERIENCE above.\n6. Pick 1-2 proof points most relevant to THIS lead \u2014 do not dump all stats into one message\n`;\n}\n\nconst systemPrompt = `You are a senior sales strategist for Cosmisk (also known as Smashed), a creative agency in India that specializes in:\n- UGC ads (creator-driven video content for Meta/Google paid ads)\n- AI-generated ads and mashup ads\n- Performance media buying (Meta + Google)\n- Ad account audits and creative strategy\n\n**YOUR TASK:** For each prospect, create HYPER-PERSONALIZED outreach using the specific data provided AND our real portfolio proof points.\n\n**PERSONALIZATION RULES (CRITICAL):**\n1. NEVER use generic phrases like \"love what you're doing\" or \"help brands like yours\"\n2. Reference SPECIFIC data: funding amount, number of ads running, specific products, competitor comparisons\n3. If they recently raised funding \u2192 reference the round, suggest they allocate creative budget NOW before scaling ads\n4. If they're running Meta ads \u2192 reference their ad volume, suggest UGC to improve ROAS/reduce creative fatigue\n5. If they appeared on Shark Tank \u2192 reference the episode/deal, suggest capitalizing on PR buzz with content\n6. If they're in skincare/beauty \u2192 reference the \"social proof\" angle, show how UGC converts 3-4x better than brand shots\n7. If they're in food/beverage \u2192 reference \"unboxing\" and \"taste test\" UGC formats\n8. If they're in fashion \u2192 reference \"try-on\" and \"outfit of the day\" UGC formats\n9. Include a SPECIFIC case study or client reference from the PORTFOLIO section \u2014 use REAL client names, never fabricated ones\n10. End with a soft CTA \u2014 offer a free creative audit or strategy session, not a \"call\"\n\n**TONE:** Confident but not pushy. Like a knowledgeable friend who has data to share. Short paragraphs. No corporate jargon.\n\nFor each prospect, return:\n{\n  \"company_name\": \"exact name\",\n  \"research\": \"3-4 bullet points of specific findings about this company\",\n  \"message\": \"The primary outreach message (4-6 sentences, hyper-personalized, references specific data AND real portfolio clients)\",\n  \"follow_up\": \"Follow-up message for 3 days later (2-3 sentences, adds new value \u2014 share a relevant case study or insight using a REAL client name)\",\n  \"platform\": \"instagram_dm | email | linkedin | whatsapp\",\n  \"subject_line\": \"email subject line if platform is email, else null\",\n  \"personalization_hooks\": [\"list of specific data points referenced in the message\"]\n}\n\nReturn a JSON array. No markdown wrapping.`;\n\nconst leadsList = leads.map((l, i) => {\n  const portfolioCtx = buildPortfolioContext(l);\n\n  let context = `${i + 1}. Company: ${l.company_name}`;\n  if (l.website) context += `\\n   Website: ${l.website}`;\n  if (l.industry) context += `\\n   Industry: ${l.industry}`;\n  if (l.notes) context += `\\n   Intel: ${l.notes.substring(0, 500)}`;\n  if (l.signal) context += `\\n   Discovery Signal: ${l.signal}`;\n  if (l.composite_score) context += `\\n   Lead Score: ${l.composite_score}/10`;\n  if (l.pitch_hook) context += `\\n   Suggested Hook: ${l.pitch_hook}`;\n  if (l.best_service) context += `\\n   Best Service Match: ${l.best_service}`;\n  if (l.suggested_platform) context += `\\n   Suggested Platform: ${l.suggested_platform}`;\n  context += `\\n${portfolioCtx}`;\n  return context;\n}).join('\\n\\n');\n\nconst userPrompt = `Research these ${leads.length} D2C/consumer brand prospects and create hyper-personalized outreach messages. Use the intel provided AND the portfolio proof points \u2014 do NOT generate generic templates. Each message MUST reference at least one real Cosmisk client by name.\\n\\n${leadsList}\\n\\nReturn a JSON array with one object per prospect. Make each message unique and data-driven.`;\n\nreturn [{ json: {\n  systemPrompt,\n  userPrompt,\n  leads,\n  count: leads.length,\n  _skip: false\n} }];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          470,
+          1100
+        ],
+        "id": "out-prep-enrich",
+        "name": "Prep Batch Research"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "loose"
+            },
+            "conditions": [
+              {
+                "id": "enrich-check",
+                "leftValue": "={{ $json.count }}",
+                "rightValue": "0",
+                "operator": {
+                  "type": "number",
+                  "operation": "gt"
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          690,
+          1100
+        ],
+        "id": "out-if-enrich",
+        "name": "Has Leads to Enrich?"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "googlePalmApi",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ systemInstruction: { parts: [{ text: $json.systemPrompt }] }, contents: [{ role: 'user', parts: [{ text: $json.userPrompt }] }], generationConfig: { temperature: 0.7, maxOutputTokens: 16000 } }) }}",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          910,
+          1050
+        ],
+        "id": "out-gemini-enrich",
+        "name": "Gemini -- Batch Research",
+        "credentials": {
+          "googlePalmApi": {
+            "id": "rIL63TG4xfMQL8uJ",
+            "name": "Cosmisk AI"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "// ============================================================\n// Parse Gemini batch research results\n// Build: Airtable PATCH body, Slack summary, webhook response\n// FIXED: geminiOk detection, removed stage field (causes select error)\n// ============================================================\nconst geminiResult = $json;\nconst prevData = $('Prep Batch Research').first().json;\nconst leads = prevData.leads || [];\n\nlet results = [];\nlet geminiOk = false;\n\ntry {\n  const text = (geminiResult.candidates || [])[0]?.content?.parts?.[0]?.text || '';\n  if (!text) throw new Error('No Gemini response');\n\n  // Strip markdown code fences (multiple patterns)\n  let cleaned = text\n    .replace(/^```json\\s*/i, '')\n    .replace(/^```\\s*/m, '')\n    .replace(/\\s*```\\s*$/m, '')\n    .trim();\n\n  // Try parsing as array\n  const arrMatch = cleaned.match(/\\[[\\s\\S]*\\]/);\n  if (arrMatch) {\n    try {\n      results = JSON.parse(arrMatch[0]);\n      geminiOk = true;\n    } catch (e) {\n      // Truncated JSON fallback \u2014 extract individual objects\n      const objPattern = /\\{[^{}]*\"company_name\"\\s*:\\s*\"[^\"]+\"[\\s\\S]*?\"platform\"\\s*:\\s*\"[^\"]+\"/g;\n      const matches = cleaned.match(objPattern) || [];\n      for (const m of matches) {\n        try {\n          // Close the object\n          const fixed = m + (m.endsWith('}') ? '' : '\"}');\n          results.push(JSON.parse(fixed));\n        } catch (e2) { /* skip */ }\n      }\n      if (results.length > 0) geminiOk = true;\n    }\n  }\n\n  // If still no results, try parsing as single object with array inside\n  if (results.length === 0) {\n    try {\n      const parsed = JSON.parse(cleaned);\n      if (Array.isArray(parsed)) {\n        results = parsed;\n        geminiOk = true;\n      } else if (parsed.results || parsed.prospects) {\n        results = parsed.results || parsed.prospects;\n        geminiOk = true;\n      }\n    } catch (e) { /* ignore */ }\n  }\n} catch (err) {\n  // Gemini completely failed\n}\n\n// Build Airtable batch PATCH and Slack message\nconst patchRecords = [];\nconst slackLines = [`:mag: *Outreach \u2014 ${leads.length} Prospects Researched & Messages Drafted*\\n`];\nconst followUpDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];\n\nfor (const lead of leads) {\n  // Match by company name (case-insensitive, trimmed)\n  const leadName = (lead.company_name || '').toLowerCase().trim();\n  const match = results.find(r =>\n    (r.company_name || '').toLowerCase().trim() === leadName\n  );\n\n  let research = '';\n  let message = '';\n  let followUp = '';\n  let platform = lead.suggested_platform || 'email';\n  let subjectLine = '';\n  let hooks = [];\n  let wasPersonalized = false;\n\n  if (match) {\n    research = Array.isArray(match.research) ? match.research.join('\\n') : (match.research || '');\n    message = match.message || '';\n    followUp = match.follow_up || '';\n    platform = match.platform || platform;\n    subjectLine = match.subject_line || '';\n    hooks = match.personalization_hooks || [];\n    wasPersonalized = true;\n  }\n  \n  // Only use fallback if Gemini completely failed\n  if (!message) {\n    const hook = lead.pitch_hook || '';\n    message = hook || `Hi, I noticed ${lead.company_name} is growing fast. We specialize in UGC ads that help consumer brands scale their paid media. Would you be open to a free creative audit?`;\n    followUp = `Following up \u2014 we just published a case study on how UGC reduced CPA by 40% for a brand in your space. Happy to share if helpful.`;\n    research = 'Gemini did not return a result for this company';\n  }\n\n  // Build enriched notes (append to existing)\n  const notesAppend = `\\n\\n--- AI Research (${geminiOk ? 'Gemini' : 'fallback'}) ---\\n${research}\\n\\n--- Draft Outreach (${platform}) ---\\n${subjectLine ? 'Subject: ' + subjectLine + '\\n' : ''}${message}\\n\\n--- Follow-up Draft ---\\n${followUp}${hooks.length ? '\\n\\nPersonalization hooks: ' + hooks.join(', ') : ''}`;\n  const fullNotes = (lead.notes || '') + notesAppend;\n\n  // DO NOT set stage \u2014 stage changes when outreach is actually sent\n  patchRecords.push({\n    id: lead.record_id,\n    fields: {\n      notes: fullNotes,\n      next_follow_up: followUpDate\n    }\n  });\n\n  const personalBadge = wasPersonalized ? ':sparkles:' : ':warning:';\n  slackLines.push(\n    `${personalBadge} *${lead.company_name}*` +\n    (lead.industry ? ` (${lead.industry})` : '') +\n    `\\n  Platform: ${platform}` +\n    (subjectLine ? ` | Subject: _${subjectLine}_` : '') +\n    `\\n  Message: \"${message.substring(0, 150)}...\"` +\n    (hooks.length ? `\\n  :dart: Hooks: ${hooks.join(', ')}` : '') +\n    `\\n  Follow-up: ${followUpDate}\\n`\n  );\n}\n\nslackLines.push(geminiOk\n  ? `\\n:white_check_mark: _${results.length} prospects researched via Gemini. Messages in Airtable notes \u2014 review, customize, and send._`\n  : `\\n:warning: _Gemini failed \u2014 fallback messages used. Review and heavily customize before sending._`\n);\n\nreturn [{ json: {\n  patchBody: JSON.stringify({ records: patchRecords }),\n  slackMsg: slackLines.join('\\n'),\n  count: patchRecords.length,\n  geminiOk,\n  enriched: true\n} }];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1130,
+          1050
+        ],
+        "id": "out-parse-enrich",
+        "name": "Parse Batch Research"
+      },
+      {
+        "parameters": {
+          "method": "PATCH",
+          "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tbl6qih4ODd7qKFZ1",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "airtableTokenApi",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ $json.patchBody }}",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1350,
+          1050
+        ],
+        "id": "out-update-enriched",
+        "name": "Update Enriched Leads",
+        "credentials": {
+          "airtableTokenApi": {
+            "id": "WelvlJEjoHaI3l9G",
+            "name": "Airtable Personal Access Token account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "select": "channel",
+          "channelId": {
+            "__rl": true,
+            "value": "C0AHQU1BUU8",
+            "mode": "id"
+          },
+          "text": "={{ $('Parse Batch Research').first().json.slackMsg }}",
+          "otherOptions": {}
+        },
+        "type": "n8n-nodes-base.slack",
+        "typeVersion": 2.2,
+        "position": [
+          1570,
+          1000
+        ],
+        "id": "out-slack-enriched",
+        "name": "Slack -- Enriched Leads",
+        "credentials": {
+          "slackApi": {
+            "id": "5Q37UpOjGx4YsbyC",
+            "name": "Slack account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblGhzSJ5RXWDS8h8",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "airtableTokenApi",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ records: [{ fields: { event_type: 'leads_enriched', source_workflow: 'outreach_automation', payload: JSON.stringify({ count: $('Parse Batch Research').first().json.count, geminiOk: $('Parse Batch Research').first().json.geminiOk }), processed: false } }] }) }}",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1570,
+          1100
+        ],
+        "id": "out-write-enrich-event",
+        "name": "Write Event -- Leads Enriched",
+        "credentials": {
+          "airtableTokenApi": {
+            "id": "WelvlJEjoHaI3l9G",
+            "name": "Airtable Personal Access Token account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "respondWith": "text",
+          "responseBody": "={{ JSON.stringify({ enriched: true, count: $('Parse Batch Research').first().json.count, geminiOk: $('Parse Batch Research').first().json.geminiOk }) }}",
+          "options": {
+            "responseHeaders": {
+              "entries": [
+                {
+                  "name": "Content-Type",
+                  "value": "application/json"
+                }
+              ]
+            }
+          }
+        },
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.1,
+        "position": [
+          1570,
+          1200
+        ],
+        "id": "out-respond-enrich-ok",
+        "name": "Respond -- Enriched OK"
+      },
+      {
+        "parameters": {
+          "respondWith": "text",
+          "responseBody": "={{ JSON.stringify({ enriched: false, count: 0, message: 'No leads to enrich' }) }}",
+          "options": {
+            "responseHeaders": {
+              "entries": [
+                {
+                  "name": "Content-Type",
+                  "value": "application/json"
+                }
+              ]
+            }
+          }
+        },
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.1,
+        "position": [
+          910,
+          1200
+        ],
+        "id": "out-respond-enrich-skip",
+        "name": "Respond -- No Leads"
       }
     ],
     "connections": {
@@ -1807,7 +2504,7 @@
         "main": [
           [
             {
-              "node": "out-create-prospect",
+              "node": "out-fetch-learnings",
               "type": "main",
               "index": 0
             }
@@ -1821,40 +2518,156 @@
           ]
         ]
       },
+      "out-fetch-learnings": {
+        "main": [
+          [
+            {
+              "node": "out-create-prospect",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
       "out-create-prospect": {
         "main": [
           [
             {
-              "node": "out-build-research-prompt",
+              "node": "out-build-3msg-prompt",
               "type": "main",
               "index": 0
             }
           ]
         ]
       },
-      "out-build-research-prompt": {
+      "out-build-3msg-prompt": {
         "main": [
           [
             {
-              "node": "out-gemini-research",
+              "node": "out-gemini-3msgs",
               "type": "main",
               "index": 0
             }
           ]
         ]
       },
-      "out-gemini-research": {
+      "out-gemini-3msgs": {
         "main": [
           [
             {
-              "node": "out-parse-research",
+              "node": "out-parse-3msgs",
               "type": "main",
               "index": 0
             }
           ]
         ]
       },
-      "out-parse-research": {
+      "out-parse-3msgs": {
+        "main": [
+          [
+            {
+              "node": "out-build-eval-prompt",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "out-build-eval-prompt": {
+        "main": [
+          [
+            {
+              "node": "out-gemini-evaluate",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "out-gemini-evaluate": {
+        "main": [
+          [
+            {
+              "node": "out-select-best",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "out-select-best": {
+        "main": [
+          [
+            {
+              "node": "out-if-retry",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "out-if-retry": {
+        "main": [
+          [
+            {
+              "node": "out-build-retry-prompt",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "out-format-best",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "out-build-retry-prompt": {
+        "main": [
+          [
+            {
+              "node": "out-gemini-retry",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "out-gemini-retry": {
+        "main": [
+          [
+            {
+              "node": "out-format-retry",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "out-format-retry": {
+        "main": [
+          [
+            {
+              "node": "out-update-prospect",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "out-slack-prospect",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "out-respond-success",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "out-format-best": {
         "main": [
           [
             {
@@ -2008,6 +2821,89 @@
             }
           ]
         ]
+      },
+      "Webhook -- Enrich Leads": {
+        "main": [
+          [
+            {
+              "node": "Prep Batch Research",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prep Batch Research": {
+        "main": [
+          [
+            {
+              "node": "Has Leads to Enrich?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Has Leads to Enrich?": {
+        "main": [
+          [
+            {
+              "node": "Gemini -- Batch Research",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Respond -- No Leads",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Gemini -- Batch Research": {
+        "main": [
+          [
+            {
+              "node": "Parse Batch Research",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Parse Batch Research": {
+        "main": [
+          [
+            {
+              "node": "Update Enriched Leads",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Update Enriched Leads": {
+        "main": [
+          [
+            {
+              "node": "Slack -- Enriched Leads",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Write Event -- Leads Enriched",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Respond -- Enriched OK",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       }
     },
     "authors": "SenseInfo Tech",
@@ -2016,18 +2912,18 @@
     "autosaved": false,
     "workflowPublishHistory": [
       {
-        "createdAt": "2026-02-24T19:55:43.166Z",
-        "id": 418,
+        "createdAt": "2026-02-27T08:03:17.931Z",
+        "id": 643,
         "workflowId": "jOhzPZTA86SexCXp",
-        "versionId": "c9112e22-e5ef-4093-a707-9aa907b61af0",
+        "versionId": "05e09f8d-a934-41d3-8888-7d5a4f59283f",
         "event": "activated",
         "userId": "ed50a507-d93d-45c3-9412-d80babb81dd0"
       },
       {
-        "createdAt": "2026-02-24T19:55:44.177Z",
-        "id": 419,
+        "createdAt": "2026-02-27T08:03:19.766Z",
+        "id": 644,
         "workflowId": "jOhzPZTA86SexCXp",
-        "versionId": "c9112e22-e5ef-4093-a707-9aa907b61af0",
+        "versionId": "05e09f8d-a934-41d3-8888-7d5a4f59283f",
         "event": "activated",
         "userId": "ed50a507-d93d-45c3-9412-d80babb81dd0"
       }
