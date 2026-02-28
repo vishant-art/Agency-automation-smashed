@@ -1,0 +1,126 @@
+{
+  "name": "Workflow Health Monitor",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 7
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Daily 7AM UTC",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const N8N_URL = 'http://n8n-jeet.duckdns.org:5678';\nconst API_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJlZDUwYTUwNy1kOTNkLTQ1YzMtOTQxMi1kODBiYWJiODFkZDAiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwiaWF0IjoxNzcxMjIzOTM0fQ.OX7lYlEY7jTxoXTjPLrCED_v6l1T-02MxyqFexLik5s';\n\nconst now = new Date();\nconst nowMs = now.getTime();\nconst helpers = this.helpers;\n\nconst scheduled = [\n  { id: 'gMTOpnDfuO3g5tyb', name: 'Daily Ops', staleH: 26 },\n  { id: '9u2JEpZGK81jkCXP', name: 'Prospect Finder', staleH: 26 },\n  { id: 'jOhzPZTA86SexCXp', name: 'Outreach Automation', staleH: 26 },\n  { id: 'KYSdsLXV50H7MHGr', name: 'Sales Pipeline', staleH: 26 },\n  { id: 'hgF70RKYIUyQ57Ng', name: 'Client Comms', staleH: 14 },\n  { id: 'teKN5R6r86kUXjgD', name: 'LinkedIn Brand', staleH: 26 },\n  { id: 'rtmRq6ttmgxVH5bx', name: 'Vibe5 Prospecting', staleH: 26 },\n  { id: 'BU38fTuYLPvm0adI', name: 'Creator Outreach', staleH: 26 },\n  { id: 'DZbFqt2WtxlXtXl1', name: 'Performance Sync', staleH: 8 },\n  { id: 'AZXaFe3cNDhCS7uQ', name: 'Comment Watch', staleH: 0.75 },\n  { id: 'zKaI0jdgELg0x1WQ', name: 'Ad Library Scanner', staleH: 80 },\n  { id: 'aKNHRB0Fxa5o3xyC', name: 'Reporting', staleH: 180 },\n  { id: 'DUfrRerxOinES9Cf', name: 'Orchestrator v2', staleH: 0.25 },\n];\n\nconst webhookOnly = [\n  { id: 'RLi-u9gL1aQ7Bl37TSidA', name: 'Phase 1 Research' },\n  { id: 'U2bxLckriORGZIyU', name: 'Phase 2 Approval' },\n  { id: 'iZOxbVl1X2w74Pzi', name: 'Phase 3 Scripts' },\n  { id: 'hvytJvFSc6ZuNMAc', name: 'Phase 4 Delivery' },\n  { id: 'XNdHsZnLclh1pARm', name: 'Script Agent' },\n  { id: 'tuewOOpK3V8I4uZX', name: 'Script Revision' },\n  { id: '8HDjMAgRTa5tcaQG', name: 'Creator Scout' },\n  { id: 'ZJfWCoCYf9c0O8tdywMTj', name: 'Onboarding' },\n  { id: '0A0iVv9qLmAnRneW', name: 'Calendar Connector' },\n  { id: 'WUPK5D8u3Ge40WRF', name: 'Content Repurposing' },\n  { id: 'SdnCREsCQovnF56R', name: 'Creative Tear-Down' },\n  { id: 'ysSIAB5jGbXkHHda', name: 'Brand Voice DNA' },\n];\n\nconst issues = [];\nlet healthyCount = 0;\nconst perWorkflow = [];\n\nfunction timeAgo(ms) {\n  const h = Math.floor(ms / 3600000);\n  const m = Math.floor((ms % 3600000) / 60000);\n  if (h > 48) return Math.floor(h / 24) + 'd ago';\n  if (h > 0) return h + 'h ' + m + 'm ago';\n  return m + 'm ago';\n}\n\nfor (const wf of scheduled) {\n  let execs = null;\n  try {\n    const resp = await helpers.httpRequest({\n      method: 'GET',\n      url: N8N_URL + '/api/v1/executions?workflowId=' + encodeURIComponent(wf.id) + '&limit=5&status=error,success',\n      headers: { 'X-N8N-API-KEY': API_KEY },\n      json: true,\n    });\n    execs = resp.data || [];\n  } catch (e) {\n    execs = null;\n  }\n  await new Promise(r => setTimeout(r, 200));\n\n  if (execs === null) {\n    issues.push({ name: wf.name, status: 'API_ERROR', detail: 'Could not fetch executions' });\n    perWorkflow.push({ name: wf.name, status: 'api_error' });\n    continue;\n  }\n  if (execs.length === 0) {\n    issues.push({ name: wf.name, status: 'NEVER_RAN', detail: 'No executions found (may be deactivated)' });\n    perWorkflow.push({ name: wf.name, status: 'never_ran' });\n    continue;\n  }\n\n  const last = execs[0];\n  const lastTime = new Date(last.stoppedAt || last.startedAt).getTime();\n  const ageMsec = nowMs - lastTime;\n  const ageStr = timeAgo(ageMsec);\n  const staleMs = wf.staleH * 3600000;\n\n  if (last.status === 'error') {\n    const errMsg = (last.data && last.data.resultData && last.data.resultData.error && last.data.resultData.error.message) || 'Unknown error';\n    issues.push({ name: wf.name, status: 'ERROR', detail: 'Last ran: ' + ageStr + '\\nError: ' + errMsg.substring(0, 200) });\n    perWorkflow.push({ name: wf.name, status: 'error', lastRan: ageStr, error: errMsg.substring(0, 200) });\n  } else if (ageMsec > staleMs) {\n    issues.push({ name: wf.name, status: 'STALE', detail: 'Last ran: ' + ageStr + ' (expected every ' + wf.staleH + 'h)\\nLast status: ' + last.status });\n    perWorkflow.push({ name: wf.name, status: 'stale', lastRan: ageStr });\n  } else {\n    healthyCount++;\n    perWorkflow.push({ name: wf.name, status: 'healthy', lastRan: ageStr });\n  }\n}\n\nfor (const wf of webhookOnly) {\n  let execs = null;\n  try {\n    const resp = await helpers.httpRequest({\n      method: 'GET',\n      url: N8N_URL + '/api/v1/executions?workflowId=' + encodeURIComponent(wf.id) + '&limit=5&status=error,success',\n      headers: { 'X-N8N-API-KEY': API_KEY },\n      json: true,\n    });\n    execs = resp.data || [];\n  } catch (e) {\n    execs = null;\n  }\n  await new Promise(r => setTimeout(r, 200));\n\n  if (execs === null) {\n    issues.push({ name: wf.name, status: 'API_ERROR', detail: 'Could not fetch executions' });\n    perWorkflow.push({ name: wf.name, status: 'api_error' });\n    continue;\n  }\n\n  const dayAgo = nowMs - 86400000;\n  const recentErrors = execs.filter(e => {\n    const t = new Date(e.stoppedAt || e.startedAt).getTime();\n    return e.status === 'error' && t > dayAgo;\n  });\n\n  if (recentErrors.length > 0) {\n    const last = recentErrors[0];\n    const lastTime = new Date(last.stoppedAt || last.startedAt).getTime();\n    const ageStr = timeAgo(nowMs - lastTime);\n    const errMsg = (last.data && last.data.resultData && last.data.resultData.error && last.data.resultData.error.message) || 'Unknown error';\n    issues.push({ name: wf.name, status: 'ERROR', detail: 'Last error: ' + ageStr + ' (' + recentErrors.length + ' errors in 24h)\\nError: ' + errMsg.substring(0, 200) });\n    perWorkflow.push({ name: wf.name, status: 'error', lastRan: ageStr, recentErrors: recentErrors.length, error: errMsg.substring(0, 200) });\n  } else {\n    healthyCount++;\n    perWorkflow.push({ name: wf.name, status: 'healthy' });\n  }\n}\n\nconst total = scheduled.length + webhookOnly.length;\nconst dateStr = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });\nlet msg = '';\n\nif (issues.length === 0) {\n  msg = ':white_check_mark: *Workflow Health Monitor \\u2014 ' + dateStr + '*\\n\\n';\n  msg += 'All ' + total + ' workflows healthy.\\n\\n';\n  msg += '*Scheduled (' + scheduled.length + '):* All ran on time\\n';\n  msg += '*Webhook (' + webhookOnly.length + '):* No errors in last 24h\\n\\n';\n  msg += '_Next check: tomorrow 12:30 PM IST_';\n} else {\n  msg = ':rotating_light: *Workflow Health Monitor \\u2014 ' + dateStr + '*\\n\\n';\n  msg += healthyCount + '/' + total + ' workflows healthy | *' + issues.length + ' issue' + (issues.length > 1 ? 's' : '') + ' found*\\n\\n';\n  for (const issue of issues) {\n    const icon = issue.status === 'ERROR' ? ':x:' : (issue.status === 'STALE' ? ':warning:' : ':grey_question:');\n    msg += icon + ' *' + issue.name + '* \\u2014 ' + issue.status + '\\n';\n    const lines = issue.detail.split('\\n');\n    for (const line of lines) {\n      msg += '   ' + line + '\\n';\n    }\n    msg += '\\n';\n  }\n  msg += '_Check n8n UI: http://n8n-jeet.duckdns.org:5678_';\n}\n\nreturn [{\n  json: {\n    slackMsg: msg,\n    hasIssues: issues.length > 0,\n    healthyCount: healthyCount,\n    issueCount: issues.length,\n    total: total,\n    issues: issues,\n    perWorkflow: perWorkflow,\n    severity: issues.length > 0 ? 'warning' : 'info',\n    timestamp: now.toISOString(),\n  }\n}];"
+      },
+      "id": "check-workflows",
+      "name": "Check All Workflows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0AGQ8RH0NP",
+          "mode": "id"
+        },
+        "text": "={{ $json.slackMsg }}",
+        "otherOptions": {}
+      },
+      "id": "slack-report",
+      "name": "Slack — Health Report",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [640, 300],
+      "credentials": {
+        "slackApi": {
+          "id": "5Q37UpOjGx4YsbyC",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblGhzSJ5RXWDS8h8",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ records: [{ fields: { event_type: 'health_check', severity: $json.severity, message: 'health_monitor: ' + $json.healthyCount + '/' + $json.total + ' workflows healthy' + ($json.issueCount > 0 ? ' | ' + $json.issueCount + ' issues' : ''), payload: JSON.stringify({ healthy: $json.healthyCount, issues: $json.issueCount, total: $json.total, details: $json.perWorkflow }), created_at: $json.timestamp } }] }) }}",
+        "options": {}
+      },
+      "id": "write-event",
+      "name": "Write Event — Health Check",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [860, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "a0TTu3NVsuJUEbct",
+          "name": "Airtable PAT Header"
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Daily 7AM UTC": {
+      "main": [
+        [
+          {
+            "node": "Check All Workflows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check All Workflows": {
+      "main": [
+        [
+          {
+            "node": "Slack — Health Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack — Health Report": {
+      "main": [
+        [
+          {
+            "node": "Write Event — Health Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null
+}

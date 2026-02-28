@@ -144,16 +144,79 @@
         },
         {
             "parameters": {
-                "jsCode": "// Guard against fetch failures\nconst fetchResults = [\n  { name: 'Events', data: $('Fetch Unprocessed Events').first().json },\n  { name: 'Projects', data: $('Fetch Active Projects').first().json },\n  { name: 'Brands', data: $('Fetch Brands').first().json }\n];\nconst fetchErrors = [];\nfor (const fr of fetchResults) {\n  if (fr.data.error || fr.data.statusCode >= 400 || (fr.data.statusMessage && fr.data.statusCode)) {\n    fetchErrors.push(`${fr.name}: ${fr.data.error || fr.data.statusMessage || 'HTTP ' + fr.data.statusCode}`);\n  }\n}\nif (fetchErrors.length > 0) {\n  return [{ json: { decisions: [], eventIds: [], decisionCount: 0, eventCount: 0, _error: true, fetchErrors } }];\n}\n\nconst events = $('Fetch Unprocessed Events').first().json.records || [];\nconst projects = $('Fetch Active Projects').first().json.records || [];\nconst brands = $('Fetch Brands').first().json.records || [];\nconst now = new Date();\nconst decisions = [];\nconst eventIds = [];\n\nfor (const event of events) {\n  const f = event.fields;\n  eventIds.push(event.id);\n\n  const project = projects.find(p => p.id === f.project_id);\n  const brand = brands.find(b => b.fields.brand_name === f.brand_name);\n  let payload = {};\n  try { payload = JSON.parse(f.payload || '{}'); } catch(e) {}\n\n  switch (f.event_type) {\n    case 'phase_complete':\n      if (f.agent === 'phase_1') {\n        decisions.push({\n          type: 'notify_client',\n          event: f,\n          eventId: event.id,\n          message: 'Research complete for ' + f.brand_name + ' \\u2014 concepts ready for PM review',\n          project_id: f.project_id,\n          brand_name: f.brand_name,\n          client_code: f.client_code\n        });\n        // Auto-scout creators when research completes\n        const brandData = brand ? brand.fields : {};\n        const projectData = project ? project.fields : {};\n        const industry = brandData.industry || projectData.industry || payload.industry || '';\n        const niches = industry ? [industry] : ['UGC'];\n        const budget = projectData.budget_per_video || brandData.budget_per_video || payload.budget_per_video || 10000;\n        const numScripts = projectData.num_scripts || payload.num_scripts || 5;\n        decisions.push({\n          type: 'scout_creators',\n          event: f,\n          eventId: event.id,\n          message: 'Auto-scouting creators for ' + f.brand_name + ' after research complete',\n          project_id: f.project_id,\n          brand_name: f.brand_name,\n          client_code: f.client_code,\n          niches: niches,\n          industry: industry,\n          budget_max: budget,\n          count: Math.max(numScripts, 3)\n        });\n      }\n      if (f.agent === 'phase_2') {\n        decisions.push({\n          type: 'trigger_phase',\n          phase: 3,\n          event: f,\n          eventId: event.id,\n          webhook: '/webhook/ugc-scripts',\n          message: 'Concepts approved for ' + f.brand_name + ' \\u2014 triggering script writing',\n          project_id: f.project_id,\n          brand_name: f.brand_name,\n          client_code: f.client_code\n        });\n        decisions.push({\n          type: 'notify_client',\n          event: f,\n          eventId: event.id,\n          message: 'Concepts approved for ' + f.brand_name + ', scripts being generated',\n          project_id: f.project_id,\n          brand_name: f.brand_name,\n          client_code: f.client_code\n        });\n      }\n      if (f.agent === 'phase_3') {\n        decisions.push({\n          type: 'trigger_phase',\n          phase: 4,\n          event: f,\n          eventId: event.id,\n          webhook: '/webhook/ugc-delivery',\n          message: 'Scripts ready for ' + f.brand_name + ' \\u2014 triggering delivery',\n          project_id: f.project_id,\n          brand_name: f.brand_name,\n          client_code: f.client_code\n        });\n        decisions.push({\n          type: 'notify_client',\n          event: f,\n          eventId: event.id,\n          message: 'Scripts ready for review for ' + f.brand_name,\n          project_id: f.project_id,\n          brand_name: f.brand_name,\n          client_code: f.client_code\n        });\n      }\n      if (f.agent === 'phase_4') {\n        decisions.push({\n          type: 'notify_client',\n          event: f,\n          eventId: event.id,\n          message: 'Delivery complete for ' + f.brand_name + '!',\n          project_id: f.project_id,\n          brand_name: f.brand_name,\n          client_code: f.client_code\n        });\n      }\n      break;\n\n    case 'campaign_alert':\n      if (payload.fatigued_count > 0) {\n        const deliveredProject = projects.find(p =>\n          p.fields.brand_name === f.brand_name &&\n          (p.fields.status === 'Delivered' || p.fields.status === 'Complete')\n        );\n        if (deliveredProject) {\n          decisions.push({\n            type: 'suggest_new_cycle',\n            event: f,\n            eventId: event.id,\n            message: 'Ad fatigue detected for ' + f.brand_name + ' \\u2014 ' + payload.fatigued_count + ' campaigns fatigued. Consider new creative cycle.',\n            project_id: deliveredProject.id,\n            brand_name: f.brand_name,\n            client_code: f.client_code\n          });\n        }\n      }\n      if (f.severity === 'critical') {\n        decisions.push({\n          type: 'escalate',\n          event: f,\n          eventId: event.id,\n          severity: 'critical',\n          message: 'CRITICAL: ROAS crash for ' + f.brand_name + ' \\u2014 immediate action needed. ' + (payload.recommendation || ''),\n          brand_name: f.brand_name\n        });\n      }\n      break;\n\n    case 'lead_action':\n      if (payload.stage === 'Won') {\n        decisions.push({\n          type: 'auto_onboard',\n          event: f,\n          eventId: event.id,\n          message: 'Lead won: ' + (f.brand_name || payload.company) + ' \\u2014 ready for onboarding',\n          brand_name: f.brand_name || payload.company,\n          client_code: f.client_code\n        });\n      }\n      break;\n\n    case 'sla_breach': {\n      const recentBreaches = events.filter(e =>\n        e.fields.event_type === 'sla_breach' && e.fields.project_id === f.project_id\n      );\n      if (recentBreaches.length >= 3) {\n        decisions.push({\n          type: 'escalate',\n          event: f,\n          eventId: event.id,\n          severity: 'critical',\n          message: 'REPEATED SLA BREACH: ' + f.brand_name + ' has ' + recentBreaches.length + ' breaches \\u2014 needs immediate attention',\n          project_id: f.project_id,\n          brand_name: f.brand_name,\n          client_code: f.client_code\n        });\n      }\n      break;\n    }\n\n    case 'status_change':\n      if (f.agent === 'onboarding') {\n        decisions.push({\n          type: 'notify_client',\n          event: f,\n          eventId: event.id,\n          message: 'New project onboarded for ' + f.brand_name + ' \\u2014 research phase starting soon',\n          project_id: f.project_id,\n          brand_name: f.brand_name,\n          client_code: f.client_code\n        });\n      }\n      break;\n  }\n}\n\n// SLA detection from project status\nfor (const project of projects) {\n  const pf = project.fields;\n  const updatedAt = new Date(pf.updated_at || pf.created_at || now);\n  const hoursInStatus = (now - updatedAt) / 3600000;\n\n  if (pf.status === 'PM Review' && hoursInStatus > 24) {\n    decisions.push({\n      type: 'sla_alert',\n      severity: 'warning',\n      project_id: project.id,\n      brand_name: pf.brand_name,\n      client_code: pf.client_code,\n      message: pf.brand_name + ' stuck in PM Review for ' + Math.round(hoursInStatus) + 'h'\n    });\n  }\n  if (pf.status === 'Script Review' && hoursInStatus > 48) {\n    decisions.push({\n      type: 'sla_alert',\n      severity: 'warning',\n      project_id: project.id,\n      brand_name: pf.brand_name,\n      client_code: pf.client_code,\n      message: pf.brand_name + ' stuck in Script Review for ' + Math.round(hoursInStatus) + 'h'\n    });\n  }\n  if (pf.status === 'In Progress' && hoursInStatus > 72) {\n    decisions.push({\n      type: 'sla_alert',\n      severity: 'urgent',\n      project_id: project.id,\n      brand_name: pf.brand_name,\n      client_code: pf.client_code,\n      message: pf.brand_name + ' In Progress for ' + Math.round(hoursInStatus) + 'h \\u2014 may be stuck'\n    });\n  }\n}\n\nreturn [{ json: { decisions, eventIds, decisionCount: decisions.length, eventCount: events.length } }];"
+                "method": "GET",
+                "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblAfe1LYh8kHPVbP?filterByFormula={active}=TRUE()&sort[0][field]=confidence&sort[0][direction]=desc&maxRecords=20",
+                "authentication": "genericCredentialType",
+                "genericAuthType": "httpHeaderAuth",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                1050,
+                400
+            ],
+            "id": "orch2-fetch-learnings",
+            "name": "Fetch System Learnings",
+            "credentials": {
+                "httpHeaderAuth": {
+                    "id": "a0TTu3NVsuJUEbct",
+                    "name": "Airtable PAT Header"
+                }
+            },
+            "onError": "continueRegularOutput"
+        },
+        {
+            "parameters": {
+                "jsCode": "// ============================================================\n// Build Orchestrator Prompt \u2014 LLM-based reasoning\n// Falls back to SLA-only detection if 0 events or Gemini fails\n// ============================================================\n\nconst fetchResults = [\n  { name: 'Events', data: $('Fetch Unprocessed Events').first().json },\n  { name: 'Projects', data: $('Fetch Active Projects').first().json },\n  { name: 'Brands', data: $('Fetch Brands').first().json }\n];\nconst fetchErrors = [];\nfor (const fr of fetchResults) {\n  if (fr.data.error || fr.data.statusCode >= 400 || (fr.data.statusMessage && fr.data.statusCode)) {\n    fetchErrors.push(`${fr.name}: ${fr.data.error || fr.data.statusMessage || 'HTTP ' + fr.data.statusCode}`);\n  }\n}\nif (fetchErrors.length > 0) {\n  return [{ json: { decisions: [], eventIds: [], decisionCount: 0, eventCount: 0, _error: true, fetchErrors } }];\n}\n\nconst events = $('Fetch Unprocessed Events').first().json.records || [];\nconst projects = $('Fetch Active Projects').first().json.records || [];\nconst brands = $('Fetch Brands').first().json.records || [];\nconst now = new Date();\nconst eventIds = events.map(e => e.id);\n\n// Fetch system learnings (may be empty)\nlet learnings = [];\ntry {\n  learnings = $('Fetch System Learnings').first().json.records || [];\n} catch(e) { learnings = []; }\n\n// === SLA DETECTION (hardcoded fallback \u2014 always runs) ===\nconst slaDecisions = [];\nfor (const project of projects) {\n  const pf = project.fields;\n  const updatedAt = new Date(pf.updated_at || pf.created_at || now);\n  const hoursInStatus = (now - updatedAt) / 3600000;\n\n  if (pf.status === 'PM Review' && hoursInStatus > 24) {\n    slaDecisions.push({\n      type: 'sla_alert', severity: 'warning',\n      project_id: project.id, brand_name: pf.brand_name,\n      client_code: pf.client_code,\n      message: pf.brand_name + ' stuck in PM Review for ' + Math.round(hoursInStatus) + 'h'\n    });\n  }\n  if (pf.status === 'Script Review' && hoursInStatus > 48) {\n    slaDecisions.push({\n      type: 'sla_alert', severity: 'warning',\n      project_id: project.id, brand_name: pf.brand_name,\n      client_code: pf.client_code,\n      message: pf.brand_name + ' stuck in Script Review for ' + Math.round(hoursInStatus) + 'h'\n    });\n  }\n  if (pf.status === 'In Progress' && hoursInStatus > 72) {\n    slaDecisions.push({\n      type: 'sla_alert', severity: 'urgent',\n      project_id: project.id, brand_name: pf.brand_name,\n      client_code: pf.client_code,\n      message: pf.brand_name + ' In Progress for ' + Math.round(hoursInStatus) + 'h \\u2014 may be stuck'\n    });\n  }\n}\n\n// If 0 events, output SLA decisions directly (skip Gemini)\n// Still provide a minimal geminiBody so the HTTP Request node doesn't fail\nif (events.length === 0) {\n  return [{ json: {\n    geminiBody: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'No events to process.' }] }], generationConfig: { maxOutputTokens: 10 } }),\n    decisions: slaDecisions,\n    eventIds: [],\n    decisionCount: slaDecisions.length,\n    eventCount: 0,\n    slaDecisions: slaDecisions,\n    _skipGemini: true\n  } }];\n}\n\n// === BUILD GEMINI PROMPT ===\nlet eventsText = '== CURRENT EVENTS (unprocessed) ==\\n';\nfor (const e of events) {\n  const f = e.fields;\n  let payloadExcerpt = '';\n  try { payloadExcerpt = (f.payload || '').substring(0, 200); } catch(x) {}\n  eventsText += `[${e.id}] ${f.event_type} | agent: ${f.agent || 'unknown'} | brand: ${f.brand_name || 'N/A'} | project: ${f.project_id || 'N/A'} | severity: ${f.severity || 'info'} | ${f.message || ''} | payload: ${payloadExcerpt}\\n`;\n}\n\nlet projectsText = '\\n== ACTIVE PROJECTS ==\\n';\nfor (const p of projects) {\n  const pf = p.fields;\n  const updatedAt = new Date(pf.updated_at || pf.created_at || now);\n  const hoursInStatus = Math.round((now - updatedAt) / 3600000);\n  projectsText += `[${p.id}] ${pf.brand_name || 'Unknown'} | status: ${pf.status || 'N/A'} | ${hoursInStatus}h in status | scripts: ${pf.num_scripts || 0} | client: ${pf.client_code || 'N/A'} | goal: ${(pf.project_goal || 'Not defined').substring(0, 150)}\\n`;\n}\n\nlet brandsText = '\\n== BRANDS ==\\n';\nfor (const b of brands) {\n  const bf = b.fields;\n  brandsText += `[${b.id}] ${bf.brand_name || 'Unknown'} | industry: ${bf.industry || 'N/A'} | website: ${bf.website_url || 'N/A'}\\n`;\n}\n\nlet learningsText = '\\n== SYSTEM LEARNINGS (top 20 by confidence) ==\\n';\nif (learnings.length > 0) {\n  learnings.forEach((l, i) => {\n    const lf = l.fields;\n    learningsText += `[${i+1}] (${lf.category || 'general'}, confidence: ${lf.confidence || 'N/A'}) ${lf.title || 'Untitled'}: ${(lf.insight || lf.learning || lf.content || '').substring(0, 200)}\\n`;\n  });\n} else {\n  learningsText += 'No system learnings available.\\n';\n}\n\nconst systemMessage = 'You are the Orchestrator for a UGC creative agency automation system. You analyze events from various agents and project state to decide what actions to take next. Be conservative \\u2014 only take actions that are clearly warranted by the data. Output ONLY valid JSON.';\n\nconst userPrompt = eventsText + projectsText + brandsText + learningsText + `\\n== ALLOWED ACTIONS (whitelist \\u2014 anything else will be REJECTED) ==\\n1. trigger_phase: { phase: 3|4, project_id: \"recXXX\", client_code: \"ABC-0123\", webhook: \"/webhook/ugc-scripts\" or \"/webhook/ugc-delivery\" }\\n2. notify_client: { project_id: \"recXXX\", brand_name: \"X\", client_code: \"ABC-0123\", message: \"...\" }\\n3. escalate: { severity: \"critical\"|\"high\", brand_name: \"X\", message: \"...\" }\\n4. sla_alert: { severity: \"warning\"|\"urgent\", project_id: \"recXXX\", brand_name: \"X\", message: \"...\" }\\n5. suggest_new_cycle: { project_id: \"recXXX\", brand_name: \"X\", message: \"...\" }\\n6. auto_onboard: { brand_name: \"X\", client_code: \"ABC-0123\" }\\n7. scout_creators: { project_id: \"recXXX\", brand_name: \"X\", niches: [\"X\"], industry: \"X\", budget_max: 10000, count: 5, client_code: \"ABC-0123\" }\\n8. no_action: { reason: \"...\" }\\n\\n== REASONING RULES ==\\n- phase_complete from phase_1 \\u2192 notify PM that research is complete + scout creators for that brand\\n- phase_complete from phase_2 \\u2192 trigger_phase 3 (scripts) + notify client\\n- phase_complete from phase_3 \\u2192 trigger_phase 4 (delivery) + notify client\\n- phase_complete from phase_4 \\u2192 notify client delivery complete\\n- campaign_alert with fatigue \\u2192 suggest_new_cycle ONLY if project has been delivered before\\n- campaign_alert critical \\u2192 escalate immediately\\n- lead_action with stage Won \\u2192 auto_onboard\\n- sla_breach repeated 3+ times \\u2192 escalate\\n- status_change from onboarding \\u2192 notify client\\n- Reference System Learnings when making suggestions or providing context in messages\\n- SLA thresholds: PM Review > 24h = warning, Script Review > 48h = warning, In Progress > 72h = urgent\\n- Consolidate multiple events for same project into fewer actions\\n- NEVER trigger phase 3 unless phase 2 completed (check project status)\\n- NEVER trigger phase 4 unless phase 3 completed (check project status)\\n- NEVER invent actions outside the allowed list\\n- For trigger_phase 3, use webhook: \"/webhook/ugc-scripts\"\\n- For trigger_phase 4, use webhook: \"/webhook/ugc-delivery\"\\n- For scout_creators, infer industry and niches from brand/project data\\n\\n== OUTPUT FORMAT ==\\n{\\n  \"reasoning\": \"Brief 2-3 sentence analysis of the situation\",\\n  \"decisions\": [\\n    { \"type\": \"trigger_phase\", \"eventId\": \"recXXX\", \"phase\": 3, \"project_id\": \"recYYY\", \"client_code\": \"WHE-0217\", \"webhook\": \"/webhook/ugc-scripts\", \"message\": \"...\" },\\n    { \"type\": \"notify_client\", \"eventId\": \"recXXX\", \"project_id\": \"recYYY\", \"brand_name\": \"X\", \"client_code\": \"WHE-0217\", \"message\": \"...\" }\\n  ]\\n}\\n\\nAnalyze the events above and determine the appropriate actions.`;\n\nconst geminiBody = JSON.stringify({\n  systemInstruction: { parts: [{ text: systemMessage }] },\n  contents: [{ role: 'user', parts: [{ text: userPrompt }] }],\n  generationConfig: { temperature: 0.1, maxOutputTokens: 4096, thinkingConfig: { thinkingBudget: 0 } }\n});\n\nreturn [{ json: { geminiBody, eventIds, eventCount: events.length, slaDecisions, _skipGemini: false } }];"
             },
             "type": "n8n-nodes-base.code",
             "typeVersion": 2,
             "position": [
-                1200,
+                1250,
                 400
             ],
             "id": "orch2-decision-engine",
-            "name": "Decision Engine"
+            "name": "Build Orchestrator Prompt"
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+                "authentication": "predefinedCredentialType",
+                "nodeCredentialType": "googlePalmApi",
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={{ $json.geminiBody }}",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                1450,
+                400
+            ],
+            "id": "orch2-gemini-reasoning",
+            "name": "Gemini Reasoning",
+            "credentials": {
+                "googlePalmApi": {
+                    "id": "rIL63TG4xfMQL8uJ",
+                    "name": "Cosmisk AI"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "jsCode": "// ============================================================\n// Parse Gemini response and validate decisions\n// Merges LLM decisions with hardcoded SLA decisions\n// Falls back gracefully on parse failure\n// ============================================================\n\nconst upstream = $('Build Orchestrator Prompt').first().json;\nconst slaDecisions = upstream.slaDecisions || [];\nconst eventIds = upstream.eventIds || [];\n\n// If Gemini was skipped (0 events), output SLA decisions only\nif (upstream._skipGemini) {\n  return [{ json: {\n    decisions: slaDecisions,\n    eventIds,\n    decisionCount: slaDecisions.length,\n    eventCount: 0\n  } }];\n}\n\n// Allowed action types\nconst allowedTypes = ['trigger_phase', 'notify_client', 'escalate', 'sla_alert', 'suggest_new_cycle', 'auto_onboard', 'scout_creators', 'no_action'];\n\n// Required fields per action type\nconst requiredFields = {\n  trigger_phase: ['phase', 'project_id'],\n  notify_client: ['message', 'brand_name'],\n  escalate: ['severity', 'message'],\n  sla_alert: ['severity', 'message'],\n  suggest_new_cycle: ['brand_name', 'message'],\n  auto_onboard: ['brand_name'],\n  scout_creators: ['brand_name'],\n  no_action: ['reason']\n};\n\nlet llmDecisions = [];\nlet reasoning = '';\n\ntry {\n  const geminiResponse = $input.first().json;\n  let rawText = '';\n  \n  // Extract text from Gemini response\n  if (geminiResponse.candidates && geminiResponse.candidates[0]) {\n    rawText = geminiResponse.candidates[0].content.parts[0].text || '';\n  } else if (geminiResponse.error) {\n    // Gemini returned an error \\u2014 fall back to SLA only\n    return [{ json: {\n      decisions: slaDecisions,\n      eventIds,\n      decisionCount: slaDecisions.length,\n      eventCount: upstream.eventCount,\n      _geminiError: geminiResponse.error.message || 'Unknown Gemini error'\n    } }];\n  }\n\n  // Strip markdown code fences\n  rawText = rawText.replace(/^```json\\s*/i, '').replace(/^```\\s*/m, '').replace(/\\s*```\\s*$/m, '').trim();\n\n  const parsed = JSON.parse(rawText);\n  reasoning = parsed.reasoning || '';\n  const rawDecisions = parsed.decisions || [];\n\n  // Validate each decision\n  for (const d of rawDecisions) {\n    if (!d.type || !allowedTypes.includes(d.type)) continue;\n    if (d.type === 'no_action') continue; // Skip no-action entries\n\n    // Check required fields\n    const required = requiredFields[d.type] || [];\n    const missing = required.filter(f => !d[f] && d[f] !== 0);\n    if (missing.length > 0) continue; // Skip invalid decisions\n\n    // Add event reference and message if missing\n    const decision = {\n      type: d.type,\n      eventId: d.eventId || eventIds[0] || '',\n      ...d,\n      message: d.message || `${d.type} action for ${d.brand_name || 'unknown'}`\n    };\n\n    // For trigger_phase, ensure webhook is set\n    if (d.type === 'trigger_phase') {\n      if (d.phase === 3) decision.webhook = '/webhook/ugc-scripts';\n      if (d.phase === 4) decision.webhook = '/webhook/ugc-delivery';\n    }\n\n    llmDecisions.push(decision);\n  }\n} catch (e) {\n  // JSON parse failed \\u2014 fall back to SLA decisions only\n  return [{ json: {\n    decisions: slaDecisions,\n    eventIds,\n    decisionCount: slaDecisions.length,\n    eventCount: upstream.eventCount,\n    _parseError: e.message\n  } }];\n}\n\n// Merge: LLM decisions + SLA decisions (deduplicate by project_id + type)\nconst seen = new Set();\nconst merged = [];\n\nfor (const d of llmDecisions) {\n  const key = `${d.type}:${d.project_id || d.brand_name || ''}`;\n  if (!seen.has(key)) {\n    seen.add(key);\n    merged.push(d);\n  }\n}\n\nfor (const d of slaDecisions) {\n  const key = `${d.type}:${d.project_id || d.brand_name || ''}`;\n  if (!seen.has(key)) {\n    seen.add(key);\n    merged.push(d);\n  }\n}\n\nreturn [{ json: {\n  decisions: merged,\n  eventIds,\n  decisionCount: merged.length,\n  eventCount: upstream.eventCount,\n  reasoning\n} }];"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                1650,
+                400
+            ],
+            "id": "orch2-parse-decisions",
+            "name": "Parse & Validate Decisions"
         },
         {
             "parameters": {
@@ -181,7 +244,7 @@
             "type": "n8n-nodes-base.if",
             "typeVersion": 2.2,
             "position": [
-                1500,
+                1850,
                 400
             ],
             "id": "orch2-check-decisions",
@@ -194,7 +257,7 @@
             "type": "n8n-nodes-base.code",
             "typeVersion": 2,
             "position": [
-                1800,
+                2150,
                 300
             ],
             "id": "orch2-split-decisions",
@@ -240,7 +303,7 @@
             "type": "n8n-nodes-base.switch",
             "typeVersion": 2,
             "position": [
-                2100,
+                2450,
                 300
             ],
             "id": "orch2-switch-type",
@@ -259,7 +322,7 @@
             "type": "n8n-nodes-base.httpRequest",
             "typeVersion": 4.2,
             "position": [
-                2500,
+                2850,
                 0
             ],
             "id": "orch2-trigger-phase",
@@ -279,7 +342,7 @@
             "type": "n8n-nodes-base.httpRequest",
             "typeVersion": 4.2,
             "position": [
-                2500,
+                2850,
                 200
             ],
             "id": "orch2-notify-client",
@@ -300,7 +363,7 @@
             "type": "n8n-nodes-base.slack",
             "typeVersion": 2.2,
             "position": [
-                2500,
+                2850,
                 400
             ],
             "id": "orch2-escalate",
@@ -327,7 +390,7 @@
             "type": "n8n-nodes-base.slack",
             "typeVersion": 2.2,
             "position": [
-                2500,
+                2850,
                 600
             ],
             "id": "orch2-sla-alert",
@@ -354,7 +417,7 @@
             "type": "n8n-nodes-base.slack",
             "typeVersion": 2.2,
             "position": [
-                2500,
+                2850,
                 800
             ],
             "id": "orch2-suggest-cycle",
@@ -380,7 +443,7 @@
             "type": "n8n-nodes-base.httpRequest",
             "typeVersion": 4.2,
             "position": [
-                2500,
+                2850,
                 1000
             ],
             "id": "orch2-auto-onboard",
@@ -394,7 +457,7 @@
             "type": "n8n-nodes-base.code",
             "typeVersion": 2,
             "position": [
-                2900,
+                3250,
                 400
             ],
             "id": "orch2-mark-consumed",
@@ -421,7 +484,7 @@
             "type": "n8n-nodes-base.httpRequest",
             "typeVersion": 4.2,
             "position": [
-                3200,
+                3550,
                 400
             ],
             "id": "orch2-batch-update",
@@ -442,13 +505,13 @@
                 "nodeCredentialType": "airtableTokenApi",
                 "sendBody": true,
                 "specifyBody": "json",
-                "jsonBody": "={{ JSON.stringify({ records: [{ fields: { agent: 'orchestrator', event_type: 'decision_made', severity: ($json.failedCount > 0 ? 'warning' : 'info'), message: 'Orchestrator processed ' + $('Decision Engine').first().json.eventCount + ' events, made ' + $('Decision Engine').first().json.decisionCount + ' decisions' + ($json.failedCount > 0 ? ' (' + $json.failedCount + ' action failures)' : ''), payload: JSON.stringify({ decisions_summary: $('Decision Engine').first().json.decisions.map(function(d) { return d.type + ': ' + (d.message || '').substring(0, 100); }), failed_actions: $json.failedCount || 0 }), consumed_by: 'orchestrator', created_at: new Date().toISOString() } }] }) }}",
+                "jsonBody": "={{ JSON.stringify({ records: [{ fields: { agent: 'orchestrator', event_type: 'decision_made', severity: ($json.failedCount > 0 ? 'warning' : 'info'), message: 'Orchestrator processed ' + $('Parse & Validate Decisions').first().json.eventCount + ' events, made ' + $('Parse & Validate Decisions').first().json.decisionCount + ' decisions' + ($json.failedCount > 0 ? ' (' + $json.failedCount + ' action failures)' : '') + ($('Parse & Validate Decisions').first().json.reasoning ? ' | Reasoning: ' + $('Parse & Validate Decisions').first().json.reasoning.substring(0, 200) : ''), payload: JSON.stringify({ decisions_summary: $('Parse & Validate Decisions').first().json.decisions.map(function(d) { return d.type + ': ' + (d.message || '').substring(0, 100); }), failed_actions: $json.failedCount || 0, reasoning: $('Parse & Validate Decisions').first().json.reasoning || '' }), consumed_by: 'orchestrator', created_at: new Date().toISOString() } }] }) }}",
                 "options": {}
             },
             "type": "n8n-nodes-base.httpRequest",
             "typeVersion": 4.2,
             "position": [
-                3500,
+                3850,
                 400
             ],
             "id": "orch2-log-decision",
@@ -463,12 +526,12 @@
         },
         {
             "parameters": {
-                "jsCode": "// Mark events consumed even when no decisions were generated\nconst eventIds = $('Decision Engine').first().json.eventIds || [];\nif (eventIds.length === 0) {\n  return [];\n}\nconst records = eventIds.map(id => ({\n  id,\n  fields: { consumed_by: 'orchestrator' }\n}));\nconst batches = [];\nfor (let i = 0; i < records.length; i += 10) {\n  batches.push(records.slice(i, i + 10));\n}\nreturn batches.map(batch => ({ json: { records: batch } }));"
+                "jsCode": "// Mark events consumed even when no decisions were generated\nconst eventIds = $('Parse & Validate Decisions').first().json.eventIds || [];\nif (eventIds.length === 0) {\n  return [];\n}\nconst records = eventIds.map(id => ({\n  id,\n  fields: { consumed_by: 'orchestrator' }\n}));\nconst batches = [];\nfor (let i = 0; i < records.length; i += 10) {\n  batches.push(records.slice(i, i + 10));\n}\nreturn batches.map(batch => ({ json: { records: batch } }));"
             },
             "type": "n8n-nodes-base.code",
             "typeVersion": 2,
             "position": [
-                1800,
+                2150,
                 600
             ],
             "id": "orch2-no-events",
@@ -495,7 +558,7 @@
             "type": "n8n-nodes-base.httpRequest",
             "typeVersion": 4.2,
             "position": [
-                2100,
+                2450,
                 600
             ],
             "id": "orch2-batch-update-silent",
@@ -515,7 +578,7 @@
             "type": "n8n-nodes-base.code",
             "typeVersion": 2,
             "position": [
-                1500,
+                1850,
                 700
             ],
             "id": "orch2-log-fetch-errors",
@@ -535,7 +598,7 @@
             "type": "n8n-nodes-base.httpRequest",
             "typeVersion": 4.2,
             "position": [
-                1800,
+                2150,
                 700
             ],
             "id": "orch2-write-error-event",
@@ -563,11 +626,103 @@
             "type": "n8n-nodes-base.httpRequest",
             "typeVersion": 4.2,
             "position": [
-                2500,
+                2850,
                 1200
             ],
             "id": "orch2-scout-creators",
             "name": "Scout Creators",
+            "onError": "continueRegularOutput"
+        },
+        {
+            "parameters": {
+                "jsCode": "// ============================================================\n// Curate Learnings — decay, merge duplicates, promote cross-brand\n// Runs after decision execution to avoid parallel-merge issues\n// ============================================================\n\nlet learnings = [];\ntry {\n  learnings = $('Fetch System Learnings').first().json.records || [];\n} catch(e) { return [{ json: { updates: [], _skip: true } }]; }\n\nif (learnings.length === 0) return [{ json: { updates: [], _skip: true } }];\n\nconst now = new Date();\nconst updates = [];\nconst toRetire = [];\nconst toMerge = [];\n\n// 1. DECAY: Reduce decay_score based on age since last_confirmed_at\nfor (const l of learnings) {\n  const f = l.fields;\n  const lastConfirmed = f.last_confirmed_at ? new Date(f.last_confirmed_at) : new Date(f.created_at);\n  const weeksSinceConfirmed = (now - lastConfirmed) / (7 * 24 * 3600000);\n  const currentDecay = f.decay_score !== undefined ? f.decay_score : (f.confidence || 5);\n  const newDecay = Math.max(0, currentDecay - (weeksSinceConfirmed * 0.1));\n\n  // Retire if below 3.0\n  if (newDecay < 3.0) {\n    toRetire.push({ id: l.id, fields: { active: false, decay_score: newDecay } });\n  } else if (Math.abs(newDecay - currentDecay) > 0.05) {\n    // Only update if decay changed meaningfully\n    updates.push({ id: l.id, fields: { decay_score: Math.round(newDecay * 10) / 10 } });\n  }\n}\n\n// 2. MERGE: Find similar learnings (same brand + >70% word overlap)\nfunction wordSet(text) {\n  return new Set((text || '').toLowerCase().replace(/[^a-z0-9\\s]/g, '').split(/\\s+/).filter(w => w.length > 2));\n}\nfunction overlap(a, b) {\n  const setA = wordSet(a);\n  const setB = wordSet(b);\n  if (setA.size === 0 || setB.size === 0) return 0;\n  let common = 0;\n  for (const w of setA) if (setB.has(w)) common++;\n  return common / Math.max(setA.size, setB.size);\n}\n\nconst merged = new Set();\nfor (let i = 0; i < learnings.length; i++) {\n  if (merged.has(learnings[i].id)) continue;\n  for (let j = i + 1; j < learnings.length; j++) {\n    if (merged.has(learnings[j].id)) continue;\n    const fi = learnings[i].fields;\n    const fj = learnings[j].fields;\n    // Same brand (or both agency-wide)\n    if ((fi.brand_name || '') !== (fj.brand_name || '')) continue;\n    const sim = overlap(fi.insight || fi.learning || '', fj.insight || fj.learning || '');\n    if (sim > 0.7) {\n      // Merge: keep the one with higher confidence, retire the other\n      const keepIdx = (fi.confidence || 0) >= (fj.confidence || 0) ? i : j;\n      const retireIdx = keepIdx === i ? j : i;\n      const keep = learnings[keepIdx];\n      const retire = learnings[retireIdx];\n      toMerge.push({\n        keep: { id: keep.id, fields: {\n          times_confirmed: (keep.fields.times_confirmed || 1) + (retire.fields.times_confirmed || 1),\n          decay_score: Math.max(keep.fields.decay_score || keep.fields.confidence || 5, retire.fields.decay_score || retire.fields.confidence || 5)\n        }},\n        retire: { id: retire.id, fields: { active: false } }\n      });\n      merged.add(retire.id);\n    }\n  }\n}\n\n// 3. PROMOTE: Brand-specific learning appearing in 3+ brands -> create agency-wide\nconst byInsight = {};\nfor (const l of learnings) {\n  const f = l.fields;\n  if (!f.brand_name) continue; // skip agency-wide\n  const key = (f.category || '') + ':' + ((f.insight || f.learning || '').substring(0, 50));\n  if (!byInsight[key]) byInsight[key] = { brands: new Set(), learning: f };\n  byInsight[key].brands.add(f.brand_name);\n}\nconst promotions = [];\nfor (const [key, data] of Object.entries(byInsight)) {\n  if (data.brands.size >= 3) {\n    // Check if agency-wide version already exists\n    const existing = learnings.find(l => !l.fields.brand_name && overlap(l.fields.insight || l.fields.learning || '', data.learning.insight || data.learning.learning || '') > 0.7);\n    if (!existing) {\n      promotions.push({\n        fields: {\n          title: (data.learning.title || 'Promoted learning') + ' (cross-brand)',\n          source_agent: 'orchestrator',\n          category: data.learning.category,\n          insight: data.learning.insight || data.learning.learning,\n          evidence: 'Confirmed across brands: ' + Array.from(data.brands).join(', '),\n          confidence: Math.min(10, (data.learning.confidence || 5) + 1),\n          decay_score: Math.min(10, (data.learning.confidence || 5) + 1),\n          times_confirmed: data.brands.size,\n          last_confirmed_at: now.toISOString(),\n          active: true,\n          brand_name: '',\n          industry: data.learning.industry || '',\n          created_at: now.toISOString()\n        }\n      });\n    }\n  }\n}\n\n// Build batch update records\nconst allUpdates = [...updates];\nfor (const r of toRetire) allUpdates.push(r);\nfor (const m of toMerge) {\n  allUpdates.push(m.keep);\n  allUpdates.push(m.retire);\n}\n\n// Batch into groups of 10\nconst batches = [];\nfor (let i = 0; i < allUpdates.length; i += 10) {\n  batches.push(allUpdates.slice(i, i + 10));\n}\n\nreturn [{ json: {\n  updateBatches: batches,\n  promotions: promotions,\n  stats: {\n    total: learnings.length,\n    decayed: updates.length,\n    retired: toRetire.length,\n    merged: toMerge.length,\n    promoted: promotions.length\n  },\n  _skip: allUpdates.length === 0 && promotions.length === 0\n}}];"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                4050,
+                400
+            ],
+            "id": "orch2-curate-learnings",
+            "name": "Curate Learnings"
+        },
+        {
+            "parameters": {
+                "conditions": {
+                    "options": {
+                        "caseSensitive": true,
+                        "leftValue": "",
+                        "typeValidation": "loose"
+                    },
+                    "conditions": [
+                        {
+                            "id": "orch2-if-curation-cond",
+                            "leftValue": "={{ $json._skip }}",
+                            "rightValue": true,
+                            "operator": {
+                                "type": "boolean",
+                                "operation": "notEquals"
+                            }
+                        }
+                    ],
+                    "combinator": "and"
+                },
+                "options": {}
+            },
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 2.2,
+            "position": [
+                4250,
+                400
+            ],
+            "id": "orch2-if-curation",
+            "name": "If Has Curation Updates"
+        },
+        {
+            "parameters": {
+                "jsCode": "// ============================================================\n// Write Curation Updates — prepare Airtable API call items\n// Outputs one item per batch (PATCH for updates, POST for promotions)\n// ============================================================\n\nconst { updateBatches, promotions } = $json;\nconst items = [];\n\n// PATCH requests for decay updates, retirements, merges\nif (updateBatches && updateBatches.length > 0) {\n  for (const batch of updateBatches) {\n    items.push({ json: {\n      method: 'PATCH',\n      body: { records: batch }\n    }});\n  }\n}\n\n// POST request for promotions (new records)\nif (promotions && promotions.length > 0) {\n  // Batch promotions into groups of 10 too\n  for (let i = 0; i < promotions.length; i += 10) {\n    const batch = promotions.slice(i, i + 10);\n    items.push({ json: {\n      method: 'POST',\n      body: { records: batch }\n    }});\n  }\n}\n\nif (items.length === 0) return [];\nreturn items;"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                4450,
+                300
+            ],
+            "id": "orch2-write-curation",
+            "name": "Write Curation Updates"
+        },
+        {
+            "parameters": {
+                "method": "={{ $json.method }}",
+                "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblAfe1LYh8kHPVbP",
+                "authentication": "genericCredentialType",
+                "genericAuthType": "httpHeaderAuth",
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={{ JSON.stringify($json.body) }}",
+                "options": {
+                    "batching": {
+                        "batch": {
+                            "batchSize": 1,
+                            "batchInterval": 300
+                        }
+                    }
+                }
+            },
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                4650,
+                300
+            ],
+            "id": "orch2-exec-curation",
+            "name": "Execute Curation",
+            "credentials": {
+                "httpHeaderAuth": {
+                    "id": "a0TTu3NVsuJUEbct",
+                    "name": "Airtable PAT Header"
+                }
+            },
             "onError": "continueRegularOutput"
         }
     ],
@@ -609,23 +764,56 @@
             "main": [
                 [
                     {
-                        "node": "Decision Engine",
+                        "node": "Fetch System Learnings",
                         "type": "main",
                         "index": 0
                     }
                 ]
             ]
         },
-        "Decision Engine": {
+        "Fetch System Learnings": {
             "main": [
                 [
                     {
-                        "node": "Check Has Decisions",
+                        "node": "Build Orchestrator Prompt",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Build Orchestrator Prompt": {
+            "main": [
+                [
+                    {
+                        "node": "Gemini Reasoning",
                         "type": "main",
                         "index": 0
                     },
                     {
                         "node": "Log Fetch Errors",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Gemini Reasoning": {
+            "main": [
+                [
+                    {
+                        "node": "Parse & Validate Decisions",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Parse & Validate Decisions": {
+            "main": [
+                [
+                    {
+                        "node": "Check Has Decisions",
                         "type": "main",
                         "index": 0
                     }
@@ -829,6 +1017,51 @@
                 [
                     {
                         "node": "Mark Events Consumed",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Log Orchestrator Decision": {
+            "main": [
+                [
+                    {
+                        "node": "Curate Learnings",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Curate Learnings": {
+            "main": [
+                [
+                    {
+                        "node": "If Has Curation Updates",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "If Has Curation Updates": {
+            "main": [
+                [
+                    {
+                        "node": "Write Curation Updates",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                []
+            ]
+        },
+        "Write Curation Updates": {
+            "main": [
+                [
+                    {
+                        "node": "Execute Curation",
                         "type": "main",
                         "index": 0
                     }
@@ -1054,16 +1287,79 @@
             },
             {
                 "parameters": {
-                    "jsCode": "// Guard against fetch failures\nconst fetchResults = [\n  { name: 'Events', data: $('Fetch Unprocessed Events').first().json },\n  { name: 'Projects', data: $('Fetch Active Projects').first().json },\n  { name: 'Brands', data: $('Fetch Brands').first().json }\n];\nconst fetchErrors = [];\nfor (const fr of fetchResults) {\n  if (fr.data.error || fr.data.statusCode >= 400 || (fr.data.statusMessage && fr.data.statusCode)) {\n    fetchErrors.push(`${fr.name}: ${fr.data.error || fr.data.statusMessage || 'HTTP ' + fr.data.statusCode}`);\n  }\n}\nif (fetchErrors.length > 0) {\n  return [{ json: { decisions: [], eventIds: [], decisionCount: 0, eventCount: 0, _error: true, fetchErrors } }];\n}\n\nconst events = $('Fetch Unprocessed Events').first().json.records || [];\nconst projects = $('Fetch Active Projects').first().json.records || [];\nconst brands = $('Fetch Brands').first().json.records || [];\nconst now = new Date();\nconst decisions = [];\nconst eventIds = [];\n\nfor (const event of events) {\n  const f = event.fields;\n  eventIds.push(event.id);\n\n  const project = projects.find(p => p.id === f.project_id);\n  const brand = brands.find(b => b.fields.brand_name === f.brand_name);\n  let payload = {};\n  try { payload = JSON.parse(f.payload || '{}'); } catch(e) {}\n\n  switch (f.event_type) {\n    case 'phase_complete':\n      if (f.agent === 'phase_1') {\n        decisions.push({\n          type: 'notify_client',\n          event: f,\n          eventId: event.id,\n          message: 'Research complete for ' + f.brand_name + ' \\u2014 concepts ready for PM review',\n          project_id: f.project_id,\n          brand_name: f.brand_name,\n          client_code: f.client_code\n        });\n        // Auto-scout creators when research completes\n        const brandData = brand ? brand.fields : {};\n        const projectData = project ? project.fields : {};\n        const industry = brandData.industry || projectData.industry || payload.industry || '';\n        const niches = industry ? [industry] : ['UGC'];\n        const budget = projectData.budget_per_video || brandData.budget_per_video || payload.budget_per_video || 10000;\n        const numScripts = projectData.num_scripts || payload.num_scripts || 5;\n        decisions.push({\n          type: 'scout_creators',\n          event: f,\n          eventId: event.id,\n          message: 'Auto-scouting creators for ' + f.brand_name + ' after research complete',\n          project_id: f.project_id,\n          brand_name: f.brand_name,\n          client_code: f.client_code,\n          niches: niches,\n          industry: industry,\n          budget_max: budget,\n          count: Math.max(numScripts, 3)\n        });\n      }\n      if (f.agent === 'phase_2') {\n        decisions.push({\n          type: 'trigger_phase',\n          phase: 3,\n          event: f,\n          eventId: event.id,\n          webhook: '/webhook/ugc-scripts',\n          message: 'Concepts approved for ' + f.brand_name + ' \\u2014 triggering script writing',\n          project_id: f.project_id,\n          brand_name: f.brand_name,\n          client_code: f.client_code\n        });\n        decisions.push({\n          type: 'notify_client',\n          event: f,\n          eventId: event.id,\n          message: 'Concepts approved for ' + f.brand_name + ', scripts being generated',\n          project_id: f.project_id,\n          brand_name: f.brand_name,\n          client_code: f.client_code\n        });\n      }\n      if (f.agent === 'phase_3') {\n        decisions.push({\n          type: 'trigger_phase',\n          phase: 4,\n          event: f,\n          eventId: event.id,\n          webhook: '/webhook/ugc-delivery',\n          message: 'Scripts ready for ' + f.brand_name + ' \\u2014 triggering delivery',\n          project_id: f.project_id,\n          brand_name: f.brand_name,\n          client_code: f.client_code\n        });\n        decisions.push({\n          type: 'notify_client',\n          event: f,\n          eventId: event.id,\n          message: 'Scripts ready for review for ' + f.brand_name,\n          project_id: f.project_id,\n          brand_name: f.brand_name,\n          client_code: f.client_code\n        });\n      }\n      if (f.agent === 'phase_4') {\n        decisions.push({\n          type: 'notify_client',\n          event: f,\n          eventId: event.id,\n          message: 'Delivery complete for ' + f.brand_name + '!',\n          project_id: f.project_id,\n          brand_name: f.brand_name,\n          client_code: f.client_code\n        });\n      }\n      break;\n\n    case 'campaign_alert':\n      if (payload.fatigued_count > 0) {\n        const deliveredProject = projects.find(p =>\n          p.fields.brand_name === f.brand_name &&\n          (p.fields.status === 'Delivered' || p.fields.status === 'Complete')\n        );\n        if (deliveredProject) {\n          decisions.push({\n            type: 'suggest_new_cycle',\n            event: f,\n            eventId: event.id,\n            message: 'Ad fatigue detected for ' + f.brand_name + ' \\u2014 ' + payload.fatigued_count + ' campaigns fatigued. Consider new creative cycle.',\n            project_id: deliveredProject.id,\n            brand_name: f.brand_name,\n            client_code: f.client_code\n          });\n        }\n      }\n      if (f.severity === 'critical') {\n        decisions.push({\n          type: 'escalate',\n          event: f,\n          eventId: event.id,\n          severity: 'critical',\n          message: 'CRITICAL: ROAS crash for ' + f.brand_name + ' \\u2014 immediate action needed. ' + (payload.recommendation || ''),\n          brand_name: f.brand_name\n        });\n      }\n      break;\n\n    case 'lead_action':\n      if (payload.stage === 'Won') {\n        decisions.push({\n          type: 'auto_onboard',\n          event: f,\n          eventId: event.id,\n          message: 'Lead won: ' + (f.brand_name || payload.company) + ' \\u2014 ready for onboarding',\n          brand_name: f.brand_name || payload.company,\n          client_code: f.client_code\n        });\n      }\n      break;\n\n    case 'sla_breach': {\n      const recentBreaches = events.filter(e =>\n        e.fields.event_type === 'sla_breach' && e.fields.project_id === f.project_id\n      );\n      if (recentBreaches.length >= 3) {\n        decisions.push({\n          type: 'escalate',\n          event: f,\n          eventId: event.id,\n          severity: 'critical',\n          message: 'REPEATED SLA BREACH: ' + f.brand_name + ' has ' + recentBreaches.length + ' breaches \\u2014 needs immediate attention',\n          project_id: f.project_id,\n          brand_name: f.brand_name,\n          client_code: f.client_code\n        });\n      }\n      break;\n    }\n\n    case 'status_change':\n      if (f.agent === 'onboarding') {\n        decisions.push({\n          type: 'notify_client',\n          event: f,\n          eventId: event.id,\n          message: 'New project onboarded for ' + f.brand_name + ' \\u2014 research phase starting soon',\n          project_id: f.project_id,\n          brand_name: f.brand_name,\n          client_code: f.client_code\n        });\n      }\n      break;\n  }\n}\n\n// SLA detection from project status\nfor (const project of projects) {\n  const pf = project.fields;\n  const updatedAt = new Date(pf.updated_at || pf.created_at || now);\n  const hoursInStatus = (now - updatedAt) / 3600000;\n\n  if (pf.status === 'PM Review' && hoursInStatus > 24) {\n    decisions.push({\n      type: 'sla_alert',\n      severity: 'warning',\n      project_id: project.id,\n      brand_name: pf.brand_name,\n      client_code: pf.client_code,\n      message: pf.brand_name + ' stuck in PM Review for ' + Math.round(hoursInStatus) + 'h'\n    });\n  }\n  if (pf.status === 'Script Review' && hoursInStatus > 48) {\n    decisions.push({\n      type: 'sla_alert',\n      severity: 'warning',\n      project_id: project.id,\n      brand_name: pf.brand_name,\n      client_code: pf.client_code,\n      message: pf.brand_name + ' stuck in Script Review for ' + Math.round(hoursInStatus) + 'h'\n    });\n  }\n  if (pf.status === 'In Progress' && hoursInStatus > 72) {\n    decisions.push({\n      type: 'sla_alert',\n      severity: 'urgent',\n      project_id: project.id,\n      brand_name: pf.brand_name,\n      client_code: pf.client_code,\n      message: pf.brand_name + ' In Progress for ' + Math.round(hoursInStatus) + 'h \\u2014 may be stuck'\n    });\n  }\n}\n\nreturn [{ json: { decisions, eventIds, decisionCount: decisions.length, eventCount: events.length } }];"
+                    "method": "GET",
+                    "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblAfe1LYh8kHPVbP?filterByFormula={active}=TRUE()&sort[0][field]=confidence&sort[0][direction]=desc&maxRecords=20",
+                    "authentication": "genericCredentialType",
+                    "genericAuthType": "httpHeaderAuth",
+                    "options": {}
+                },
+                "type": "n8n-nodes-base.httpRequest",
+                "typeVersion": 4.2,
+                "position": [
+                    1050,
+                    400
+                ],
+                "id": "orch2-fetch-learnings",
+                "name": "Fetch System Learnings",
+                "credentials": {
+                    "httpHeaderAuth": {
+                        "id": "a0TTu3NVsuJUEbct",
+                        "name": "Airtable PAT Header"
+                    }
+                },
+                "onError": "continueRegularOutput"
+            },
+            {
+                "parameters": {
+                    "jsCode": "// ============================================================\n// Build Orchestrator Prompt \u2014 LLM-based reasoning\n// Falls back to SLA-only detection if 0 events or Gemini fails\n// ============================================================\n\nconst fetchResults = [\n  { name: 'Events', data: $('Fetch Unprocessed Events').first().json },\n  { name: 'Projects', data: $('Fetch Active Projects').first().json },\n  { name: 'Brands', data: $('Fetch Brands').first().json }\n];\nconst fetchErrors = [];\nfor (const fr of fetchResults) {\n  if (fr.data.error || fr.data.statusCode >= 400 || (fr.data.statusMessage && fr.data.statusCode)) {\n    fetchErrors.push(`${fr.name}: ${fr.data.error || fr.data.statusMessage || 'HTTP ' + fr.data.statusCode}`);\n  }\n}\nif (fetchErrors.length > 0) {\n  return [{ json: { decisions: [], eventIds: [], decisionCount: 0, eventCount: 0, _error: true, fetchErrors } }];\n}\n\nconst events = $('Fetch Unprocessed Events').first().json.records || [];\nconst projects = $('Fetch Active Projects').first().json.records || [];\nconst brands = $('Fetch Brands').first().json.records || [];\nconst now = new Date();\nconst eventIds = events.map(e => e.id);\n\n// Fetch system learnings (may be empty)\nlet learnings = [];\ntry {\n  learnings = $('Fetch System Learnings').first().json.records || [];\n} catch(e) { learnings = []; }\n\n// === SLA DETECTION (hardcoded fallback \u2014 always runs) ===\nconst slaDecisions = [];\nfor (const project of projects) {\n  const pf = project.fields;\n  const updatedAt = new Date(pf.updated_at || pf.created_at || now);\n  const hoursInStatus = (now - updatedAt) / 3600000;\n\n  if (pf.status === 'PM Review' && hoursInStatus > 24) {\n    slaDecisions.push({\n      type: 'sla_alert', severity: 'warning',\n      project_id: project.id, brand_name: pf.brand_name,\n      client_code: pf.client_code,\n      message: pf.brand_name + ' stuck in PM Review for ' + Math.round(hoursInStatus) + 'h'\n    });\n  }\n  if (pf.status === 'Script Review' && hoursInStatus > 48) {\n    slaDecisions.push({\n      type: 'sla_alert', severity: 'warning',\n      project_id: project.id, brand_name: pf.brand_name,\n      client_code: pf.client_code,\n      message: pf.brand_name + ' stuck in Script Review for ' + Math.round(hoursInStatus) + 'h'\n    });\n  }\n  if (pf.status === 'In Progress' && hoursInStatus > 72) {\n    slaDecisions.push({\n      type: 'sla_alert', severity: 'urgent',\n      project_id: project.id, brand_name: pf.brand_name,\n      client_code: pf.client_code,\n      message: pf.brand_name + ' In Progress for ' + Math.round(hoursInStatus) + 'h \\u2014 may be stuck'\n    });\n  }\n}\n\n// If 0 events, output SLA decisions directly (skip Gemini)\n// Still provide a minimal geminiBody so the HTTP Request node doesn't fail\nif (events.length === 0) {\n  return [{ json: {\n    geminiBody: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'No events to process.' }] }], generationConfig: { maxOutputTokens: 10 } }),\n    decisions: slaDecisions,\n    eventIds: [],\n    decisionCount: slaDecisions.length,\n    eventCount: 0,\n    slaDecisions: slaDecisions,\n    _skipGemini: true\n  } }];\n}\n\n// === BUILD GEMINI PROMPT ===\nlet eventsText = '== CURRENT EVENTS (unprocessed) ==\\n';\nfor (const e of events) {\n  const f = e.fields;\n  let payloadExcerpt = '';\n  try { payloadExcerpt = (f.payload || '').substring(0, 200); } catch(x) {}\n  eventsText += `[${e.id}] ${f.event_type} | agent: ${f.agent || 'unknown'} | brand: ${f.brand_name || 'N/A'} | project: ${f.project_id || 'N/A'} | severity: ${f.severity || 'info'} | ${f.message || ''} | payload: ${payloadExcerpt}\\n`;\n}\n\nlet projectsText = '\\n== ACTIVE PROJECTS ==\\n';\nfor (const p of projects) {\n  const pf = p.fields;\n  const updatedAt = new Date(pf.updated_at || pf.created_at || now);\n  const hoursInStatus = Math.round((now - updatedAt) / 3600000);\n  projectsText += `[${p.id}] ${pf.brand_name || 'Unknown'} | status: ${pf.status || 'N/A'} | ${hoursInStatus}h in status | scripts: ${pf.num_scripts || 0} | client: ${pf.client_code || 'N/A'} | goal: ${(pf.project_goal || 'Not defined').substring(0, 150)}\\n`;\n}\n\nlet brandsText = '\\n== BRANDS ==\\n';\nfor (const b of brands) {\n  const bf = b.fields;\n  brandsText += `[${b.id}] ${bf.brand_name || 'Unknown'} | industry: ${bf.industry || 'N/A'} | website: ${bf.website_url || 'N/A'}\\n`;\n}\n\nlet learningsText = '\\n== SYSTEM LEARNINGS (top 20 by confidence) ==\\n';\nif (learnings.length > 0) {\n  learnings.forEach((l, i) => {\n    const lf = l.fields;\n    learningsText += `[${i+1}] (${lf.category || 'general'}, confidence: ${lf.confidence || 'N/A'}) ${lf.title || 'Untitled'}: ${(lf.insight || lf.learning || lf.content || '').substring(0, 200)}\\n`;\n  });\n} else {\n  learningsText += 'No system learnings available.\\n';\n}\n\nconst systemMessage = 'You are the Orchestrator for a UGC creative agency automation system. You analyze events from various agents and project state to decide what actions to take next. Be conservative \\u2014 only take actions that are clearly warranted by the data. Output ONLY valid JSON.';\n\nconst userPrompt = eventsText + projectsText + brandsText + learningsText + `\\n== ALLOWED ACTIONS (whitelist \\u2014 anything else will be REJECTED) ==\\n1. trigger_phase: { phase: 3|4, project_id: \"recXXX\", client_code: \"ABC-0123\", webhook: \"/webhook/ugc-scripts\" or \"/webhook/ugc-delivery\" }\\n2. notify_client: { project_id: \"recXXX\", brand_name: \"X\", client_code: \"ABC-0123\", message: \"...\" }\\n3. escalate: { severity: \"critical\"|\"high\", brand_name: \"X\", message: \"...\" }\\n4. sla_alert: { severity: \"warning\"|\"urgent\", project_id: \"recXXX\", brand_name: \"X\", message: \"...\" }\\n5. suggest_new_cycle: { project_id: \"recXXX\", brand_name: \"X\", message: \"...\" }\\n6. auto_onboard: { brand_name: \"X\", client_code: \"ABC-0123\" }\\n7. scout_creators: { project_id: \"recXXX\", brand_name: \"X\", niches: [\"X\"], industry: \"X\", budget_max: 10000, count: 5, client_code: \"ABC-0123\" }\\n8. no_action: { reason: \"...\" }\\n\\n== REASONING RULES ==\\n- phase_complete from phase_1 \\u2192 notify PM that research is complete + scout creators for that brand\\n- phase_complete from phase_2 \\u2192 trigger_phase 3 (scripts) + notify client\\n- phase_complete from phase_3 \\u2192 trigger_phase 4 (delivery) + notify client\\n- phase_complete from phase_4 \\u2192 notify client delivery complete\\n- campaign_alert with fatigue \\u2192 suggest_new_cycle ONLY if project has been delivered before\\n- campaign_alert critical \\u2192 escalate immediately\\n- lead_action with stage Won \\u2192 auto_onboard\\n- sla_breach repeated 3+ times \\u2192 escalate\\n- status_change from onboarding \\u2192 notify client\\n- Reference System Learnings when making suggestions or providing context in messages\\n- SLA thresholds: PM Review > 24h = warning, Script Review > 48h = warning, In Progress > 72h = urgent\\n- Consolidate multiple events for same project into fewer actions\\n- NEVER trigger phase 3 unless phase 2 completed (check project status)\\n- NEVER trigger phase 4 unless phase 3 completed (check project status)\\n- NEVER invent actions outside the allowed list\\n- For trigger_phase 3, use webhook: \"/webhook/ugc-scripts\"\\n- For trigger_phase 4, use webhook: \"/webhook/ugc-delivery\"\\n- For scout_creators, infer industry and niches from brand/project data\\n\\n== OUTPUT FORMAT ==\\n{\\n  \"reasoning\": \"Brief 2-3 sentence analysis of the situation\",\\n  \"decisions\": [\\n    { \"type\": \"trigger_phase\", \"eventId\": \"recXXX\", \"phase\": 3, \"project_id\": \"recYYY\", \"client_code\": \"WHE-0217\", \"webhook\": \"/webhook/ugc-scripts\", \"message\": \"...\" },\\n    { \"type\": \"notify_client\", \"eventId\": \"recXXX\", \"project_id\": \"recYYY\", \"brand_name\": \"X\", \"client_code\": \"WHE-0217\", \"message\": \"...\" }\\n  ]\\n}\\n\\nAnalyze the events above and determine the appropriate actions.`;\n\nconst geminiBody = JSON.stringify({\n  systemInstruction: { parts: [{ text: systemMessage }] },\n  contents: [{ role: 'user', parts: [{ text: userPrompt }] }],\n  generationConfig: { temperature: 0.1, maxOutputTokens: 4096, thinkingConfig: { thinkingBudget: 0 } }\n});\n\nreturn [{ json: { geminiBody, eventIds, eventCount: events.length, slaDecisions, _skipGemini: false } }];"
                 },
                 "type": "n8n-nodes-base.code",
                 "typeVersion": 2,
                 "position": [
-                    1200,
+                    1250,
                     400
                 ],
                 "id": "orch2-decision-engine",
-                "name": "Decision Engine"
+                "name": "Build Orchestrator Prompt"
+            },
+            {
+                "parameters": {
+                    "method": "POST",
+                    "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+                    "authentication": "predefinedCredentialType",
+                    "nodeCredentialType": "googlePalmApi",
+                    "sendBody": true,
+                    "specifyBody": "json",
+                    "jsonBody": "={{ $json.geminiBody }}",
+                    "options": {}
+                },
+                "type": "n8n-nodes-base.httpRequest",
+                "typeVersion": 4.2,
+                "position": [
+                    1450,
+                    400
+                ],
+                "id": "orch2-gemini-reasoning",
+                "name": "Gemini Reasoning",
+                "credentials": {
+                    "googlePalmApi": {
+                        "id": "rIL63TG4xfMQL8uJ",
+                        "name": "Cosmisk AI"
+                    }
+                }
+            },
+            {
+                "parameters": {
+                    "jsCode": "// ============================================================\n// Parse Gemini response and validate decisions\n// Merges LLM decisions with hardcoded SLA decisions\n// Falls back gracefully on parse failure\n// ============================================================\n\nconst upstream = $('Build Orchestrator Prompt').first().json;\nconst slaDecisions = upstream.slaDecisions || [];\nconst eventIds = upstream.eventIds || [];\n\n// If Gemini was skipped (0 events), output SLA decisions only\nif (upstream._skipGemini) {\n  return [{ json: {\n    decisions: slaDecisions,\n    eventIds,\n    decisionCount: slaDecisions.length,\n    eventCount: 0\n  } }];\n}\n\n// Allowed action types\nconst allowedTypes = ['trigger_phase', 'notify_client', 'escalate', 'sla_alert', 'suggest_new_cycle', 'auto_onboard', 'scout_creators', 'no_action'];\n\n// Required fields per action type\nconst requiredFields = {\n  trigger_phase: ['phase', 'project_id'],\n  notify_client: ['message', 'brand_name'],\n  escalate: ['severity', 'message'],\n  sla_alert: ['severity', 'message'],\n  suggest_new_cycle: ['brand_name', 'message'],\n  auto_onboard: ['brand_name'],\n  scout_creators: ['brand_name'],\n  no_action: ['reason']\n};\n\nlet llmDecisions = [];\nlet reasoning = '';\n\ntry {\n  const geminiResponse = $input.first().json;\n  let rawText = '';\n  \n  // Extract text from Gemini response\n  if (geminiResponse.candidates && geminiResponse.candidates[0]) {\n    rawText = geminiResponse.candidates[0].content.parts[0].text || '';\n  } else if (geminiResponse.error) {\n    // Gemini returned an error \\u2014 fall back to SLA only\n    return [{ json: {\n      decisions: slaDecisions,\n      eventIds,\n      decisionCount: slaDecisions.length,\n      eventCount: upstream.eventCount,\n      _geminiError: geminiResponse.error.message || 'Unknown Gemini error'\n    } }];\n  }\n\n  // Strip markdown code fences\n  rawText = rawText.replace(/^```json\\s*/i, '').replace(/^```\\s*/m, '').replace(/\\s*```\\s*$/m, '').trim();\n\n  const parsed = JSON.parse(rawText);\n  reasoning = parsed.reasoning || '';\n  const rawDecisions = parsed.decisions || [];\n\n  // Validate each decision\n  for (const d of rawDecisions) {\n    if (!d.type || !allowedTypes.includes(d.type)) continue;\n    if (d.type === 'no_action') continue; // Skip no-action entries\n\n    // Check required fields\n    const required = requiredFields[d.type] || [];\n    const missing = required.filter(f => !d[f] && d[f] !== 0);\n    if (missing.length > 0) continue; // Skip invalid decisions\n\n    // Add event reference and message if missing\n    const decision = {\n      type: d.type,\n      eventId: d.eventId || eventIds[0] || '',\n      ...d,\n      message: d.message || `${d.type} action for ${d.brand_name || 'unknown'}`\n    };\n\n    // For trigger_phase, ensure webhook is set\n    if (d.type === 'trigger_phase') {\n      if (d.phase === 3) decision.webhook = '/webhook/ugc-scripts';\n      if (d.phase === 4) decision.webhook = '/webhook/ugc-delivery';\n    }\n\n    llmDecisions.push(decision);\n  }\n} catch (e) {\n  // JSON parse failed \\u2014 fall back to SLA decisions only\n  return [{ json: {\n    decisions: slaDecisions,\n    eventIds,\n    decisionCount: slaDecisions.length,\n    eventCount: upstream.eventCount,\n    _parseError: e.message\n  } }];\n}\n\n// Merge: LLM decisions + SLA decisions (deduplicate by project_id + type)\nconst seen = new Set();\nconst merged = [];\n\nfor (const d of llmDecisions) {\n  const key = `${d.type}:${d.project_id || d.brand_name || ''}`;\n  if (!seen.has(key)) {\n    seen.add(key);\n    merged.push(d);\n  }\n}\n\nfor (const d of slaDecisions) {\n  const key = `${d.type}:${d.project_id || d.brand_name || ''}`;\n  if (!seen.has(key)) {\n    seen.add(key);\n    merged.push(d);\n  }\n}\n\nreturn [{ json: {\n  decisions: merged,\n  eventIds,\n  decisionCount: merged.length,\n  eventCount: upstream.eventCount,\n  reasoning\n} }];"
+                },
+                "type": "n8n-nodes-base.code",
+                "typeVersion": 2,
+                "position": [
+                    1650,
+                    400
+                ],
+                "id": "orch2-parse-decisions",
+                "name": "Parse & Validate Decisions"
             },
             {
                 "parameters": {
@@ -1091,7 +1387,7 @@
                 "type": "n8n-nodes-base.if",
                 "typeVersion": 2.2,
                 "position": [
-                    1500,
+                    1850,
                     400
                 ],
                 "id": "orch2-check-decisions",
@@ -1104,7 +1400,7 @@
                 "type": "n8n-nodes-base.code",
                 "typeVersion": 2,
                 "position": [
-                    1800,
+                    2150,
                     300
                 ],
                 "id": "orch2-split-decisions",
@@ -1150,7 +1446,7 @@
                 "type": "n8n-nodes-base.switch",
                 "typeVersion": 2,
                 "position": [
-                    2100,
+                    2450,
                     300
                 ],
                 "id": "orch2-switch-type",
@@ -1169,7 +1465,7 @@
                 "type": "n8n-nodes-base.httpRequest",
                 "typeVersion": 4.2,
                 "position": [
-                    2500,
+                    2850,
                     0
                 ],
                 "id": "orch2-trigger-phase",
@@ -1189,7 +1485,7 @@
                 "type": "n8n-nodes-base.httpRequest",
                 "typeVersion": 4.2,
                 "position": [
-                    2500,
+                    2850,
                     200
                 ],
                 "id": "orch2-notify-client",
@@ -1210,7 +1506,7 @@
                 "type": "n8n-nodes-base.slack",
                 "typeVersion": 2.2,
                 "position": [
-                    2500,
+                    2850,
                     400
                 ],
                 "id": "orch2-escalate",
@@ -1237,7 +1533,7 @@
                 "type": "n8n-nodes-base.slack",
                 "typeVersion": 2.2,
                 "position": [
-                    2500,
+                    2850,
                     600
                 ],
                 "id": "orch2-sla-alert",
@@ -1264,7 +1560,7 @@
                 "type": "n8n-nodes-base.slack",
                 "typeVersion": 2.2,
                 "position": [
-                    2500,
+                    2850,
                     800
                 ],
                 "id": "orch2-suggest-cycle",
@@ -1290,7 +1586,7 @@
                 "type": "n8n-nodes-base.httpRequest",
                 "typeVersion": 4.2,
                 "position": [
-                    2500,
+                    2850,
                     1000
                 ],
                 "id": "orch2-auto-onboard",
@@ -1304,7 +1600,7 @@
                 "type": "n8n-nodes-base.code",
                 "typeVersion": 2,
                 "position": [
-                    2900,
+                    3250,
                     400
                 ],
                 "id": "orch2-mark-consumed",
@@ -1331,7 +1627,7 @@
                 "type": "n8n-nodes-base.httpRequest",
                 "typeVersion": 4.2,
                 "position": [
-                    3200,
+                    3550,
                     400
                 ],
                 "id": "orch2-batch-update",
@@ -1352,13 +1648,13 @@
                     "nodeCredentialType": "airtableTokenApi",
                     "sendBody": true,
                     "specifyBody": "json",
-                    "jsonBody": "={{ JSON.stringify({ records: [{ fields: { agent: 'orchestrator', event_type: 'decision_made', severity: ($json.failedCount > 0 ? 'warning' : 'info'), message: 'Orchestrator processed ' + $('Decision Engine').first().json.eventCount + ' events, made ' + $('Decision Engine').first().json.decisionCount + ' decisions' + ($json.failedCount > 0 ? ' (' + $json.failedCount + ' action failures)' : ''), payload: JSON.stringify({ decisions_summary: $('Decision Engine').first().json.decisions.map(function(d) { return d.type + ': ' + (d.message || '').substring(0, 100); }), failed_actions: $json.failedCount || 0 }), consumed_by: 'orchestrator', created_at: new Date().toISOString() } }] }) }}",
+                    "jsonBody": "={{ JSON.stringify({ records: [{ fields: { agent: 'orchestrator', event_type: 'decision_made', severity: ($json.failedCount > 0 ? 'warning' : 'info'), message: 'Orchestrator processed ' + $('Parse & Validate Decisions').first().json.eventCount + ' events, made ' + $('Parse & Validate Decisions').first().json.decisionCount + ' decisions' + ($json.failedCount > 0 ? ' (' + $json.failedCount + ' action failures)' : '') + ($('Parse & Validate Decisions').first().json.reasoning ? ' | Reasoning: ' + $('Parse & Validate Decisions').first().json.reasoning.substring(0, 200) : ''), payload: JSON.stringify({ decisions_summary: $('Parse & Validate Decisions').first().json.decisions.map(function(d) { return d.type + ': ' + (d.message || '').substring(0, 100); }), failed_actions: $json.failedCount || 0, reasoning: $('Parse & Validate Decisions').first().json.reasoning || '' }), consumed_by: 'orchestrator', created_at: new Date().toISOString() } }] }) }}",
                     "options": {}
                 },
                 "type": "n8n-nodes-base.httpRequest",
                 "typeVersion": 4.2,
                 "position": [
-                    3500,
+                    3850,
                     400
                 ],
                 "id": "orch2-log-decision",
@@ -1373,12 +1669,12 @@
             },
             {
                 "parameters": {
-                    "jsCode": "// Mark events consumed even when no decisions were generated\nconst eventIds = $('Decision Engine').first().json.eventIds || [];\nif (eventIds.length === 0) {\n  return [];\n}\nconst records = eventIds.map(id => ({\n  id,\n  fields: { consumed_by: 'orchestrator' }\n}));\nconst batches = [];\nfor (let i = 0; i < records.length; i += 10) {\n  batches.push(records.slice(i, i + 10));\n}\nreturn batches.map(batch => ({ json: { records: batch } }));"
+                    "jsCode": "// Mark events consumed even when no decisions were generated\nconst eventIds = $('Parse & Validate Decisions').first().json.eventIds || [];\nif (eventIds.length === 0) {\n  return [];\n}\nconst records = eventIds.map(id => ({\n  id,\n  fields: { consumed_by: 'orchestrator' }\n}));\nconst batches = [];\nfor (let i = 0; i < records.length; i += 10) {\n  batches.push(records.slice(i, i + 10));\n}\nreturn batches.map(batch => ({ json: { records: batch } }));"
                 },
                 "type": "n8n-nodes-base.code",
                 "typeVersion": 2,
                 "position": [
-                    1800,
+                    2150,
                     600
                 ],
                 "id": "orch2-no-events",
@@ -1405,7 +1701,7 @@
                 "type": "n8n-nodes-base.httpRequest",
                 "typeVersion": 4.2,
                 "position": [
-                    2100,
+                    2450,
                     600
                 ],
                 "id": "orch2-batch-update-silent",
@@ -1425,7 +1721,7 @@
                 "type": "n8n-nodes-base.code",
                 "typeVersion": 2,
                 "position": [
-                    1500,
+                    1850,
                     700
                 ],
                 "id": "orch2-log-fetch-errors",
@@ -1445,7 +1741,7 @@
                 "type": "n8n-nodes-base.httpRequest",
                 "typeVersion": 4.2,
                 "position": [
-                    1800,
+                    2150,
                     700
                 ],
                 "id": "orch2-write-error-event",
@@ -1473,7 +1769,7 @@
                 "type": "n8n-nodes-base.httpRequest",
                 "typeVersion": 4.2,
                 "position": [
-                    2500,
+                    2850,
                     1200
                 ],
                 "id": "orch2-scout-creators",
@@ -1519,23 +1815,56 @@
                 "main": [
                     [
                         {
-                            "node": "Decision Engine",
+                            "node": "Fetch System Learnings",
                             "type": "main",
                             "index": 0
                         }
                     ]
                 ]
             },
-            "Decision Engine": {
+            "Fetch System Learnings": {
                 "main": [
                     [
                         {
-                            "node": "Check Has Decisions",
+                            "node": "Build Orchestrator Prompt",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Build Orchestrator Prompt": {
+                "main": [
+                    [
+                        {
+                            "node": "Gemini Reasoning",
                             "type": "main",
                             "index": 0
                         },
                         {
                             "node": "Log Fetch Errors",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Gemini Reasoning": {
+                "main": [
+                    [
+                        {
+                            "node": "Parse & Validate Decisions",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Parse & Validate Decisions": {
+                "main": [
+                    [
+                        {
+                            "node": "Check Has Decisions",
                             "type": "main",
                             "index": 0
                         }
