@@ -120,7 +120,28 @@
     },
     {
       "parameters": {
-        "jsCode": "// Collect inputs from both parallel branches\nconst prospectData = $('out-validate-prospect').first().json;\nconst recordId = $('out-create-prospect').first().json.id || 'unknown';\n\n// Parse system learnings (may have failed gracefully)\nlet learningsText = '';\ntry {\n  const learningsResp = $('out-fetch-learnings').first().json;\n  const records = learningsResp.records || [];\n  if (records.length > 0) {\n    learningsText = '\\n\\n## SYSTEM LEARNINGS (what has worked in past outreach)\\n';\n    for (const rec of records) {\n      const f = rec.fields || {};\n      learningsText += `- [${f.category || 'general'}] ${f.learning || f.insight || f.description || JSON.stringify(f)}\\n`;\n    }\n  }\n} catch (e) {\n  learningsText = '';\n}\n\nconst systemPrompt = `You are Cosmisk's outreach copywriter. Cosmisk is a UGC agency in India offering UGC ads, AI-generated ads, mashup ads, media buying, and ad account audits.\n\nYou write cold outreach messages that get replies. You NEVER write generic, spammy messages.\n\nABSOLUTE BANS \u2014 never use these phrases:\n- \"I hope this email finds you well\"\n- \"I came across your company\"\n- \"I'd love to connect\"\n- \"Let's schedule a quick call\"\n- \"synergy\"\n- \"game-changer\"\n- \"best-in-class\"\n\nRULES:\n1. Open with something SPECIFIC about THEIR business (a recent ad they ran, their industry challenge, their growth stage, a specific product they sell)\n2. Each message MUST be under 150 words\n3. CTA must be a SPECIFIC question, not a generic \"let's chat\"\n4. Subject line must create curiosity without clickbait\n5. Match platform tone: Instagram DM = casual, Email = slightly formal, LinkedIn = professional\n${learningsText}`;\n\nconst userPrompt = `Generate 3 DISTINCT outreach messages for this prospect. Each takes a completely different angle:\n\n**Prospect Details:**\n- Company: ${prospectData.company}\n- Contact: ${prospectData.contact}\n- Platform: ${prospectData.platform}\n- Profile/Website: ${prospectData.profileUrl || 'not provided'}\n- Industry: ${prospectData.industry || 'not specified'}\n\n**Message A \u2014 Pain-Point Focused:**\nIdentify their most likely pain point based on their industry and size. Show how UGC/AI ads specifically solve THAT problem. Be empathetic, not pushy.\n\n**Message B \u2014 Results-Focused:**\nLead with a specific number or case study result (e.g., \"We helped a ${prospectData.industry || 'similar'} brand cut CAC by 40% with UGC\"). Back it with social proof.\n\n**Message C \u2014 Curiosity-Focused:**\nIntriguing hook that makes them want to reply. Minimal pitch. Create an open loop. Ask a question that's hard to ignore.\n\nFor EACH message, also provide:\n- subject_line (for email) or hook_line (for DM)\n- brief research note about the brand (1-2 sentences of what you found/inferred)\n\nReturn as JSON:\n{\n  \"messages\": [\n    {\n      \"angle\": \"pain_point\",\n      \"subject_line\": \"...\",\n      \"body\": \"...\",\n      \"research_note\": \"...\"\n    },\n    {\n      \"angle\": \"results\",\n      \"subject_line\": \"...\",\n      \"body\": \"...\",\n      \"research_note\": \"...\"\n    },\n    {\n      \"angle\": \"curiosity\",\n      \"subject_line\": \"...\",\n      \"body\": \"...\",\n      \"research_note\": \"...\"\n    }\n  ]\n}`;\n\nreturn [{ json: { systemPrompt, userPrompt, recordId, prospect: prospectData } }];"
+        "method": "GET",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblGhzSJ5RXWDS8h8?filterByFormula=AND(DATETIME_DIFF(NOW()%2C%20CREATED_TIME()%2C%20'hours')%20%3C%2072%2COR(%7Bevent_type%7D%3D'lead_action'%2C%7Bevent_type%7D%3D'prospect_found'%2C%7Bevent_type%7D%3D'calendar_booking'))&sort%5B0%5D%5Bfield%5D=created_at&sort%5B0%5D%5Bdirection%5D=desc&maxRecords=20",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "out-fetch-agent-events",
+      "name": "Fetch Recent Agent Events",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [910, 400],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "a0TTu3NVsuJUEbct",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Collect inputs from both parallel branches\nconst prospectData = $('out-validate-prospect').first().json;\nconst recordId = $('out-create-prospect').first().json.id || 'unknown';\n\n// Parse system learnings (may have failed gracefully)\nlet learningsText = '';\ntry {\n  const learningsResp = $('out-fetch-learnings').first().json;\n  const records = learningsResp.records || [];\n  if (records.length > 0) {\n    learningsText = '\\n\\n## SYSTEM LEARNINGS (what has worked in past outreach)\\n';\n    for (const rec of records) {\n      const f = rec.fields || {};\n      learningsText += `- [${f.category || 'general'}] ${f.learning || f.insight || f.description || JSON.stringify(f)}\\n`;\n    }\n  }\n} catch (e) {\n  learningsText = '';\n}\n\n// Cross-agent awareness — recent lead pipeline events\nlet pipelineContext = '';\ntry {\n  const eventRecords = $('Fetch Recent Agent Events').first().json.records || [];\n  if (eventRecords.length > 0) {\n    pipelineContext = '\\n\\n## RECENT PIPELINE ACTIVITY (last 72h)\\n';\n    pipelineContext += eventRecords.map((r, i) => {\n      const f = r.fields;\n      return '- [' + (f.event_type || 'unknown') + '] ' + (f.message || '').substring(0, 150);\n    }).join('\\n');\n    pipelineContext += '\\n\\nUse this context to personalize: if the prospect was found by Prospect Finder, reference how. If similar companies booked calls recently, mention industry momentum.\\n';\n  }\n} catch(e) { pipelineContext = ''; }\n\nconst systemPrompt = `You are Cosmisk's outreach copywriter. Cosmisk is a UGC agency in India offering UGC ads, AI-generated ads, mashup ads, media buying, and ad account audits.\n\nYou write cold outreach messages that get replies. You NEVER write generic, spammy messages.\n\nABSOLUTE BANS \u2014 never use these phrases:\n- \"I hope this email finds you well\"\n- \"I came across your company\"\n- \"I'd love to connect\"\n- \"Let's schedule a quick call\"\n- \"synergy\"\n- \"game-changer\"\n- \"best-in-class\"\n\nRULES:\n1. Open with something SPECIFIC about THEIR business (a recent ad they ran, their industry challenge, their growth stage, a specific product they sell)\n2. Each message MUST be under 150 words\n3. CTA must be a SPECIFIC question, not a generic \"let's chat\"\n4. Subject line must create curiosity without clickbait\n5. Match platform tone: Instagram DM = casual, Email = slightly formal, LinkedIn = professional\n${learningsText}${pipelineContext}`;\n\nconst userPrompt = `Generate 3 DISTINCT outreach messages for this prospect. Each takes a completely different angle:\n\n**Prospect Details:**\n- Company: ${prospectData.company}\n- Contact: ${prospectData.contact}\n- Platform: ${prospectData.platform}\n- Profile/Website: ${prospectData.profileUrl || 'not provided'}\n- Industry: ${prospectData.industry || 'not specified'}\n\n**Message A \u2014 Pain-Point Focused:**\nIdentify their most likely pain point based on their industry and size. Show how UGC/AI ads specifically solve THAT problem. Be empathetic, not pushy.\n\n**Message B \u2014 Results-Focused:**\nLead with a specific number or case study result (e.g., \"We helped a ${prospectData.industry || 'similar'} brand cut CAC by 40% with UGC\"). Back it with social proof.\n\n**Message C \u2014 Curiosity-Focused:**\nIntriguing hook that makes them want to reply. Minimal pitch. Create an open loop. Ask a question that's hard to ignore.\n\nFor EACH message, also provide:\n- subject_line (for email) or hook_line (for DM)\n- brief research note about the brand (1-2 sentences of what you found/inferred)\n\nReturn as JSON:\n{\n  \"messages\": [\n    {\n      \"angle\": \"pain_point\",\n      \"subject_line\": \"...\",\n      \"body\": \"...\",\n      \"research_note\": \"...\"\n    },\n    {\n      \"angle\": \"results\",\n      \"subject_line\": \"...\",\n      \"body\": \"...\",\n      \"research_note\": \"...\"\n    },\n    {\n      \"angle\": \"curiosity\",\n      \"subject_line\": \"...\",\n      \"body\": \"...\",\n      \"research_note\": \"...\"\n    }\n  ]\n}`;\n\nreturn [{ json: { systemPrompt, userPrompt, recordId, prospect: prospectData } }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -1032,6 +1053,17 @@
       "main": [
         [
           {
+            "node": "Fetch Recent Agent Events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Recent Agent Events": {
+      "main": [
+        [
+          {
             "node": "out-create-prospect",
             "type": "main",
             "index": 0
@@ -1610,7 +1642,28 @@
       },
       {
         "parameters": {
-          "jsCode": "// Collect inputs from both parallel branches\nconst prospectData = $('out-validate-prospect').first().json;\nconst recordId = $('out-create-prospect').first().json.id || 'unknown';\n\n// Parse system learnings (may have failed gracefully)\nlet learningsText = '';\ntry {\n  const learningsResp = $('out-fetch-learnings').first().json;\n  const records = learningsResp.records || [];\n  if (records.length > 0) {\n    learningsText = '\\n\\n## SYSTEM LEARNINGS (what has worked in past outreach)\\n';\n    for (const rec of records) {\n      const f = rec.fields || {};\n      learningsText += `- [${f.category || 'general'}] ${f.learning || f.insight || f.description || JSON.stringify(f)}\\n`;\n    }\n  }\n} catch (e) {\n  learningsText = '';\n}\n\nconst systemPrompt = `You are Cosmisk's outreach copywriter. Cosmisk is a UGC agency in India offering UGC ads, AI-generated ads, mashup ads, media buying, and ad account audits.\n\nYou write cold outreach messages that get replies. You NEVER write generic, spammy messages.\n\nABSOLUTE BANS \u2014 never use these phrases:\n- \"I hope this email finds you well\"\n- \"I came across your company\"\n- \"I'd love to connect\"\n- \"Let's schedule a quick call\"\n- \"synergy\"\n- \"game-changer\"\n- \"best-in-class\"\n\nRULES:\n1. Open with something SPECIFIC about THEIR business (a recent ad they ran, their industry challenge, their growth stage, a specific product they sell)\n2. Each message MUST be under 150 words\n3. CTA must be a SPECIFIC question, not a generic \"let's chat\"\n4. Subject line must create curiosity without clickbait\n5. Match platform tone: Instagram DM = casual, Email = slightly formal, LinkedIn = professional\n${learningsText}`;\n\nconst userPrompt = `Generate 3 DISTINCT outreach messages for this prospect. Each takes a completely different angle:\n\n**Prospect Details:**\n- Company: ${prospectData.company}\n- Contact: ${prospectData.contact}\n- Platform: ${prospectData.platform}\n- Profile/Website: ${prospectData.profileUrl || 'not provided'}\n- Industry: ${prospectData.industry || 'not specified'}\n\n**Message A \u2014 Pain-Point Focused:**\nIdentify their most likely pain point based on their industry and size. Show how UGC/AI ads specifically solve THAT problem. Be empathetic, not pushy.\n\n**Message B \u2014 Results-Focused:**\nLead with a specific number or case study result (e.g., \"We helped a ${prospectData.industry || 'similar'} brand cut CAC by 40% with UGC\"). Back it with social proof.\n\n**Message C \u2014 Curiosity-Focused:**\nIntriguing hook that makes them want to reply. Minimal pitch. Create an open loop. Ask a question that's hard to ignore.\n\nFor EACH message, also provide:\n- subject_line (for email) or hook_line (for DM)\n- brief research note about the brand (1-2 sentences of what you found/inferred)\n\nReturn as JSON:\n{\n  \"messages\": [\n    {\n      \"angle\": \"pain_point\",\n      \"subject_line\": \"...\",\n      \"body\": \"...\",\n      \"research_note\": \"...\"\n    },\n    {\n      \"angle\": \"results\",\n      \"subject_line\": \"...\",\n      \"body\": \"...\",\n      \"research_note\": \"...\"\n    },\n    {\n      \"angle\": \"curiosity\",\n      \"subject_line\": \"...\",\n      \"body\": \"...\",\n      \"research_note\": \"...\"\n    }\n  ]\n}`;\n\nreturn [{ json: { systemPrompt, userPrompt, recordId, prospect: prospectData } }];"
+          "method": "GET",
+          "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblGhzSJ5RXWDS8h8?filterByFormula=AND(DATETIME_DIFF(NOW()%2C%20CREATED_TIME()%2C%20'hours')%20%3C%2072%2COR(%7Bevent_type%7D%3D'lead_action'%2C%7Bevent_type%7D%3D'prospect_found'%2C%7Bevent_type%7D%3D'calendar_booking'))&sort%5B0%5D%5Bfield%5D=created_at&sort%5B0%5D%5Bdirection%5D=desc&maxRecords=20",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "options": {}
+        },
+        "id": "out-fetch-agent-events",
+        "name": "Fetch Recent Agent Events",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [910, 400],
+        "onError": "continueRegularOutput",
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "a0TTu3NVsuJUEbct",
+            "name": "Airtable Personal Access Token account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "// Collect inputs from both parallel branches\nconst prospectData = $('out-validate-prospect').first().json;\nconst recordId = $('out-create-prospect').first().json.id || 'unknown';\n\n// Parse system learnings (may have failed gracefully)\nlet learningsText = '';\ntry {\n  const learningsResp = $('out-fetch-learnings').first().json;\n  const records = learningsResp.records || [];\n  if (records.length > 0) {\n    learningsText = '\\n\\n## SYSTEM LEARNINGS (what has worked in past outreach)\\n';\n    for (const rec of records) {\n      const f = rec.fields || {};\n      learningsText += `- [${f.category || 'general'}] ${f.learning || f.insight || f.description || JSON.stringify(f)}\\n`;\n    }\n  }\n} catch (e) {\n  learningsText = '';\n}\n\n// Cross-agent awareness — recent lead pipeline events\nlet pipelineContext = '';\ntry {\n  const eventRecords = $('Fetch Recent Agent Events').first().json.records || [];\n  if (eventRecords.length > 0) {\n    pipelineContext = '\\n\\n## RECENT PIPELINE ACTIVITY (last 72h)\\n';\n    pipelineContext += eventRecords.map((r, i) => {\n      const f = r.fields;\n      return '- [' + (f.event_type || 'unknown') + '] ' + (f.message || '').substring(0, 150);\n    }).join('\\n');\n    pipelineContext += '\\n\\nUse this context to personalize: if the prospect was found by Prospect Finder, reference how. If similar companies booked calls recently, mention industry momentum.\\n';\n  }\n} catch(e) { pipelineContext = ''; }\n\nconst systemPrompt = `You are Cosmisk's outreach copywriter. Cosmisk is a UGC agency in India offering UGC ads, AI-generated ads, mashup ads, media buying, and ad account audits.\n\nYou write cold outreach messages that get replies. You NEVER write generic, spammy messages.\n\nABSOLUTE BANS \u2014 never use these phrases:\n- \"I hope this email finds you well\"\n- \"I came across your company\"\n- \"I'd love to connect\"\n- \"Let's schedule a quick call\"\n- \"synergy\"\n- \"game-changer\"\n- \"best-in-class\"\n\nRULES:\n1. Open with something SPECIFIC about THEIR business (a recent ad they ran, their industry challenge, their growth stage, a specific product they sell)\n2. Each message MUST be under 150 words\n3. CTA must be a SPECIFIC question, not a generic \"let's chat\"\n4. Subject line must create curiosity without clickbait\n5. Match platform tone: Instagram DM = casual, Email = slightly formal, LinkedIn = professional\n${learningsText}${pipelineContext}`;\n\nconst userPrompt = `Generate 3 DISTINCT outreach messages for this prospect. Each takes a completely different angle:\n\n**Prospect Details:**\n- Company: ${prospectData.company}\n- Contact: ${prospectData.contact}\n- Platform: ${prospectData.platform}\n- Profile/Website: ${prospectData.profileUrl || 'not provided'}\n- Industry: ${prospectData.industry || 'not specified'}\n\n**Message A \u2014 Pain-Point Focused:**\nIdentify their most likely pain point based on their industry and size. Show how UGC/AI ads specifically solve THAT problem. Be empathetic, not pushy.\n\n**Message B \u2014 Results-Focused:**\nLead with a specific number or case study result (e.g., \"We helped a ${prospectData.industry || 'similar'} brand cut CAC by 40% with UGC\"). Back it with social proof.\n\n**Message C \u2014 Curiosity-Focused:**\nIntriguing hook that makes them want to reply. Minimal pitch. Create an open loop. Ask a question that's hard to ignore.\n\nFor EACH message, also provide:\n- subject_line (for email) or hook_line (for DM)\n- brief research note about the brand (1-2 sentences of what you found/inferred)\n\nReturn as JSON:\n{\n  \"messages\": [\n    {\n      \"angle\": \"pain_point\",\n      \"subject_line\": \"...\",\n      \"body\": \"...\",\n      \"research_note\": \"...\"\n    },\n    {\n      \"angle\": \"results\",\n      \"subject_line\": \"...\",\n      \"body\": \"...\",\n      \"research_note\": \"...\"\n    },\n    {\n      \"angle\": \"curiosity\",\n      \"subject_line\": \"...\",\n      \"body\": \"...\",\n      \"research_note\": \"...\"\n    }\n  ]\n}`;\n\nreturn [{ json: { systemPrompt, userPrompt, recordId, prospect: prospectData } }];"
         },
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
@@ -2519,6 +2572,17 @@
         ]
       },
       "out-fetch-learnings": {
+        "main": [
+          [
+            {
+              "node": "Fetch Recent Agent Events",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Fetch Recent Agent Events": {
         "main": [
           [
             {

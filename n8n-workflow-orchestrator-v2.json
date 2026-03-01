@@ -1,5 +1,5 @@
 {
-    "updatedAt": "2026-02-25T07:38:02.424Z",
+    "updatedAt": "2026-03-01T08:12:24.932Z",
     "createdAt": "2026-02-24T06:41:19.006Z",
     "id": "DUfrRerxOinES9Cf",
     "name": "Agent 2 \u2014 Intelligent Orchestrator v2",
@@ -161,19 +161,78 @@
             "credentials": {
                 "httpHeaderAuth": {
                     "id": "a0TTu3NVsuJUEbct",
-                    "name": "Airtable PAT Header"
+                    "name": "Airtable Personal Access Token account"
                 }
             },
             "onError": "continueRegularOutput"
         },
         {
             "parameters": {
-                "jsCode": "// ============================================================\n// Build Orchestrator Prompt \u2014 LLM-based reasoning\n// Falls back to SLA-only detection if 0 events or Gemini fails\n// ============================================================\n\nconst fetchResults = [\n  { name: 'Events', data: $('Fetch Unprocessed Events').first().json },\n  { name: 'Projects', data: $('Fetch Active Projects').first().json },\n  { name: 'Brands', data: $('Fetch Brands').first().json }\n];\nconst fetchErrors = [];\nfor (const fr of fetchResults) {\n  if (fr.data.error || fr.data.statusCode >= 400 || (fr.data.statusMessage && fr.data.statusCode)) {\n    fetchErrors.push(`${fr.name}: ${fr.data.error || fr.data.statusMessage || 'HTTP ' + fr.data.statusCode}`);\n  }\n}\nif (fetchErrors.length > 0) {\n  return [{ json: { decisions: [], eventIds: [], decisionCount: 0, eventCount: 0, _error: true, fetchErrors } }];\n}\n\nconst events = $('Fetch Unprocessed Events').first().json.records || [];\nconst projects = $('Fetch Active Projects').first().json.records || [];\nconst brands = $('Fetch Brands').first().json.records || [];\nconst now = new Date();\nconst eventIds = events.map(e => e.id);\n\n// Fetch system learnings (may be empty)\nlet learnings = [];\ntry {\n  learnings = $('Fetch System Learnings').first().json.records || [];\n} catch(e) { learnings = []; }\n\n// === SLA DETECTION (hardcoded fallback \u2014 always runs) ===\nconst slaDecisions = [];\nfor (const project of projects) {\n  const pf = project.fields;\n  const updatedAt = new Date(pf.updated_at || pf.created_at || now);\n  const hoursInStatus = (now - updatedAt) / 3600000;\n\n  if (pf.status === 'PM Review' && hoursInStatus > 24) {\n    slaDecisions.push({\n      type: 'sla_alert', severity: 'warning',\n      project_id: project.id, brand_name: pf.brand_name,\n      client_code: pf.client_code,\n      message: pf.brand_name + ' stuck in PM Review for ' + Math.round(hoursInStatus) + 'h'\n    });\n  }\n  if (pf.status === 'Script Review' && hoursInStatus > 48) {\n    slaDecisions.push({\n      type: 'sla_alert', severity: 'warning',\n      project_id: project.id, brand_name: pf.brand_name,\n      client_code: pf.client_code,\n      message: pf.brand_name + ' stuck in Script Review for ' + Math.round(hoursInStatus) + 'h'\n    });\n  }\n  if (pf.status === 'In Progress' && hoursInStatus > 72) {\n    slaDecisions.push({\n      type: 'sla_alert', severity: 'urgent',\n      project_id: project.id, brand_name: pf.brand_name,\n      client_code: pf.client_code,\n      message: pf.brand_name + ' In Progress for ' + Math.round(hoursInStatus) + 'h \\u2014 may be stuck'\n    });\n  }\n}\n\n// If 0 events, output SLA decisions directly (skip Gemini)\n// Still provide a minimal geminiBody so the HTTP Request node doesn't fail\nif (events.length === 0) {\n  return [{ json: {\n    geminiBody: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'No events to process.' }] }], generationConfig: { maxOutputTokens: 10 } }),\n    decisions: slaDecisions,\n    eventIds: [],\n    decisionCount: slaDecisions.length,\n    eventCount: 0,\n    slaDecisions: slaDecisions,\n    _skipGemini: true\n  } }];\n}\n\n// === BUILD GEMINI PROMPT ===\nlet eventsText = '== CURRENT EVENTS (unprocessed) ==\\n';\nfor (const e of events) {\n  const f = e.fields;\n  let payloadExcerpt = '';\n  try { payloadExcerpt = (f.payload || '').substring(0, 200); } catch(x) {}\n  eventsText += `[${e.id}] ${f.event_type} | agent: ${f.agent || 'unknown'} | brand: ${f.brand_name || 'N/A'} | project: ${f.project_id || 'N/A'} | severity: ${f.severity || 'info'} | ${f.message || ''} | payload: ${payloadExcerpt}\\n`;\n}\n\nlet projectsText = '\\n== ACTIVE PROJECTS ==\\n';\nfor (const p of projects) {\n  const pf = p.fields;\n  const updatedAt = new Date(pf.updated_at || pf.created_at || now);\n  const hoursInStatus = Math.round((now - updatedAt) / 3600000);\n  projectsText += `[${p.id}] ${pf.brand_name || 'Unknown'} | status: ${pf.status || 'N/A'} | ${hoursInStatus}h in status | scripts: ${pf.num_scripts || 0} | client: ${pf.client_code || 'N/A'} | goal: ${(pf.project_goal || 'Not defined').substring(0, 150)}\\n`;\n}\n\nlet brandsText = '\\n== BRANDS ==\\n';\nfor (const b of brands) {\n  const bf = b.fields;\n  brandsText += `[${b.id}] ${bf.brand_name || 'Unknown'} | industry: ${bf.industry || 'N/A'} | website: ${bf.website_url || 'N/A'}\\n`;\n}\n\nlet learningsText = '\\n== SYSTEM LEARNINGS (top 20 by confidence) ==\\n';\nif (learnings.length > 0) {\n  learnings.forEach((l, i) => {\n    const lf = l.fields;\n    learningsText += `[${i+1}] (${lf.category || 'general'}, confidence: ${lf.confidence || 'N/A'}) ${lf.title || 'Untitled'}: ${(lf.insight || lf.learning || lf.content || '').substring(0, 200)}\\n`;\n  });\n} else {\n  learningsText += 'No system learnings available.\\n';\n}\n\nconst systemMessage = 'You are the Orchestrator for a UGC creative agency automation system. You analyze events from various agents and project state to decide what actions to take next. Be conservative \\u2014 only take actions that are clearly warranted by the data. Output ONLY valid JSON.';\n\nconst userPrompt = eventsText + projectsText + brandsText + learningsText + `\\n== ALLOWED ACTIONS (whitelist \\u2014 anything else will be REJECTED) ==\\n1. trigger_phase: { phase: 3|4, project_id: \"recXXX\", client_code: \"ABC-0123\", webhook: \"/webhook/ugc-scripts\" or \"/webhook/ugc-delivery\" }\\n2. notify_client: { project_id: \"recXXX\", brand_name: \"X\", client_code: \"ABC-0123\", message: \"...\" }\\n3. escalate: { severity: \"critical\"|\"high\", brand_name: \"X\", message: \"...\" }\\n4. sla_alert: { severity: \"warning\"|\"urgent\", project_id: \"recXXX\", brand_name: \"X\", message: \"...\" }\\n5. suggest_new_cycle: { project_id: \"recXXX\", brand_name: \"X\", message: \"...\" }\\n6. auto_onboard: { brand_name: \"X\", client_code: \"ABC-0123\" }\\n7. scout_creators: { project_id: \"recXXX\", brand_name: \"X\", niches: [\"X\"], industry: \"X\", budget_max: 10000, count: 5, client_code: \"ABC-0123\" }\\n8. no_action: { reason: \"...\" }\\n\\n== REASONING RULES ==\\n- phase_complete from phase_1 \\u2192 notify PM that research is complete + scout creators for that brand\\n- phase_complete from phase_2 \\u2192 trigger_phase 3 (scripts) + notify client\\n- phase_complete from phase_3 \\u2192 trigger_phase 4 (delivery) + notify client\\n- phase_complete from phase_4 \\u2192 notify client delivery complete\\n- campaign_alert with fatigue \\u2192 suggest_new_cycle ONLY if project has been delivered before\\n- campaign_alert critical \\u2192 escalate immediately\\n- lead_action with stage Won \\u2192 auto_onboard\\n- sla_breach repeated 3+ times \\u2192 escalate\\n- status_change from onboarding \\u2192 notify client\\n- Reference System Learnings when making suggestions or providing context in messages\\n- SLA thresholds: PM Review > 24h = warning, Script Review > 48h = warning, In Progress > 72h = urgent\\n- Consolidate multiple events for same project into fewer actions\\n- NEVER trigger phase 3 unless phase 2 completed (check project status)\\n- NEVER trigger phase 4 unless phase 3 completed (check project status)\\n- NEVER invent actions outside the allowed list\\n- For trigger_phase 3, use webhook: \"/webhook/ugc-scripts\"\\n- For trigger_phase 4, use webhook: \"/webhook/ugc-delivery\"\\n- For scout_creators, infer industry and niches from brand/project data\\n\\n== OUTPUT FORMAT ==\\n{\\n  \"reasoning\": \"Brief 2-3 sentence analysis of the situation\",\\n  \"decisions\": [\\n    { \"type\": \"trigger_phase\", \"eventId\": \"recXXX\", \"phase\": 3, \"project_id\": \"recYYY\", \"client_code\": \"WHE-0217\", \"webhook\": \"/webhook/ugc-scripts\", \"message\": \"...\" },\\n    { \"type\": \"notify_client\", \"eventId\": \"recXXX\", \"project_id\": \"recYYY\", \"brand_name\": \"X\", \"client_code\": \"WHE-0217\", \"message\": \"...\" }\\n  ]\\n}\\n\\nAnalyze the events above and determine the appropriate actions.`;\n\nconst geminiBody = JSON.stringify({\n  systemInstruction: { parts: [{ text: systemMessage }] },\n  contents: [{ role: 'user', parts: [{ text: userPrompt }] }],\n  generationConfig: { temperature: 0.1, maxOutputTokens: 4096, thinkingConfig: { thinkingBudget: 0 } }\n});\n\nreturn [{ json: { geminiBody, eventIds, eventCount: events.length, slaDecisions, _skipGemini: false } }];"
+                "method": "GET",
+                "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Agent_Events",
+                "authentication": "genericCredentialType",
+                "genericAuthType": "httpHeaderAuth",
+                "sendQuery": true,
+                "queryParameters": {
+                    "parameters": [
+                        {
+                            "name": "filterByFormula",
+                            "value": "AND(OR({event_type}='proactive_trigger',{event_type}='pre_alert'), DATETIME_DIFF(NOW(), CREATED_TIME(), 'hours') < 24)"
+                        },
+                        {
+                            "name": "sort[0][field]",
+                            "value": "created_at"
+                        },
+                        {
+                            "name": "sort[0][direction]",
+                            "value": "desc"
+                        },
+                        {
+                            "name": "maxRecords",
+                            "value": "50"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                1100,
+                600
+            ],
+            "id": "orch2-fetch-recent-proactive",
+            "name": "Fetch Recent Proactive Events",
+            "credentials": {
+                "httpHeaderAuth": {
+                    "id": "a0TTu3NVsuJUEbct",
+                    "name": "Airtable Personal Access Token account"
+                }
+            },
+            "onError": "continueRegularOutput"
+        },
+        {
+            "parameters": {
+                "jsCode": "// ============================================================\n// Proactive Analysis v2 \u2014 WITH DEDUPLICATION + THROTTLING\n// Generates deterministic insight_key per pattern.\n// Checks recent proactive events (last 24h) to skip duplicates.\n// Throttle: max 3 suggestions per run, max 1 per brand per 24h.\n// ============================================================\n\nconst now = new Date();\nconst allCandidates = [];\n\n// Safely fetch upstream data\nlet events = [], projects = [], brands = [], learnings = [], recentProactive = [];\ntry { events = $('Fetch Unprocessed Events').first().json.records || []; } catch(e) {}\ntry { projects = $('Fetch Active Projects').first().json.records || []; } catch(e) {}\ntry { brands = $('Fetch Brands').first().json.records || []; } catch(e) {}\ntry { learnings = $('Fetch System Learnings').first().json.records || []; } catch(e) {}\ntry { recentProactive = $('Fetch Recent Proactive Events').first().json.records || []; } catch(e) {}\n\n// === BUILD DEDUP INDEX from recent proactive events ===\nconst recentKeys = new Set();\nconst recentBrandAlerts = {};  // brand_name -> count in last 24h\nfor (const rp of recentProactive) {\n  const rpf = rp.fields || {};\n  // Try to extract insight_key from payload JSON\n  let insightKey = '';\n  try {\n    const payload = typeof rpf.payload === 'string' ? JSON.parse(rpf.payload) : (rpf.payload || {});\n    insightKey = payload.insight_key || '';\n  } catch(e) {}\n  // Fallback key from event_type + brand_name + message prefix\n  if (!insightKey) {\n    insightKey = (rpf.event_type || '') + ':' + (rpf.brand_name || '') + ':' + ((rpf.message || '').substring(0, 80));\n  }\n  recentKeys.add(insightKey);\n  const bn = rpf.brand_name || '';\n  if (bn) recentBrandAlerts[bn] = (recentBrandAlerts[bn] || 0) + 1;\n}\n\n// Helper: hours since a date\nfunction hoursSince(dateStr) {\n  if (!dateStr) return 9999;\n  return (now - new Date(dateStr)) / 3600000;\n}\n\n// Helper: check if insight_key was already sent\nfunction alreadySent(key) {\n  return recentKeys.has(key);\n}\n\n// Helper: check if brand exceeded 1 proactive alert per 24h\nfunction brandThrottled(brandName) {\n  if (!brandName) return false;\n  return (recentBrandAlerts[brandName] || 0) >= 1;\n}\n\n// === 1. PIPELINE VELOCITY: warn at 75% of SLA thresholds ===\nconst slaThresholds = {\n  'Research': { warn: 36, breach: 48 },\n  'PM Review': { warn: 18, breach: 24 },\n  'Script Writing': { warn: 54, breach: 72 },\n  'Script Review': { warn: 36, breach: 48 },\n  'In Progress': { warn: 54, breach: 72 }\n};\nfor (const p of projects) {\n  const pf = p.fields;\n  const status = pf.status || '';\n  const threshold = slaThresholds[status];\n  if (!threshold) continue;\n  const hrs = hoursSince(pf.updated_at || pf.created_at);\n  if (hrs >= threshold.warn && hrs < threshold.breach) {\n    const key = 'pipeline_velocity:' + (pf.client_code || p.id) + ':' + status;\n    if (alreadySent(key) || brandThrottled(pf.brand_name)) continue;\n    allCandidates.push({\n      type: 'pre_alert',\n      severity: 'info',\n      brand_name: pf.brand_name || 'Unknown',\n      project_id: p.id,\n      client_code: pf.client_code || '',\n      insight_key: key,\n      message: (pf.brand_name || 'Project') + ' approaching SLA in \"' + status + '\" (' + Math.round(hrs) + 'h / ' + threshold.breach + 'h limit). Consider nudging.'\n    });\n  }\n}\n\n// === 2. TREND DETECTION: 2+ campaign_alerts for same brand -> suggest rotation ===\nconst alertsByBrand = {};\nfor (const e of events) {\n  const ef = e.fields;\n  if (ef.event_type === 'campaign_alert') {\n    const bn = ef.brand_name || 'unknown';\n    if (!alertsByBrand[bn]) alertsByBrand[bn] = [];\n    alertsByBrand[bn].push(ef);\n  }\n}\nfor (const [brand, alerts] of Object.entries(alertsByBrand)) {\n  if (alerts.length >= 2) {\n    const key = 'suggest_rotation:' + brand;\n    if (alreadySent(key) || brandThrottled(brand)) continue;\n    const fatigueAlerts = alerts.filter(a => (a.message || '').toLowerCase().includes('fatigue'));\n    allCandidates.push({\n      type: 'proactive_trigger',\n      action: 'suggest_rotation',\n      brand_name: brand,\n      insight_key: key,\n      message: brand + ' has ' + alerts.length + ' campaign alerts' + (fatigueAlerts.length > 0 ? ' (including fatigue signals)' : '') + '. Consider creative rotation or new cycle.',\n      webhook: '/webhook/ugc-research'\n    });\n  }\n}\n\n// === 3. RESOURCE FORECASTING: 3+ projects entering scripting -> pre-scout ===\nconst scriptingProjects = projects.filter(p =>\n  p.fields.status === 'Script Writing' || p.fields.status === 'Research'\n);\nif (scriptingProjects.length >= 3) {\n  const brandNames = scriptingProjects.map(p => p.fields.brand_name).filter(Boolean);\n  const key = 'pre_scout:' + brandNames.sort().join(',');\n  if (!alreadySent(key)) {\n    allCandidates.push({\n      type: 'pre_alert',\n      severity: 'info',\n      insight_key: key,\n      message: scriptingProjects.length + ' projects in pipeline (' + brandNames.join(', ') + '). Consider pre-scouting creators to avoid bottleneck.',\n      brand_name: brandNames[0] || ''\n    });\n  }\n}\n\n// === 4. CROSS-BRAND PATTERNS: learning confirmed 3x+ ===\nfor (const l of learnings) {\n  const lf = l.fields;\n  if (!lf.brand_name || !lf.industry) continue;\n  if ((lf.times_confirmed || 0) < 3) continue;\n  const sameBrands = brands.filter(b =>\n    b.fields.industry === lf.industry &&\n    b.fields.brand_name !== lf.brand_name\n  );\n  if (sameBrands.length > 0) {\n    const key = 'cross_brand:' + l.id;\n    if (alreadySent(key) || brandThrottled(lf.brand_name)) continue;\n    allCandidates.push({\n      type: 'pre_alert',\n      severity: 'info',\n      brand_name: lf.brand_name,\n      insight_key: key,\n      message: 'Learning \"' + (lf.title || '').substring(0, 60) + '\" confirmed ' + lf.times_confirmed + 'x for ' + lf.brand_name + '. May benefit: ' + sameBrands.map(b => b.fields.brand_name).join(', ') + ' (same industry: ' + lf.industry + ').'\n    });\n  }\n}\n\n// === 5. ANTICIPATORY TRIGGERS: scripts completed but not repurposed ===\nfor (const e of events) {\n  const ef = e.fields;\n  if (ef.event_type === 'phase_complete' && ef.agent === 'phase_3') {\n    const hasRepurpose = events.some(e2 =>\n      e2.fields.event_type === 'content_repurposed' &&\n      e2.fields.brand_name === ef.brand_name\n    );\n    if (!hasRepurpose) {\n      const key = 'suggest_repurpose:' + (ef.brand_name || '') + ':' + (ef.project_id || '');\n      if (alreadySent(key) || brandThrottled(ef.brand_name)) continue;\n      allCandidates.push({\n        type: 'proactive_trigger',\n        action: 'suggest_repurpose',\n        brand_name: ef.brand_name || '',\n        project_id: ef.project_id || '',\n        insight_key: key,\n        message: 'Scripts completed for ' + (ef.brand_name || 'brand') + ' but not yet repurposed. Trigger /repurpose to generate variations.',\n        webhook: '/webhook/repurpose'\n      });\n    }\n  }\n}\n\n// === GLOBAL THROTTLE: max 3 suggestions per run ===\nconst suggestions = allCandidates.slice(0, 3);\n\n// Pass through to Build Orchestrator Prompt\nreturn [{ json: {\n  proactiveSuggestions: suggestions,\n  suggestionCount: suggestions.length,\n  _dedupStats: {\n    candidatesBeforeDedup: allCandidates.length,\n    recentProactiveEventsChecked: recentProactive.length,\n    recentKeysKnown: recentKeys.size,\n    brandThrottleCounts: recentBrandAlerts\n  }\n} }];"
             },
             "type": "n8n-nodes-base.code",
             "typeVersion": 2,
             "position": [
-                1250,
+                1150,
+                400
+            ],
+            "id": "orch2-proactive-analysis",
+            "name": "Proactive Analysis",
+            "onError": "continueRegularOutput"
+        },
+        {
+            "parameters": {
+                "jsCode": "// ============================================================\n// Build Orchestrator Prompt v2 \u2014 LLM-based reasoning\n// WITH DEDUP CONTEXT: injects recently-sent proactive alerts\n// Falls back to SLA-only detection if 0 events or Gemini fails\n// ============================================================\n\nconst fetchResults = [\n  { name: 'Events', data: $('Fetch Unprocessed Events').first().json },\n  { name: 'Projects', data: $('Fetch Active Projects').first().json },\n  { name: 'Brands', data: $('Fetch Brands').first().json }\n];\nconst fetchErrors = [];\nfor (const fr of fetchResults) {\n  if (fr.data.error || fr.data.statusCode >= 400 || (fr.data.statusMessage && fr.data.statusCode)) {\n    fetchErrors.push(`${fr.name}: ${fr.data.error || fr.data.statusMessage || 'HTTP ' + fr.data.statusCode}`);\n  }\n}\nif (fetchErrors.length > 0) {\n  return [{ json: { decisions: [], eventIds: [], decisionCount: 0, eventCount: 0, _error: true, fetchErrors } }];\n}\n\nconst events = $('Fetch Unprocessed Events').first().json.records || [];\nconst projects = $('Fetch Active Projects').first().json.records || [];\nconst brands = $('Fetch Brands').first().json.records || [];\nconst now = new Date();\nconst eventIds = events.map(e => e.id);\n\n// Fetch system learnings (may be empty)\nlet learnings = [];\ntry {\n  learnings = $('Fetch System Learnings').first().json.records || [];\n} catch(e) { learnings = []; }\n\n// Fetch recent proactive events for dedup context\nlet recentProactive = [];\ntry {\n  recentProactive = $('Fetch Recent Proactive Events').first().json.records || [];\n} catch(e) { recentProactive = []; }\n\n// === SLA DETECTION (hardcoded fallback \u2014 always runs) ===\nconst slaDecisions = [];\nfor (const project of projects) {\n  const pf = project.fields;\n  const updatedAt = new Date(pf.updated_at || pf.created_at || now);\n  const hoursInStatus = (now - updatedAt) / 3600000;\n\n  if (pf.status === 'PM Review' && hoursInStatus > 24) {\n    slaDecisions.push({\n      type: 'sla_alert', severity: 'warning',\n      project_id: project.id, brand_name: pf.brand_name,\n      client_code: pf.client_code,\n      message: pf.brand_name + ' stuck in PM Review for ' + Math.round(hoursInStatus) + 'h'\n    });\n  }\n  if (pf.status === 'Script Review' && hoursInStatus > 48) {\n    slaDecisions.push({\n      type: 'sla_alert', severity: 'warning',\n      project_id: project.id, brand_name: pf.brand_name,\n      client_code: pf.client_code,\n      message: pf.brand_name + ' stuck in Script Review for ' + Math.round(hoursInStatus) + 'h'\n    });\n  }\n  if (pf.status === 'In Progress' && hoursInStatus > 72) {\n    slaDecisions.push({\n      type: 'sla_alert', severity: 'urgent',\n      project_id: project.id, brand_name: pf.brand_name,\n      client_code: pf.client_code,\n      message: pf.brand_name + ' In Progress for ' + Math.round(hoursInStatus) + 'h \\u2014 may be stuck'\n    });\n  }\n}\n\n// Read proactive suggestions BEFORE skip-check so they're never lost\nconst proactive = $('Proactive Analysis').first().json.proactiveSuggestions || [];\n\n// If 0 events AND 0 proactive suggestions, output SLA decisions directly (skip Gemini)\nif (events.length === 0 && proactive.length === 0) {\n  return [{ json: {\n    geminiBody: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'No events to process.' }] }], generationConfig: { maxOutputTokens: 10 } }),\n    decisions: slaDecisions,\n    eventIds: [],\n    decisionCount: slaDecisions.length,\n    eventCount: 0,\n    slaDecisions: slaDecisions,\n    _skipGemini: true\n  } }];\n}\n\n// === BUILD GEMINI PROMPT ===\nlet eventsText = '== CURRENT EVENTS (unprocessed) ==\\n';\nfor (const e of events) {\n  const f = e.fields;\n  let payloadExcerpt = '';\n  try { payloadExcerpt = (f.payload || '').substring(0, 200); } catch(x) {}\n  eventsText += `[${e.id}] ${f.event_type} | agent: ${f.agent || 'unknown'} | brand: ${f.brand_name || 'N/A'} | project: ${f.project_id || 'N/A'} | severity: ${f.severity || 'info'} | ${f.message || ''} | payload: ${payloadExcerpt}\\n`;\n}\n\nlet projectsText = '\\n== ACTIVE PROJECTS ==\\n';\nfor (const p of projects) {\n  const pf = p.fields;\n  const updatedAt = new Date(pf.updated_at || pf.created_at || now);\n  const hoursInStatus = Math.round((now - updatedAt) / 3600000);\n  projectsText += `[${p.id}] ${pf.brand_name || 'Unknown'} | status: ${pf.status || 'N/A'} | ${hoursInStatus}h in status | scripts: ${pf.num_scripts || 0} | client: ${pf.client_code || 'N/A'} | goal: ${(pf.project_goal || 'Not defined').substring(0, 150)}\\n`;\n}\n\nlet brandsText = '\\n== BRANDS ==\\n';\nfor (const b of brands) {\n  const bf = b.fields;\n  brandsText += `[${b.id}] ${bf.brand_name || 'Unknown'} | industry: ${bf.industry || 'N/A'} | website: ${bf.website_url || 'N/A'}\\n`;\n}\n\nlet learningsText = '\\n== SYSTEM LEARNINGS (top 20 by confidence) ==\\n';\nif (learnings.length > 0) {\n  learnings.forEach((l, i) => {\n    const lf = l.fields;\n    learningsText += `[${i+1}] (${lf.category || 'general'}, confidence: ${lf.confidence || 'N/A'}) ${lf.title || 'Untitled'}: ${(lf.insight || lf.learning || lf.content || '').substring(0, 200)}\\n`;\n  });\n} else {\n  learningsText += 'No system learnings available.\\n';\n}\n\n// Proactive suggestions already read above (before skip-check)\nlet proactiveText = '\\n== PROACTIVE INSIGHTS (deterministic pattern detection, already deduplicated) ==\\n';\nif (proactive.length > 0) {\n  proactive.forEach((s, i) => {\n    proactiveText += `[${i+1}] type: ${s.type} | brand: ${s.brand_name || 'N/A'} | key: ${s.insight_key || 'N/A'} | ${s.message}\\n`;\n  });\n  proactiveText += '\\nNote: These suggestions have ALREADY been deduplicated against the last 24h of proactive events. Include them as pre_alert or proactive_trigger decisions.\\n';\n} else {\n  proactiveText += 'No proactive patterns detected this cycle (all patterns already alerted in last 24h, or no patterns found).\\n';\n}\n\n// Build dedup context for Gemini\nlet dedupText = '\\n== RECENTLY SENT PROACTIVE ALERTS (last 24h \u2014 DO NOT REPEAT) ==\\n';\nif (recentProactive.length > 0) {\n  const recentBrands = new Set();\n  recentProactive.forEach((rp, i) => {\n    const rpf = rp.fields || {};\n    if (i < 10) {  // Show max 10 recent alerts\n      dedupText += `- ${rpf.event_type || 'unknown'} | brand: ${rpf.brand_name || 'N/A'} | ${(rpf.message || '').substring(0, 120)}\\n`;\n    }\n    if (rpf.brand_name) recentBrands.add(rpf.brand_name);\n  });\n  if (recentProactive.length > 10) {\n    dedupText += `... and ${recentProactive.length - 10} more\\n`;\n  }\n  dedupText += '\\nCRITICAL DEDUP RULE: Do NOT generate pre_alert or proactive_trigger decisions for brands that already appear above (' + Array.from(recentBrands).join(', ') + '). These brands have already been alerted in the last 24 hours. Only generate proactive decisions for NEW patterns not listed above.\\n';\n} else {\n  dedupText += 'No recent proactive alerts. You may generate new proactive insights if patterns warrant them.\\n';\n}\n\nconst systemMessage = 'You are the Orchestrator for a UGC creative agency automation system. You analyze events from various agents and project state to decide what actions to take next. Be conservative \\u2014 only take actions that are clearly warranted by the data. NEVER repeat proactive alerts that were already sent in the last 24 hours. Output ONLY valid JSON.';\n\nconst userPrompt = eventsText + projectsText + brandsText + learningsText + proactiveText + dedupText + `\\n== ALLOWED ACTIONS (whitelist \\u2014 anything else will be REJECTED) ==\\n1. trigger_phase: { phase: 3|4, project_id: \"recXXX\", client_code: \"ABC-0123\", webhook: \"/webhook/ugc-scripts\" or \"/webhook/ugc-delivery\" }\\n2. notify_client: { project_id: \"recXXX\", brand_name: \"X\", client_code: \"ABC-0123\", message: \"...\" }\\n3. escalate: { severity: \"critical\"|\"high\", brand_name: \"X\", message: \"...\" }\\n4. sla_alert: { severity: \"warning\"|\"urgent\", project_id: \"recXXX\", brand_name: \"X\", message: \"...\" }\\n5. suggest_new_cycle: { project_id: \"recXXX\", brand_name: \"X\", message: \"...\" }\\n6. auto_onboard: { brand_name: \"X\", client_code: \"ABC-0123\" }\\n7. scout_creators: { project_id: \"recXXX\", brand_name: \"X\", niches: [\"X\"], industry: \"X\", budget_max: 10000, count: 5, client_code: \"ABC-0123\" }\\n8. no_action: { reason: \"...\" }\\n9. pre_alert: { severity: \"info\", brand_name: \"X\", message: \"...\", project_id: \"recXXX\" (optional), insight_key: \"...\" }\\n10. proactive_trigger: { action: \"suggest_rotation\"|\"suggest_repurpose\", brand_name: \"X\", message: \"...\", webhook: \"/webhook/...\" (optional), insight_key: \"...\" }\\n\\n== REASONING RULES ==\\n- phase_complete from phase_1 \\u2192 notify PM that research is complete + scout creators for that brand\\n- phase_complete from phase_2 \\u2192 trigger_phase 3 (scripts) + notify client\\n- phase_complete from phase_3 \\u2192 trigger_phase 4 (delivery) + notify client\\n- phase_complete from phase_4 \\u2192 notify client delivery complete\\n- campaign_alert with fatigue \\u2192 suggest_new_cycle ONLY if project has been delivered before\\n- campaign_alert critical \\u2192 escalate immediately\\n- lead_action with stage Won \\u2192 auto_onboard\\n- sla_breach repeated 3+ times \\u2192 escalate\\n- status_change from onboarding \\u2192 notify client\\n- Reference System Learnings when making suggestions or providing context in messages\\n- SLA thresholds: PM Review > 24h = warning, Script Review > 48h = warning, In Progress > 72h = urgent\\n- Consolidate multiple events for same project into fewer actions\\n- NEVER trigger phase 3 unless phase 2 completed (check project status)\\n- NEVER trigger phase 4 unless phase 3 completed (check project status)\\n- NEVER invent actions outside the allowed list\\n- NEVER generate pre_alert or proactive_trigger for brands already alerted in RECENTLY SENT section\\n- For trigger_phase 3, use webhook: \"/webhook/ugc-scripts\"\\n- For trigger_phase 4, use webhook: \"/webhook/ugc-delivery\"\\n- For scout_creators, infer industry and niches from brand/project data\\n- For pre_alert and proactive_trigger, ALWAYS include the insight_key from the PROACTIVE INSIGHTS section\\n\\n== OUTPUT FORMAT ==\\n{\\n  \"reasoning\": \"Brief 2-3 sentence analysis of the situation\",\\n  \"decisions\": [\\n    { \"type\": \"trigger_phase\", \"eventId\": \"recXXX\", \"phase\": 3, \"project_id\": \"recYYY\", \"client_code\": \"WHE-0217\", \"webhook\": \"/webhook/ugc-scripts\", \"message\": \"...\" },\\n    { \"type\": \"notify_client\", \"eventId\": \"recXXX\", \"project_id\": \"recYYY\", \"brand_name\": \"X\", \"client_code\": \"WHE-0217\", \"message\": \"...\" }\\n  ]\\n}\\n\\nAnalyze the events above and determine the appropriate actions.`;\n\nconst geminiBody = JSON.stringify({\n  systemInstruction: { parts: [{ text: systemMessage }] },\n  contents: [{ role: 'user', parts: [{ text: userPrompt }] }],\n  generationConfig: { temperature: 0.1, maxOutputTokens: 4096, thinkingConfig: { thinkingBudget: 0 } }\n});\n\nreturn [{ json: { geminiBody, eventIds, eventCount: events.length, slaDecisions, _skipGemini: false } }];"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                1350,
                 400
             ],
             "id": "orch2-decision-engine",
@@ -207,7 +266,7 @@
         },
         {
             "parameters": {
-                "jsCode": "// ============================================================\n// Parse Gemini response and validate decisions\n// Merges LLM decisions with hardcoded SLA decisions\n// Falls back gracefully on parse failure\n// ============================================================\n\nconst upstream = $('Build Orchestrator Prompt').first().json;\nconst slaDecisions = upstream.slaDecisions || [];\nconst eventIds = upstream.eventIds || [];\n\n// If Gemini was skipped (0 events), output SLA decisions only\nif (upstream._skipGemini) {\n  return [{ json: {\n    decisions: slaDecisions,\n    eventIds,\n    decisionCount: slaDecisions.length,\n    eventCount: 0\n  } }];\n}\n\n// Allowed action types\nconst allowedTypes = ['trigger_phase', 'notify_client', 'escalate', 'sla_alert', 'suggest_new_cycle', 'auto_onboard', 'scout_creators', 'no_action'];\n\n// Required fields per action type\nconst requiredFields = {\n  trigger_phase: ['phase', 'project_id'],\n  notify_client: ['message', 'brand_name'],\n  escalate: ['severity', 'message'],\n  sla_alert: ['severity', 'message'],\n  suggest_new_cycle: ['brand_name', 'message'],\n  auto_onboard: ['brand_name'],\n  scout_creators: ['brand_name'],\n  no_action: ['reason']\n};\n\nlet llmDecisions = [];\nlet reasoning = '';\n\ntry {\n  const geminiResponse = $input.first().json;\n  let rawText = '';\n  \n  // Extract text from Gemini response\n  if (geminiResponse.candidates && geminiResponse.candidates[0]) {\n    rawText = geminiResponse.candidates[0].content.parts[0].text || '';\n  } else if (geminiResponse.error) {\n    // Gemini returned an error \\u2014 fall back to SLA only\n    return [{ json: {\n      decisions: slaDecisions,\n      eventIds,\n      decisionCount: slaDecisions.length,\n      eventCount: upstream.eventCount,\n      _geminiError: geminiResponse.error.message || 'Unknown Gemini error'\n    } }];\n  }\n\n  // Strip markdown code fences\n  rawText = rawText.replace(/^```json\\s*/i, '').replace(/^```\\s*/m, '').replace(/\\s*```\\s*$/m, '').trim();\n\n  const parsed = JSON.parse(rawText);\n  reasoning = parsed.reasoning || '';\n  const rawDecisions = parsed.decisions || [];\n\n  // Validate each decision\n  for (const d of rawDecisions) {\n    if (!d.type || !allowedTypes.includes(d.type)) continue;\n    if (d.type === 'no_action') continue; // Skip no-action entries\n\n    // Check required fields\n    const required = requiredFields[d.type] || [];\n    const missing = required.filter(f => !d[f] && d[f] !== 0);\n    if (missing.length > 0) continue; // Skip invalid decisions\n\n    // Add event reference and message if missing\n    const decision = {\n      type: d.type,\n      eventId: d.eventId || eventIds[0] || '',\n      ...d,\n      message: d.message || `${d.type} action for ${d.brand_name || 'unknown'}`\n    };\n\n    // For trigger_phase, ensure webhook is set\n    if (d.type === 'trigger_phase') {\n      if (d.phase === 3) decision.webhook = '/webhook/ugc-scripts';\n      if (d.phase === 4) decision.webhook = '/webhook/ugc-delivery';\n    }\n\n    llmDecisions.push(decision);\n  }\n} catch (e) {\n  // JSON parse failed \\u2014 fall back to SLA decisions only\n  return [{ json: {\n    decisions: slaDecisions,\n    eventIds,\n    decisionCount: slaDecisions.length,\n    eventCount: upstream.eventCount,\n    _parseError: e.message\n  } }];\n}\n\n// Merge: LLM decisions + SLA decisions (deduplicate by project_id + type)\nconst seen = new Set();\nconst merged = [];\n\nfor (const d of llmDecisions) {\n  const key = `${d.type}:${d.project_id || d.brand_name || ''}`;\n  if (!seen.has(key)) {\n    seen.add(key);\n    merged.push(d);\n  }\n}\n\nfor (const d of slaDecisions) {\n  const key = `${d.type}:${d.project_id || d.brand_name || ''}`;\n  if (!seen.has(key)) {\n    seen.add(key);\n    merged.push(d);\n  }\n}\n\nreturn [{ json: {\n  decisions: merged,\n  eventIds,\n  decisionCount: merged.length,\n  eventCount: upstream.eventCount,\n  reasoning\n} }];"
+                "jsCode": "// ============================================================\n// Parse Gemini response and validate decisions\n// Merges LLM decisions with hardcoded SLA decisions\n// Falls back gracefully on parse failure\n// ============================================================\n\nconst upstream = $('Build Orchestrator Prompt').first().json;\nconst slaDecisions = upstream.slaDecisions || [];\nconst eventIds = upstream.eventIds || [];\n\n// If Gemini was skipped (0 events), output SLA decisions only\nif (upstream._skipGemini) {\n  return [{ json: {\n    decisions: slaDecisions,\n    eventIds,\n    decisionCount: slaDecisions.length,\n    eventCount: 0\n  } }];\n}\n\n// Allowed action types\nconst allowedTypes = ['trigger_phase', 'notify_client', 'escalate', 'sla_alert', 'suggest_new_cycle', 'auto_onboard', 'scout_creators', 'no_action', 'pre_alert', 'proactive_trigger'];\n\n// Required fields per action type\nconst requiredFields = {\n  trigger_phase: ['phase', 'project_id'],\n  notify_client: ['message', 'brand_name'],\n  escalate: ['severity', 'message'],\n  sla_alert: ['severity', 'message'],\n  suggest_new_cycle: ['brand_name', 'message'],\n  auto_onboard: ['brand_name'],\n  scout_creators: ['brand_name'],\n  no_action: ['reason'],\n  pre_alert: ['message'],\n  proactive_trigger: ['action', 'message']\n};\n\nlet llmDecisions = [];\nlet reasoning = '';\n\ntry {\n  const geminiResponse = $input.first().json;\n  let rawText = '';\n  \n  // Extract text from Gemini response\n  if (geminiResponse.candidates && geminiResponse.candidates[0]) {\n    rawText = geminiResponse.candidates[0].content.parts[0].text || '';\n  } else if (geminiResponse.error) {\n    // Gemini returned an error \\u2014 fall back to SLA only\n    return [{ json: {\n      decisions: slaDecisions,\n      eventIds,\n      decisionCount: slaDecisions.length,\n      eventCount: upstream.eventCount,\n      _geminiError: geminiResponse.error.message || 'Unknown Gemini error'\n    } }];\n  }\n\n  // Strip markdown code fences\n  rawText = rawText.replace(/^```json\\s*/i, '').replace(/^```\\s*/m, '').replace(/\\s*```\\s*$/m, '').trim();\n\n  const parsed = JSON.parse(rawText);\n  reasoning = parsed.reasoning || '';\n  const rawDecisions = parsed.decisions || [];\n\n  // Validate each decision\n  for (const d of rawDecisions) {\n    if (!d.type || !allowedTypes.includes(d.type)) continue;\n    if (d.type === 'no_action') continue; // Skip no-action entries\n\n    // Check required fields\n    const required = requiredFields[d.type] || [];\n    const missing = required.filter(f => !d[f] && d[f] !== 0);\n    if (missing.length > 0) continue; // Skip invalid decisions\n\n    // Add event reference and message if missing\n    const decision = {\n      type: d.type,\n      eventId: d.eventId || eventIds[0] || '',\n      ...d,\n      message: d.message || `${d.type} action for ${d.brand_name || 'unknown'}`\n    };\n\n    // For trigger_phase, ensure webhook is set\n    if (d.type === 'trigger_phase') {\n      if (d.phase === 3) decision.webhook = '/webhook/ugc-scripts';\n      if (d.phase === 4) decision.webhook = '/webhook/ugc-delivery';\n    }\n\n    llmDecisions.push(decision);\n  }\n} catch (e) {\n  // JSON parse failed \\u2014 fall back to SLA decisions only\n  return [{ json: {\n    decisions: slaDecisions,\n    eventIds,\n    decisionCount: slaDecisions.length,\n    eventCount: upstream.eventCount,\n    _parseError: e.message\n  } }];\n}\n\n// Merge: LLM decisions + SLA decisions (deduplicate by project_id + type)\nconst seen = new Set();\nconst merged = [];\n\nfor (const d of llmDecisions) {\n  const key = `${d.type}:${d.project_id || d.brand_name || ''}`;\n  if (!seen.has(key)) {\n    seen.add(key);\n    merged.push(d);\n  }\n}\n\nfor (const d of slaDecisions) {\n  const key = `${d.type}:${d.project_id || d.brand_name || ''}`;\n  if (!seen.has(key)) {\n    seen.add(key);\n    merged.push(d);\n  }\n}\n\nreturn [{ json: {\n  decisions: merged,\n  eventIds,\n  decisionCount: merged.length,\n  eventCount: upstream.eventCount,\n  reasoning\n} }];"
             },
             "type": "n8n-nodes-base.code",
             "typeVersion": 2,
@@ -296,6 +355,14 @@
                         {
                             "value2": "scout_creators",
                             "output": 6
+                        },
+                        {
+                            "value2": "pre_alert",
+                            "output": 7
+                        },
+                        {
+                            "value2": "proactive_trigger",
+                            "output": 8
                         }
                     ]
                 }
@@ -505,7 +572,7 @@
                 "nodeCredentialType": "airtableTokenApi",
                 "sendBody": true,
                 "specifyBody": "json",
-                "jsonBody": "={{ JSON.stringify({ records: [{ fields: { agent: 'orchestrator', event_type: 'decision_made', severity: ($json.failedCount > 0 ? 'warning' : 'info'), message: 'Orchestrator processed ' + $('Parse & Validate Decisions').first().json.eventCount + ' events, made ' + $('Parse & Validate Decisions').first().json.decisionCount + ' decisions' + ($json.failedCount > 0 ? ' (' + $json.failedCount + ' action failures)' : '') + ($('Parse & Validate Decisions').first().json.reasoning ? ' | Reasoning: ' + $('Parse & Validate Decisions').first().json.reasoning.substring(0, 200) : ''), payload: JSON.stringify({ decisions_summary: $('Parse & Validate Decisions').first().json.decisions.map(function(d) { return d.type + ': ' + (d.message || '').substring(0, 100); }), failed_actions: $json.failedCount || 0, reasoning: $('Parse & Validate Decisions').first().json.reasoning || '' }), consumed_by: 'orchestrator', created_at: new Date().toISOString() } }] }) }}",
+                "jsonBody": "={{ JSON.stringify({ records: [{ fields: { agent: 'orchestrator', event_type: 'decision_made', severity: ($json.failedCount > 0 ? 'warning' : 'info'), message: 'Orchestrator processed ' + $('Parse & Validate Decisions').first().json.eventCount + ' events, made ' + $('Parse & Validate Decisions').first().json.decisionCount + ' decisions' + ($json.failedCount > 0 ? ' (' + $json.failedCount + ' action failures)' : '') + ($('Parse & Validate Decisions').first().json.reasoning ? ' | Reasoning: ' + $('Parse & Validate Decisions').first().json.reasoning.substring(0, 200) : ''), payload: JSON.stringify({ decisions_summary: $('Parse & Validate Decisions').first().json.decisions.map(function(d) { return d.type + ':' + (d.insight_key || '') + ':' + (d.message || '').substring(0, 100); }), insight_keys: $('Parse & Validate Decisions').first().json.decisions.filter(function(d) { return d.insight_key; }).map(function(d) { return d.insight_key; }), failed_actions: $json.failedCount || 0, reasoning: $('Parse & Validate Decisions').first().json.reasoning || '' }), consumed_by: 'orchestrator', created_at: new Date().toISOString() } }] }) }}",
                 "options": {}
             },
             "type": "n8n-nodes-base.httpRequest",
@@ -635,7 +702,75 @@
         },
         {
             "parameters": {
-                "jsCode": "// ============================================================\n// Curate Learnings — decay, merge duplicates, promote cross-brand\n// Runs after decision execution to avoid parallel-merge issues\n// ============================================================\n\nlet learnings = [];\ntry {\n  learnings = $('Fetch System Learnings').first().json.records || [];\n} catch(e) { return [{ json: { updates: [], _skip: true } }]; }\n\nif (learnings.length === 0) return [{ json: { updates: [], _skip: true } }];\n\nconst now = new Date();\nconst updates = [];\nconst toRetire = [];\nconst toMerge = [];\n\n// 1. DECAY: Reduce decay_score based on age since last_confirmed_at\nfor (const l of learnings) {\n  const f = l.fields;\n  const lastConfirmed = f.last_confirmed_at ? new Date(f.last_confirmed_at) : new Date(f.created_at);\n  const weeksSinceConfirmed = (now - lastConfirmed) / (7 * 24 * 3600000);\n  const currentDecay = f.decay_score !== undefined ? f.decay_score : (f.confidence || 5);\n  const newDecay = Math.max(0, currentDecay - (weeksSinceConfirmed * 0.1));\n\n  // Retire if below 3.0\n  if (newDecay < 3.0) {\n    toRetire.push({ id: l.id, fields: { active: false, decay_score: newDecay } });\n  } else if (Math.abs(newDecay - currentDecay) > 0.05) {\n    // Only update if decay changed meaningfully\n    updates.push({ id: l.id, fields: { decay_score: Math.round(newDecay * 10) / 10 } });\n  }\n}\n\n// 2. MERGE: Find similar learnings (same brand + >70% word overlap)\nfunction wordSet(text) {\n  return new Set((text || '').toLowerCase().replace(/[^a-z0-9\\s]/g, '').split(/\\s+/).filter(w => w.length > 2));\n}\nfunction overlap(a, b) {\n  const setA = wordSet(a);\n  const setB = wordSet(b);\n  if (setA.size === 0 || setB.size === 0) return 0;\n  let common = 0;\n  for (const w of setA) if (setB.has(w)) common++;\n  return common / Math.max(setA.size, setB.size);\n}\n\nconst merged = new Set();\nfor (let i = 0; i < learnings.length; i++) {\n  if (merged.has(learnings[i].id)) continue;\n  for (let j = i + 1; j < learnings.length; j++) {\n    if (merged.has(learnings[j].id)) continue;\n    const fi = learnings[i].fields;\n    const fj = learnings[j].fields;\n    // Same brand (or both agency-wide)\n    if ((fi.brand_name || '') !== (fj.brand_name || '')) continue;\n    const sim = overlap(fi.insight || fi.learning || '', fj.insight || fj.learning || '');\n    if (sim > 0.7) {\n      // Merge: keep the one with higher confidence, retire the other\n      const keepIdx = (fi.confidence || 0) >= (fj.confidence || 0) ? i : j;\n      const retireIdx = keepIdx === i ? j : i;\n      const keep = learnings[keepIdx];\n      const retire = learnings[retireIdx];\n      toMerge.push({\n        keep: { id: keep.id, fields: {\n          times_confirmed: (keep.fields.times_confirmed || 1) + (retire.fields.times_confirmed || 1),\n          decay_score: Math.max(keep.fields.decay_score || keep.fields.confidence || 5, retire.fields.decay_score || retire.fields.confidence || 5)\n        }},\n        retire: { id: retire.id, fields: { active: false } }\n      });\n      merged.add(retire.id);\n    }\n  }\n}\n\n// 3. PROMOTE: Brand-specific learning appearing in 3+ brands -> create agency-wide\nconst byInsight = {};\nfor (const l of learnings) {\n  const f = l.fields;\n  if (!f.brand_name) continue; // skip agency-wide\n  const key = (f.category || '') + ':' + ((f.insight || f.learning || '').substring(0, 50));\n  if (!byInsight[key]) byInsight[key] = { brands: new Set(), learning: f };\n  byInsight[key].brands.add(f.brand_name);\n}\nconst promotions = [];\nfor (const [key, data] of Object.entries(byInsight)) {\n  if (data.brands.size >= 3) {\n    // Check if agency-wide version already exists\n    const existing = learnings.find(l => !l.fields.brand_name && overlap(l.fields.insight || l.fields.learning || '', data.learning.insight || data.learning.learning || '') > 0.7);\n    if (!existing) {\n      promotions.push({\n        fields: {\n          title: (data.learning.title || 'Promoted learning') + ' (cross-brand)',\n          source_agent: 'orchestrator',\n          category: data.learning.category,\n          insight: data.learning.insight || data.learning.learning,\n          evidence: 'Confirmed across brands: ' + Array.from(data.brands).join(', '),\n          confidence: Math.min(10, (data.learning.confidence || 5) + 1),\n          decay_score: Math.min(10, (data.learning.confidence || 5) + 1),\n          times_confirmed: data.brands.size,\n          last_confirmed_at: now.toISOString(),\n          active: true,\n          brand_name: '',\n          industry: data.learning.industry || '',\n          created_at: now.toISOString()\n        }\n      });\n    }\n  }\n}\n\n// Build batch update records\nconst allUpdates = [...updates];\nfor (const r of toRetire) allUpdates.push(r);\nfor (const m of toMerge) {\n  allUpdates.push(m.keep);\n  allUpdates.push(m.retire);\n}\n\n// Batch into groups of 10\nconst batches = [];\nfor (let i = 0; i < allUpdates.length; i += 10) {\n  batches.push(allUpdates.slice(i, i + 10));\n}\n\nreturn [{ json: {\n  updateBatches: batches,\n  promotions: promotions,\n  stats: {\n    total: learnings.length,\n    decayed: updates.length,\n    retired: toRetire.length,\n    merged: toMerge.length,\n    promoted: promotions.length\n  },\n  _skip: allUpdates.length === 0 && promotions.length === 0\n}}];"
+                "select": "channel",
+                "channelId": {
+                    "__rl": true,
+                    "value": "C0AGQ8RH0NP",
+                    "mode": "id"
+                },
+                "text": "=:crystal_ball: *Proactive Insight*\n{{ $json.message }}\n\n_Brand:_ {{ $json.brand_name || 'N/A' }}\n_Detected by:_ Orchestrator v2 (pattern analysis)",
+                "otherOptions": {}
+            },
+            "type": "n8n-nodes-base.slack",
+            "typeVersion": 2.2,
+            "position": [
+                2850,
+                1400
+            ],
+            "id": "orch2-pre-alert",
+            "name": "Slack \u2014 Pre-Alert",
+            "credentials": {
+                "slackApi": {
+                    "id": "5Q37UpOjGx4YsbyC",
+                    "name": "Slack account"
+                }
+            },
+            "onError": "continueRegularOutput"
+        },
+        {
+            "parameters": {
+                "jsCode": "// Handle proactive triggers \u2014 format for Slack notification\nconst d = $json;\nconst action = d.action || 'unknown';\nconst emoji = action === 'suggest_rotation' ? ':arrows_counterclockwise:' : action === 'suggest_repurpose' ? ':recycle:' : ':robot_face:';\nconst label = action === 'suggest_rotation' ? 'Creative Rotation Suggested' : action === 'suggest_repurpose' ? 'Content Repurposing Opportunity' : 'Proactive Suggestion';\n\nreturn [{ json: {\n  ...d,\n  _emoji: emoji,\n  _label: label,\n  _slackText: emoji + ' *' + label + '*\\n' + (d.message || 'No details') + '\\n\\n_Brand:_ ' + (d.brand_name || 'N/A') + '\\n_Action:_ `' + action + '`\\n_Detected by:_ Orchestrator v2 (pattern analysis)'\n} }];"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                2850,
+                1600
+            ],
+            "id": "orch2-handle-proactive",
+            "name": "Handle Proactive Trigger",
+            "onError": "continueRegularOutput"
+        },
+        {
+            "parameters": {
+                "select": "channel",
+                "channelId": {
+                    "__rl": true,
+                    "value": "C0AGQ8RH0NP",
+                    "mode": "id"
+                },
+                "text": "={{ $json._slackText }}",
+                "otherOptions": {}
+            },
+            "type": "n8n-nodes-base.slack",
+            "typeVersion": 2.2,
+            "position": [
+                3050,
+                1600
+            ],
+            "id": "orch2-slack-proactive",
+            "name": "Slack \u2014 Proactive Trigger",
+            "credentials": {
+                "slackApi": {
+                    "id": "5Q37UpOjGx4YsbyC",
+                    "name": "Slack account"
+                }
+            },
+            "onError": "continueRegularOutput"
+        },
+        {
+            "parameters": {
+                "jsCode": "// ============================================================\n// Curate Learnings \u2014 decay, merge duplicates, promote cross-brand\n// Runs after decision execution to avoid parallel-merge issues\n// ============================================================\n\nlet learnings = [];\ntry {\n  learnings = $('Fetch System Learnings').first().json.records || [];\n} catch(e) { return [{ json: { updates: [], _skip: true } }]; }\n\nif (learnings.length === 0) return [{ json: { updates: [], _skip: true } }];\n\nconst now = new Date();\nconst updates = [];\nconst toRetire = [];\nconst toMerge = [];\n\n// 1. DECAY: Reduce decay_score based on age since last_confirmed_at\nfor (const l of learnings) {\n  const f = l.fields;\n  const lastConfirmed = f.last_confirmed_at ? new Date(f.last_confirmed_at) : new Date(f.created_at);\n  const weeksSinceConfirmed = (now - lastConfirmed) / (7 * 24 * 3600000);\n  const currentDecay = f.decay_score !== undefined ? f.decay_score : (f.confidence || 5);\n  const newDecay = Math.max(0, currentDecay - (weeksSinceConfirmed * 0.1));\n\n  // Retire if below 3.0\n  if (newDecay < 3.0) {\n    toRetire.push({ id: l.id, fields: { active: false, decay_score: newDecay } });\n  } else if (Math.abs(newDecay - currentDecay) > 0.05) {\n    // Only update if decay changed meaningfully\n    updates.push({ id: l.id, fields: { decay_score: Math.round(newDecay * 10) / 10 } });\n  }\n}\n\n// 2. MERGE: Find similar learnings (same brand + >70% word overlap)\nfunction wordSet(text) {\n  return new Set((text || '').toLowerCase().replace(/[^a-z0-9\\s]/g, '').split(/\\s+/).filter(w => w.length > 2));\n}\nfunction overlap(a, b) {\n  const setA = wordSet(a);\n  const setB = wordSet(b);\n  if (setA.size === 0 || setB.size === 0) return 0;\n  let common = 0;\n  for (const w of setA) if (setB.has(w)) common++;\n  return common / Math.max(setA.size, setB.size);\n}\n\nconst merged = new Set();\nfor (let i = 0; i < learnings.length; i++) {\n  if (merged.has(learnings[i].id)) continue;\n  for (let j = i + 1; j < learnings.length; j++) {\n    if (merged.has(learnings[j].id)) continue;\n    const fi = learnings[i].fields;\n    const fj = learnings[j].fields;\n    // Same brand (or both agency-wide)\n    if ((fi.brand_name || '') !== (fj.brand_name || '')) continue;\n    const sim = overlap(fi.insight || fi.learning || '', fj.insight || fj.learning || '');\n    if (sim > 0.7) {\n      // Merge: keep the one with higher confidence, retire the other\n      const keepIdx = (fi.confidence || 0) >= (fj.confidence || 0) ? i : j;\n      const retireIdx = keepIdx === i ? j : i;\n      const keep = learnings[keepIdx];\n      const retire = learnings[retireIdx];\n      toMerge.push({\n        keep: { id: keep.id, fields: {\n          times_confirmed: (keep.fields.times_confirmed || 1) + (retire.fields.times_confirmed || 1),\n          decay_score: Math.max(keep.fields.decay_score || keep.fields.confidence || 5, retire.fields.decay_score || retire.fields.confidence || 5)\n        }},\n        retire: { id: retire.id, fields: { active: false } }\n      });\n      merged.add(retire.id);\n    }\n  }\n}\n\n// 3. PROMOTE: Brand-specific learning appearing in 3+ brands -> create agency-wide\nconst byInsight = {};\nfor (const l of learnings) {\n  const f = l.fields;\n  if (!f.brand_name) continue; // skip agency-wide\n  const key = (f.category || '') + ':' + ((f.insight || f.learning || '').substring(0, 50));\n  if (!byInsight[key]) byInsight[key] = { brands: new Set(), learning: f };\n  byInsight[key].brands.add(f.brand_name);\n}\nconst promotions = [];\nfor (const [key, data] of Object.entries(byInsight)) {\n  if (data.brands.size >= 3) {\n    // Check if agency-wide version already exists\n    const existing = learnings.find(l => !l.fields.brand_name && overlap(l.fields.insight || l.fields.learning || '', data.learning.insight || data.learning.learning || '') > 0.7);\n    if (!existing) {\n      promotions.push({\n        fields: {\n          title: (data.learning.title || 'Promoted learning') + ' (cross-brand)',\n          source_agent: 'orchestrator',\n          category: data.learning.category,\n          insight: data.learning.insight || data.learning.learning,\n          evidence: 'Confirmed across brands: ' + Array.from(data.brands).join(', '),\n          confidence: Math.min(10, (data.learning.confidence || 5) + 1),\n          decay_score: Math.min(10, (data.learning.confidence || 5) + 1),\n          times_confirmed: data.brands.size,\n          last_confirmed_at: now.toISOString(),\n          active: true,\n          brand_name: '',\n          industry: data.learning.industry || '',\n          created_at: now.toISOString()\n        }\n      });\n    }\n  }\n}\n\n// Build batch update records\nconst allUpdates = [...updates];\nfor (const r of toRetire) allUpdates.push(r);\nfor (const m of toMerge) {\n  allUpdates.push(m.keep);\n  allUpdates.push(m.retire);\n}\n\n// Batch into groups of 10\nconst batches = [];\nfor (let i = 0; i < allUpdates.length; i += 10) {\n  batches.push(allUpdates.slice(i, i + 10));\n}\n\nreturn [{ json: {\n  updateBatches: batches,\n  promotions: promotions,\n  stats: {\n    total: learnings.length,\n    decayed: updates.length,\n    retired: toRetire.length,\n    merged: toMerge.length,\n    promoted: promotions.length\n  },\n  _skip: allUpdates.length === 0 && promotions.length === 0\n}}];"
             },
             "type": "n8n-nodes-base.code",
             "typeVersion": 2,
@@ -680,7 +815,7 @@
         },
         {
             "parameters": {
-                "jsCode": "// ============================================================\n// Write Curation Updates — prepare Airtable API call items\n// Outputs one item per batch (PATCH for updates, POST for promotions)\n// ============================================================\n\nconst { updateBatches, promotions } = $json;\nconst items = [];\n\n// PATCH requests for decay updates, retirements, merges\nif (updateBatches && updateBatches.length > 0) {\n  for (const batch of updateBatches) {\n    items.push({ json: {\n      method: 'PATCH',\n      body: { records: batch }\n    }});\n  }\n}\n\n// POST request for promotions (new records)\nif (promotions && promotions.length > 0) {\n  // Batch promotions into groups of 10 too\n  for (let i = 0; i < promotions.length; i += 10) {\n    const batch = promotions.slice(i, i + 10);\n    items.push({ json: {\n      method: 'POST',\n      body: { records: batch }\n    }});\n  }\n}\n\nif (items.length === 0) return [];\nreturn items;"
+                "jsCode": "// ============================================================\n// Write Curation Updates \u2014 prepare Airtable API call items\n// Outputs one item per batch (PATCH for updates, POST for promotions)\n// ============================================================\n\nconst { updateBatches, promotions } = $json;\nconst items = [];\n\n// PATCH requests for decay updates, retirements, merges\nif (updateBatches && updateBatches.length > 0) {\n  for (const batch of updateBatches) {\n    items.push({ json: {\n      method: 'PATCH',\n      body: { records: batch }\n    }});\n  }\n}\n\n// POST request for promotions (new records)\nif (promotions && promotions.length > 0) {\n  // Batch promotions into groups of 10 too\n  for (let i = 0; i < promotions.length; i += 10) {\n    const batch = promotions.slice(i, i + 10);\n    items.push({ json: {\n      method: 'POST',\n      body: { records: batch }\n    }});\n  }\n}\n\nif (items.length === 0) return [];\nreturn items;"
             },
             "type": "n8n-nodes-base.code",
             "typeVersion": 2,
@@ -720,7 +855,48 @@
             "credentials": {
                 "httpHeaderAuth": {
                     "id": "a0TTu3NVsuJUEbct",
-                    "name": "Airtable PAT Header"
+                    "name": "Airtable Personal Access Token account"
+                }
+            },
+            "onError": "continueRegularOutput"
+        },
+        {
+            "parameters": {
+                "jsCode": "// Write individual proactive alert event to Agent_Events for dedup\nconst d = $input.first().json;\n// Extract insight_key - it may be in the original decision data\n// or passed through from the Slack node response\nlet insightKey = '';\nlet brandName = '';\nlet eventType = '';\nlet message = '';\n\n// Try to get data from upstream split decisions\ntry {\n  const splitItems = $('Split Decisions').all();\n  for (const item of splitItems) {\n    const ij = item.json;\n    if (ij.type === 'pre_alert' || ij.type === 'proactive_trigger') {\n      insightKey = ij.insight_key || '';\n      brandName = ij.brand_name || '';\n      eventType = ij.type || 'pre_alert';\n      message = ij.message || '';\n      break;  // Take the first proactive decision\n    }\n  }\n} catch(e) {}\n\nif (!insightKey && !brandName) {\n  return [];  // Nothing to log\n}\n\nreturn [{ json: {\n  records: [{\n    fields: {\n      agent: 'orchestrator',\n      event_type: eventType,\n      severity: 'info',\n      brand_name: brandName,\n      message: message.substring(0, 500),\n      payload: JSON.stringify({ insight_key: insightKey, source: 'proactive_analysis' }),\n      consumed_by: 'orchestrator',\n      created_at: new Date().toISOString()\n    }\n  }]\n} }];"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                3050,
+                1400
+            ],
+            "id": "orch2-log-proactive-event",
+            "name": "Log Proactive Event",
+            "onError": "continueRegularOutput"
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Agent_Events",
+                "authentication": "genericCredentialType",
+                "genericAuthType": "httpHeaderAuth",
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={{ JSON.stringify($json) }}",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                3250,
+                1400
+            ],
+            "id": "orch2-write-proactive-event",
+            "name": "Write Proactive Event",
+            "credentials": {
+                "httpHeaderAuth": {
+                    "id": "a0TTu3NVsuJUEbct",
+                    "name": "Airtable Personal Access Token account"
                 }
             },
             "onError": "continueRegularOutput"
@@ -772,6 +948,17 @@
             ]
         },
         "Fetch System Learnings": {
+            "main": [
+                [
+                    {
+                        "node": "Fetch Recent Proactive Events",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Proactive Analysis": {
             "main": [
                 [
                     {
@@ -899,6 +1086,20 @@
                         "type": "main",
                         "index": 0
                     }
+                ],
+                [
+                    {
+                        "node": "Slack \u2014 Pre-Alert",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Handle Proactive Trigger",
+                        "type": "main",
+                        "index": 0
+                    }
                 ]
             ]
         },
@@ -1023,6 +1224,49 @@
                 ]
             ]
         },
+        "Slack \u2014 Pre-Alert": {
+            "main": [
+                [
+                    {
+                        "node": "Mark Events Consumed",
+                        "type": "main",
+                        "index": 0
+                    },
+                    {
+                        "node": "Log Proactive Event",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Handle Proactive Trigger": {
+            "main": [
+                [
+                    {
+                        "node": "Slack \u2014 Proactive Trigger",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Slack \u2014 Proactive Trigger": {
+            "main": [
+                [
+                    {
+                        "node": "Mark Events Consumed",
+                        "type": "main",
+                        "index": 0
+                    },
+                    {
+                        "node": "Log Proactive Event",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
         "Log Orchestrator Decision": {
             "main": [
                 [
@@ -1067,6 +1311,28 @@
                     }
                 ]
             ]
+        },
+        "Fetch Recent Proactive Events": {
+            "main": [
+                [
+                    {
+                        "node": "Proactive Analysis",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Log Proactive Event": {
+            "main": [
+                [
+                    {
+                        "node": "Write Proactive Event",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
         }
     },
     "settings": {
@@ -1081,9 +1347,9 @@
     },
     "meta": null,
     "pinData": null,
-    "versionId": "5f89f86d-a52a-41f7-a5ca-0a3298fbbdd1",
-    "activeVersionId": "5f89f86d-a52a-41f7-a5ca-0a3298fbbdd1",
-    "versionCounter": 48,
+    "versionId": "23fd4fc9-eaf5-42f1-b659-e4e07b54cb18",
+    "activeVersionId": "23fd4fc9-eaf5-42f1-b659-e4e07b54cb18",
+    "versionCounter": 78,
     "triggerCount": 1,
     "shared": [
         {
@@ -1108,7 +1374,7 @@
                         "userId": "ed50a507-d93d-45c3-9412-d80babb81dd0",
                         "projectId": "AD8mXtbIf5cdYNIV",
                         "user": {
-                            "updatedAt": "2026-02-24T18:32:01.000Z",
+                            "updatedAt": "2026-02-28T19:18:18.000Z",
                             "createdAt": "2026-01-26T04:34:34.578Z",
                             "id": "ed50a507-d93d-45c3-9412-d80babb81dd0",
                             "email": "senseinfotechno@gmail.com",
@@ -1135,7 +1401,7 @@
                             },
                             "disabled": false,
                             "mfaEnabled": false,
-                            "lastActiveAt": "2026-02-24",
+                            "lastActiveAt": "2026-02-28",
                             "isPending": false
                         }
                     }
@@ -1145,9 +1411,9 @@
     ],
     "tags": [],
     "activeVersion": {
-        "updatedAt": "2026-02-25T07:38:02.426Z",
-        "createdAt": "2026-02-25T07:38:02.426Z",
-        "versionId": "5f89f86d-a52a-41f7-a5ca-0a3298fbbdd1",
+        "updatedAt": "2026-03-01T08:12:24.934Z",
+        "createdAt": "2026-03-01T08:12:24.934Z",
+        "versionId": "23fd4fc9-eaf5-42f1-b659-e4e07b54cb18",
         "workflowId": "DUfrRerxOinES9Cf",
         "nodes": [
             {
@@ -1304,19 +1570,78 @@
                 "credentials": {
                     "httpHeaderAuth": {
                         "id": "a0TTu3NVsuJUEbct",
-                        "name": "Airtable PAT Header"
+                        "name": "Airtable Personal Access Token account"
                     }
                 },
                 "onError": "continueRegularOutput"
             },
             {
                 "parameters": {
-                    "jsCode": "// ============================================================\n// Build Orchestrator Prompt \u2014 LLM-based reasoning\n// Falls back to SLA-only detection if 0 events or Gemini fails\n// ============================================================\n\nconst fetchResults = [\n  { name: 'Events', data: $('Fetch Unprocessed Events').first().json },\n  { name: 'Projects', data: $('Fetch Active Projects').first().json },\n  { name: 'Brands', data: $('Fetch Brands').first().json }\n];\nconst fetchErrors = [];\nfor (const fr of fetchResults) {\n  if (fr.data.error || fr.data.statusCode >= 400 || (fr.data.statusMessage && fr.data.statusCode)) {\n    fetchErrors.push(`${fr.name}: ${fr.data.error || fr.data.statusMessage || 'HTTP ' + fr.data.statusCode}`);\n  }\n}\nif (fetchErrors.length > 0) {\n  return [{ json: { decisions: [], eventIds: [], decisionCount: 0, eventCount: 0, _error: true, fetchErrors } }];\n}\n\nconst events = $('Fetch Unprocessed Events').first().json.records || [];\nconst projects = $('Fetch Active Projects').first().json.records || [];\nconst brands = $('Fetch Brands').first().json.records || [];\nconst now = new Date();\nconst eventIds = events.map(e => e.id);\n\n// Fetch system learnings (may be empty)\nlet learnings = [];\ntry {\n  learnings = $('Fetch System Learnings').first().json.records || [];\n} catch(e) { learnings = []; }\n\n// === SLA DETECTION (hardcoded fallback \u2014 always runs) ===\nconst slaDecisions = [];\nfor (const project of projects) {\n  const pf = project.fields;\n  const updatedAt = new Date(pf.updated_at || pf.created_at || now);\n  const hoursInStatus = (now - updatedAt) / 3600000;\n\n  if (pf.status === 'PM Review' && hoursInStatus > 24) {\n    slaDecisions.push({\n      type: 'sla_alert', severity: 'warning',\n      project_id: project.id, brand_name: pf.brand_name,\n      client_code: pf.client_code,\n      message: pf.brand_name + ' stuck in PM Review for ' + Math.round(hoursInStatus) + 'h'\n    });\n  }\n  if (pf.status === 'Script Review' && hoursInStatus > 48) {\n    slaDecisions.push({\n      type: 'sla_alert', severity: 'warning',\n      project_id: project.id, brand_name: pf.brand_name,\n      client_code: pf.client_code,\n      message: pf.brand_name + ' stuck in Script Review for ' + Math.round(hoursInStatus) + 'h'\n    });\n  }\n  if (pf.status === 'In Progress' && hoursInStatus > 72) {\n    slaDecisions.push({\n      type: 'sla_alert', severity: 'urgent',\n      project_id: project.id, brand_name: pf.brand_name,\n      client_code: pf.client_code,\n      message: pf.brand_name + ' In Progress for ' + Math.round(hoursInStatus) + 'h \\u2014 may be stuck'\n    });\n  }\n}\n\n// If 0 events, output SLA decisions directly (skip Gemini)\n// Still provide a minimal geminiBody so the HTTP Request node doesn't fail\nif (events.length === 0) {\n  return [{ json: {\n    geminiBody: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'No events to process.' }] }], generationConfig: { maxOutputTokens: 10 } }),\n    decisions: slaDecisions,\n    eventIds: [],\n    decisionCount: slaDecisions.length,\n    eventCount: 0,\n    slaDecisions: slaDecisions,\n    _skipGemini: true\n  } }];\n}\n\n// === BUILD GEMINI PROMPT ===\nlet eventsText = '== CURRENT EVENTS (unprocessed) ==\\n';\nfor (const e of events) {\n  const f = e.fields;\n  let payloadExcerpt = '';\n  try { payloadExcerpt = (f.payload || '').substring(0, 200); } catch(x) {}\n  eventsText += `[${e.id}] ${f.event_type} | agent: ${f.agent || 'unknown'} | brand: ${f.brand_name || 'N/A'} | project: ${f.project_id || 'N/A'} | severity: ${f.severity || 'info'} | ${f.message || ''} | payload: ${payloadExcerpt}\\n`;\n}\n\nlet projectsText = '\\n== ACTIVE PROJECTS ==\\n';\nfor (const p of projects) {\n  const pf = p.fields;\n  const updatedAt = new Date(pf.updated_at || pf.created_at || now);\n  const hoursInStatus = Math.round((now - updatedAt) / 3600000);\n  projectsText += `[${p.id}] ${pf.brand_name || 'Unknown'} | status: ${pf.status || 'N/A'} | ${hoursInStatus}h in status | scripts: ${pf.num_scripts || 0} | client: ${pf.client_code || 'N/A'} | goal: ${(pf.project_goal || 'Not defined').substring(0, 150)}\\n`;\n}\n\nlet brandsText = '\\n== BRANDS ==\\n';\nfor (const b of brands) {\n  const bf = b.fields;\n  brandsText += `[${b.id}] ${bf.brand_name || 'Unknown'} | industry: ${bf.industry || 'N/A'} | website: ${bf.website_url || 'N/A'}\\n`;\n}\n\nlet learningsText = '\\n== SYSTEM LEARNINGS (top 20 by confidence) ==\\n';\nif (learnings.length > 0) {\n  learnings.forEach((l, i) => {\n    const lf = l.fields;\n    learningsText += `[${i+1}] (${lf.category || 'general'}, confidence: ${lf.confidence || 'N/A'}) ${lf.title || 'Untitled'}: ${(lf.insight || lf.learning || lf.content || '').substring(0, 200)}\\n`;\n  });\n} else {\n  learningsText += 'No system learnings available.\\n';\n}\n\nconst systemMessage = 'You are the Orchestrator for a UGC creative agency automation system. You analyze events from various agents and project state to decide what actions to take next. Be conservative \\u2014 only take actions that are clearly warranted by the data. Output ONLY valid JSON.';\n\nconst userPrompt = eventsText + projectsText + brandsText + learningsText + `\\n== ALLOWED ACTIONS (whitelist \\u2014 anything else will be REJECTED) ==\\n1. trigger_phase: { phase: 3|4, project_id: \"recXXX\", client_code: \"ABC-0123\", webhook: \"/webhook/ugc-scripts\" or \"/webhook/ugc-delivery\" }\\n2. notify_client: { project_id: \"recXXX\", brand_name: \"X\", client_code: \"ABC-0123\", message: \"...\" }\\n3. escalate: { severity: \"critical\"|\"high\", brand_name: \"X\", message: \"...\" }\\n4. sla_alert: { severity: \"warning\"|\"urgent\", project_id: \"recXXX\", brand_name: \"X\", message: \"...\" }\\n5. suggest_new_cycle: { project_id: \"recXXX\", brand_name: \"X\", message: \"...\" }\\n6. auto_onboard: { brand_name: \"X\", client_code: \"ABC-0123\" }\\n7. scout_creators: { project_id: \"recXXX\", brand_name: \"X\", niches: [\"X\"], industry: \"X\", budget_max: 10000, count: 5, client_code: \"ABC-0123\" }\\n8. no_action: { reason: \"...\" }\\n\\n== REASONING RULES ==\\n- phase_complete from phase_1 \\u2192 notify PM that research is complete + scout creators for that brand\\n- phase_complete from phase_2 \\u2192 trigger_phase 3 (scripts) + notify client\\n- phase_complete from phase_3 \\u2192 trigger_phase 4 (delivery) + notify client\\n- phase_complete from phase_4 \\u2192 notify client delivery complete\\n- campaign_alert with fatigue \\u2192 suggest_new_cycle ONLY if project has been delivered before\\n- campaign_alert critical \\u2192 escalate immediately\\n- lead_action with stage Won \\u2192 auto_onboard\\n- sla_breach repeated 3+ times \\u2192 escalate\\n- status_change from onboarding \\u2192 notify client\\n- Reference System Learnings when making suggestions or providing context in messages\\n- SLA thresholds: PM Review > 24h = warning, Script Review > 48h = warning, In Progress > 72h = urgent\\n- Consolidate multiple events for same project into fewer actions\\n- NEVER trigger phase 3 unless phase 2 completed (check project status)\\n- NEVER trigger phase 4 unless phase 3 completed (check project status)\\n- NEVER invent actions outside the allowed list\\n- For trigger_phase 3, use webhook: \"/webhook/ugc-scripts\"\\n- For trigger_phase 4, use webhook: \"/webhook/ugc-delivery\"\\n- For scout_creators, infer industry and niches from brand/project data\\n\\n== OUTPUT FORMAT ==\\n{\\n  \"reasoning\": \"Brief 2-3 sentence analysis of the situation\",\\n  \"decisions\": [\\n    { \"type\": \"trigger_phase\", \"eventId\": \"recXXX\", \"phase\": 3, \"project_id\": \"recYYY\", \"client_code\": \"WHE-0217\", \"webhook\": \"/webhook/ugc-scripts\", \"message\": \"...\" },\\n    { \"type\": \"notify_client\", \"eventId\": \"recXXX\", \"project_id\": \"recYYY\", \"brand_name\": \"X\", \"client_code\": \"WHE-0217\", \"message\": \"...\" }\\n  ]\\n}\\n\\nAnalyze the events above and determine the appropriate actions.`;\n\nconst geminiBody = JSON.stringify({\n  systemInstruction: { parts: [{ text: systemMessage }] },\n  contents: [{ role: 'user', parts: [{ text: userPrompt }] }],\n  generationConfig: { temperature: 0.1, maxOutputTokens: 4096, thinkingConfig: { thinkingBudget: 0 } }\n});\n\nreturn [{ json: { geminiBody, eventIds, eventCount: events.length, slaDecisions, _skipGemini: false } }];"
+                    "method": "GET",
+                    "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Agent_Events",
+                    "authentication": "genericCredentialType",
+                    "genericAuthType": "httpHeaderAuth",
+                    "sendQuery": true,
+                    "queryParameters": {
+                        "parameters": [
+                            {
+                                "name": "filterByFormula",
+                                "value": "AND(OR({event_type}='proactive_trigger',{event_type}='pre_alert'), DATETIME_DIFF(NOW(), CREATED_TIME(), 'hours') < 24)"
+                            },
+                            {
+                                "name": "sort[0][field]",
+                                "value": "created_at"
+                            },
+                            {
+                                "name": "sort[0][direction]",
+                                "value": "desc"
+                            },
+                            {
+                                "name": "maxRecords",
+                                "value": "50"
+                            }
+                        ]
+                    },
+                    "options": {}
+                },
+                "type": "n8n-nodes-base.httpRequest",
+                "typeVersion": 4.2,
+                "position": [
+                    1100,
+                    600
+                ],
+                "id": "orch2-fetch-recent-proactive",
+                "name": "Fetch Recent Proactive Events",
+                "credentials": {
+                    "httpHeaderAuth": {
+                        "id": "a0TTu3NVsuJUEbct",
+                        "name": "Airtable Personal Access Token account"
+                    }
+                },
+                "onError": "continueRegularOutput"
+            },
+            {
+                "parameters": {
+                    "jsCode": "// ============================================================\n// Proactive Analysis v2 \u2014 WITH DEDUPLICATION + THROTTLING\n// Generates deterministic insight_key per pattern.\n// Checks recent proactive events (last 24h) to skip duplicates.\n// Throttle: max 3 suggestions per run, max 1 per brand per 24h.\n// ============================================================\n\nconst now = new Date();\nconst allCandidates = [];\n\n// Safely fetch upstream data\nlet events = [], projects = [], brands = [], learnings = [], recentProactive = [];\ntry { events = $('Fetch Unprocessed Events').first().json.records || []; } catch(e) {}\ntry { projects = $('Fetch Active Projects').first().json.records || []; } catch(e) {}\ntry { brands = $('Fetch Brands').first().json.records || []; } catch(e) {}\ntry { learnings = $('Fetch System Learnings').first().json.records || []; } catch(e) {}\ntry { recentProactive = $('Fetch Recent Proactive Events').first().json.records || []; } catch(e) {}\n\n// === BUILD DEDUP INDEX from recent proactive events ===\nconst recentKeys = new Set();\nconst recentBrandAlerts = {};  // brand_name -> count in last 24h\nfor (const rp of recentProactive) {\n  const rpf = rp.fields || {};\n  // Try to extract insight_key from payload JSON\n  let insightKey = '';\n  try {\n    const payload = typeof rpf.payload === 'string' ? JSON.parse(rpf.payload) : (rpf.payload || {});\n    insightKey = payload.insight_key || '';\n  } catch(e) {}\n  // Fallback key from event_type + brand_name + message prefix\n  if (!insightKey) {\n    insightKey = (rpf.event_type || '') + ':' + (rpf.brand_name || '') + ':' + ((rpf.message || '').substring(0, 80));\n  }\n  recentKeys.add(insightKey);\n  const bn = rpf.brand_name || '';\n  if (bn) recentBrandAlerts[bn] = (recentBrandAlerts[bn] || 0) + 1;\n}\n\n// Helper: hours since a date\nfunction hoursSince(dateStr) {\n  if (!dateStr) return 9999;\n  return (now - new Date(dateStr)) / 3600000;\n}\n\n// Helper: check if insight_key was already sent\nfunction alreadySent(key) {\n  return recentKeys.has(key);\n}\n\n// Helper: check if brand exceeded 1 proactive alert per 24h\nfunction brandThrottled(brandName) {\n  if (!brandName) return false;\n  return (recentBrandAlerts[brandName] || 0) >= 1;\n}\n\n// === 1. PIPELINE VELOCITY: warn at 75% of SLA thresholds ===\nconst slaThresholds = {\n  'Research': { warn: 36, breach: 48 },\n  'PM Review': { warn: 18, breach: 24 },\n  'Script Writing': { warn: 54, breach: 72 },\n  'Script Review': { warn: 36, breach: 48 },\n  'In Progress': { warn: 54, breach: 72 }\n};\nfor (const p of projects) {\n  const pf = p.fields;\n  const status = pf.status || '';\n  const threshold = slaThresholds[status];\n  if (!threshold) continue;\n  const hrs = hoursSince(pf.updated_at || pf.created_at);\n  if (hrs >= threshold.warn && hrs < threshold.breach) {\n    const key = 'pipeline_velocity:' + (pf.client_code || p.id) + ':' + status;\n    if (alreadySent(key) || brandThrottled(pf.brand_name)) continue;\n    allCandidates.push({\n      type: 'pre_alert',\n      severity: 'info',\n      brand_name: pf.brand_name || 'Unknown',\n      project_id: p.id,\n      client_code: pf.client_code || '',\n      insight_key: key,\n      message: (pf.brand_name || 'Project') + ' approaching SLA in \"' + status + '\" (' + Math.round(hrs) + 'h / ' + threshold.breach + 'h limit). Consider nudging.'\n    });\n  }\n}\n\n// === 2. TREND DETECTION: 2+ campaign_alerts for same brand -> suggest rotation ===\nconst alertsByBrand = {};\nfor (const e of events) {\n  const ef = e.fields;\n  if (ef.event_type === 'campaign_alert') {\n    const bn = ef.brand_name || 'unknown';\n    if (!alertsByBrand[bn]) alertsByBrand[bn] = [];\n    alertsByBrand[bn].push(ef);\n  }\n}\nfor (const [brand, alerts] of Object.entries(alertsByBrand)) {\n  if (alerts.length >= 2) {\n    const key = 'suggest_rotation:' + brand;\n    if (alreadySent(key) || brandThrottled(brand)) continue;\n    const fatigueAlerts = alerts.filter(a => (a.message || '').toLowerCase().includes('fatigue'));\n    allCandidates.push({\n      type: 'proactive_trigger',\n      action: 'suggest_rotation',\n      brand_name: brand,\n      insight_key: key,\n      message: brand + ' has ' + alerts.length + ' campaign alerts' + (fatigueAlerts.length > 0 ? ' (including fatigue signals)' : '') + '. Consider creative rotation or new cycle.',\n      webhook: '/webhook/ugc-research'\n    });\n  }\n}\n\n// === 3. RESOURCE FORECASTING: 3+ projects entering scripting -> pre-scout ===\nconst scriptingProjects = projects.filter(p =>\n  p.fields.status === 'Script Writing' || p.fields.status === 'Research'\n);\nif (scriptingProjects.length >= 3) {\n  const brandNames = scriptingProjects.map(p => p.fields.brand_name).filter(Boolean);\n  const key = 'pre_scout:' + brandNames.sort().join(',');\n  if (!alreadySent(key)) {\n    allCandidates.push({\n      type: 'pre_alert',\n      severity: 'info',\n      insight_key: key,\n      message: scriptingProjects.length + ' projects in pipeline (' + brandNames.join(', ') + '). Consider pre-scouting creators to avoid bottleneck.',\n      brand_name: brandNames[0] || ''\n    });\n  }\n}\n\n// === 4. CROSS-BRAND PATTERNS: learning confirmed 3x+ ===\nfor (const l of learnings) {\n  const lf = l.fields;\n  if (!lf.brand_name || !lf.industry) continue;\n  if ((lf.times_confirmed || 0) < 3) continue;\n  const sameBrands = brands.filter(b =>\n    b.fields.industry === lf.industry &&\n    b.fields.brand_name !== lf.brand_name\n  );\n  if (sameBrands.length > 0) {\n    const key = 'cross_brand:' + l.id;\n    if (alreadySent(key) || brandThrottled(lf.brand_name)) continue;\n    allCandidates.push({\n      type: 'pre_alert',\n      severity: 'info',\n      brand_name: lf.brand_name,\n      insight_key: key,\n      message: 'Learning \"' + (lf.title || '').substring(0, 60) + '\" confirmed ' + lf.times_confirmed + 'x for ' + lf.brand_name + '. May benefit: ' + sameBrands.map(b => b.fields.brand_name).join(', ') + ' (same industry: ' + lf.industry + ').'\n    });\n  }\n}\n\n// === 5. ANTICIPATORY TRIGGERS: scripts completed but not repurposed ===\nfor (const e of events) {\n  const ef = e.fields;\n  if (ef.event_type === 'phase_complete' && ef.agent === 'phase_3') {\n    const hasRepurpose = events.some(e2 =>\n      e2.fields.event_type === 'content_repurposed' &&\n      e2.fields.brand_name === ef.brand_name\n    );\n    if (!hasRepurpose) {\n      const key = 'suggest_repurpose:' + (ef.brand_name || '') + ':' + (ef.project_id || '');\n      if (alreadySent(key) || brandThrottled(ef.brand_name)) continue;\n      allCandidates.push({\n        type: 'proactive_trigger',\n        action: 'suggest_repurpose',\n        brand_name: ef.brand_name || '',\n        project_id: ef.project_id || '',\n        insight_key: key,\n        message: 'Scripts completed for ' + (ef.brand_name || 'brand') + ' but not yet repurposed. Trigger /repurpose to generate variations.',\n        webhook: '/webhook/repurpose'\n      });\n    }\n  }\n}\n\n// === GLOBAL THROTTLE: max 3 suggestions per run ===\nconst suggestions = allCandidates.slice(0, 3);\n\n// Pass through to Build Orchestrator Prompt\nreturn [{ json: {\n  proactiveSuggestions: suggestions,\n  suggestionCount: suggestions.length,\n  _dedupStats: {\n    candidatesBeforeDedup: allCandidates.length,\n    recentProactiveEventsChecked: recentProactive.length,\n    recentKeysKnown: recentKeys.size,\n    brandThrottleCounts: recentBrandAlerts\n  }\n} }];"
                 },
                 "type": "n8n-nodes-base.code",
                 "typeVersion": 2,
                 "position": [
-                    1250,
+                    1150,
+                    400
+                ],
+                "id": "orch2-proactive-analysis",
+                "name": "Proactive Analysis",
+                "onError": "continueRegularOutput"
+            },
+            {
+                "parameters": {
+                    "jsCode": "// ============================================================\n// Build Orchestrator Prompt v2 \u2014 LLM-based reasoning\n// WITH DEDUP CONTEXT: injects recently-sent proactive alerts\n// Falls back to SLA-only detection if 0 events or Gemini fails\n// ============================================================\n\nconst fetchResults = [\n  { name: 'Events', data: $('Fetch Unprocessed Events').first().json },\n  { name: 'Projects', data: $('Fetch Active Projects').first().json },\n  { name: 'Brands', data: $('Fetch Brands').first().json }\n];\nconst fetchErrors = [];\nfor (const fr of fetchResults) {\n  if (fr.data.error || fr.data.statusCode >= 400 || (fr.data.statusMessage && fr.data.statusCode)) {\n    fetchErrors.push(`${fr.name}: ${fr.data.error || fr.data.statusMessage || 'HTTP ' + fr.data.statusCode}`);\n  }\n}\nif (fetchErrors.length > 0) {\n  return [{ json: { decisions: [], eventIds: [], decisionCount: 0, eventCount: 0, _error: true, fetchErrors } }];\n}\n\nconst events = $('Fetch Unprocessed Events').first().json.records || [];\nconst projects = $('Fetch Active Projects').first().json.records || [];\nconst brands = $('Fetch Brands').first().json.records || [];\nconst now = new Date();\nconst eventIds = events.map(e => e.id);\n\n// Fetch system learnings (may be empty)\nlet learnings = [];\ntry {\n  learnings = $('Fetch System Learnings').first().json.records || [];\n} catch(e) { learnings = []; }\n\n// Fetch recent proactive events for dedup context\nlet recentProactive = [];\ntry {\n  recentProactive = $('Fetch Recent Proactive Events').first().json.records || [];\n} catch(e) { recentProactive = []; }\n\n// === SLA DETECTION (hardcoded fallback \u2014 always runs) ===\nconst slaDecisions = [];\nfor (const project of projects) {\n  const pf = project.fields;\n  const updatedAt = new Date(pf.updated_at || pf.created_at || now);\n  const hoursInStatus = (now - updatedAt) / 3600000;\n\n  if (pf.status === 'PM Review' && hoursInStatus > 24) {\n    slaDecisions.push({\n      type: 'sla_alert', severity: 'warning',\n      project_id: project.id, brand_name: pf.brand_name,\n      client_code: pf.client_code,\n      message: pf.brand_name + ' stuck in PM Review for ' + Math.round(hoursInStatus) + 'h'\n    });\n  }\n  if (pf.status === 'Script Review' && hoursInStatus > 48) {\n    slaDecisions.push({\n      type: 'sla_alert', severity: 'warning',\n      project_id: project.id, brand_name: pf.brand_name,\n      client_code: pf.client_code,\n      message: pf.brand_name + ' stuck in Script Review for ' + Math.round(hoursInStatus) + 'h'\n    });\n  }\n  if (pf.status === 'In Progress' && hoursInStatus > 72) {\n    slaDecisions.push({\n      type: 'sla_alert', severity: 'urgent',\n      project_id: project.id, brand_name: pf.brand_name,\n      client_code: pf.client_code,\n      message: pf.brand_name + ' In Progress for ' + Math.round(hoursInStatus) + 'h \\u2014 may be stuck'\n    });\n  }\n}\n\n// Read proactive suggestions BEFORE skip-check so they're never lost\nconst proactive = $('Proactive Analysis').first().json.proactiveSuggestions || [];\n\n// If 0 events AND 0 proactive suggestions, output SLA decisions directly (skip Gemini)\nif (events.length === 0 && proactive.length === 0) {\n  return [{ json: {\n    geminiBody: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'No events to process.' }] }], generationConfig: { maxOutputTokens: 10 } }),\n    decisions: slaDecisions,\n    eventIds: [],\n    decisionCount: slaDecisions.length,\n    eventCount: 0,\n    slaDecisions: slaDecisions,\n    _skipGemini: true\n  } }];\n}\n\n// === BUILD GEMINI PROMPT ===\nlet eventsText = '== CURRENT EVENTS (unprocessed) ==\\n';\nfor (const e of events) {\n  const f = e.fields;\n  let payloadExcerpt = '';\n  try { payloadExcerpt = (f.payload || '').substring(0, 200); } catch(x) {}\n  eventsText += `[${e.id}] ${f.event_type} | agent: ${f.agent || 'unknown'} | brand: ${f.brand_name || 'N/A'} | project: ${f.project_id || 'N/A'} | severity: ${f.severity || 'info'} | ${f.message || ''} | payload: ${payloadExcerpt}\\n`;\n}\n\nlet projectsText = '\\n== ACTIVE PROJECTS ==\\n';\nfor (const p of projects) {\n  const pf = p.fields;\n  const updatedAt = new Date(pf.updated_at || pf.created_at || now);\n  const hoursInStatus = Math.round((now - updatedAt) / 3600000);\n  projectsText += `[${p.id}] ${pf.brand_name || 'Unknown'} | status: ${pf.status || 'N/A'} | ${hoursInStatus}h in status | scripts: ${pf.num_scripts || 0} | client: ${pf.client_code || 'N/A'} | goal: ${(pf.project_goal || 'Not defined').substring(0, 150)}\\n`;\n}\n\nlet brandsText = '\\n== BRANDS ==\\n';\nfor (const b of brands) {\n  const bf = b.fields;\n  brandsText += `[${b.id}] ${bf.brand_name || 'Unknown'} | industry: ${bf.industry || 'N/A'} | website: ${bf.website_url || 'N/A'}\\n`;\n}\n\nlet learningsText = '\\n== SYSTEM LEARNINGS (top 20 by confidence) ==\\n';\nif (learnings.length > 0) {\n  learnings.forEach((l, i) => {\n    const lf = l.fields;\n    learningsText += `[${i+1}] (${lf.category || 'general'}, confidence: ${lf.confidence || 'N/A'}) ${lf.title || 'Untitled'}: ${(lf.insight || lf.learning || lf.content || '').substring(0, 200)}\\n`;\n  });\n} else {\n  learningsText += 'No system learnings available.\\n';\n}\n\n// Proactive suggestions already read above (before skip-check)\nlet proactiveText = '\\n== PROACTIVE INSIGHTS (deterministic pattern detection, already deduplicated) ==\\n';\nif (proactive.length > 0) {\n  proactive.forEach((s, i) => {\n    proactiveText += `[${i+1}] type: ${s.type} | brand: ${s.brand_name || 'N/A'} | key: ${s.insight_key || 'N/A'} | ${s.message}\\n`;\n  });\n  proactiveText += '\\nNote: These suggestions have ALREADY been deduplicated against the last 24h of proactive events. Include them as pre_alert or proactive_trigger decisions.\\n';\n} else {\n  proactiveText += 'No proactive patterns detected this cycle (all patterns already alerted in last 24h, or no patterns found).\\n';\n}\n\n// Build dedup context for Gemini\nlet dedupText = '\\n== RECENTLY SENT PROACTIVE ALERTS (last 24h \u2014 DO NOT REPEAT) ==\\n';\nif (recentProactive.length > 0) {\n  const recentBrands = new Set();\n  recentProactive.forEach((rp, i) => {\n    const rpf = rp.fields || {};\n    if (i < 10) {  // Show max 10 recent alerts\n      dedupText += `- ${rpf.event_type || 'unknown'} | brand: ${rpf.brand_name || 'N/A'} | ${(rpf.message || '').substring(0, 120)}\\n`;\n    }\n    if (rpf.brand_name) recentBrands.add(rpf.brand_name);\n  });\n  if (recentProactive.length > 10) {\n    dedupText += `... and ${recentProactive.length - 10} more\\n`;\n  }\n  dedupText += '\\nCRITICAL DEDUP RULE: Do NOT generate pre_alert or proactive_trigger decisions for brands that already appear above (' + Array.from(recentBrands).join(', ') + '). These brands have already been alerted in the last 24 hours. Only generate proactive decisions for NEW patterns not listed above.\\n';\n} else {\n  dedupText += 'No recent proactive alerts. You may generate new proactive insights if patterns warrant them.\\n';\n}\n\nconst systemMessage = 'You are the Orchestrator for a UGC creative agency automation system. You analyze events from various agents and project state to decide what actions to take next. Be conservative \\u2014 only take actions that are clearly warranted by the data. NEVER repeat proactive alerts that were already sent in the last 24 hours. Output ONLY valid JSON.';\n\nconst userPrompt = eventsText + projectsText + brandsText + learningsText + proactiveText + dedupText + `\\n== ALLOWED ACTIONS (whitelist \\u2014 anything else will be REJECTED) ==\\n1. trigger_phase: { phase: 3|4, project_id: \"recXXX\", client_code: \"ABC-0123\", webhook: \"/webhook/ugc-scripts\" or \"/webhook/ugc-delivery\" }\\n2. notify_client: { project_id: \"recXXX\", brand_name: \"X\", client_code: \"ABC-0123\", message: \"...\" }\\n3. escalate: { severity: \"critical\"|\"high\", brand_name: \"X\", message: \"...\" }\\n4. sla_alert: { severity: \"warning\"|\"urgent\", project_id: \"recXXX\", brand_name: \"X\", message: \"...\" }\\n5. suggest_new_cycle: { project_id: \"recXXX\", brand_name: \"X\", message: \"...\" }\\n6. auto_onboard: { brand_name: \"X\", client_code: \"ABC-0123\" }\\n7. scout_creators: { project_id: \"recXXX\", brand_name: \"X\", niches: [\"X\"], industry: \"X\", budget_max: 10000, count: 5, client_code: \"ABC-0123\" }\\n8. no_action: { reason: \"...\" }\\n9. pre_alert: { severity: \"info\", brand_name: \"X\", message: \"...\", project_id: \"recXXX\" (optional), insight_key: \"...\" }\\n10. proactive_trigger: { action: \"suggest_rotation\"|\"suggest_repurpose\", brand_name: \"X\", message: \"...\", webhook: \"/webhook/...\" (optional), insight_key: \"...\" }\\n\\n== REASONING RULES ==\\n- phase_complete from phase_1 \\u2192 notify PM that research is complete + scout creators for that brand\\n- phase_complete from phase_2 \\u2192 trigger_phase 3 (scripts) + notify client\\n- phase_complete from phase_3 \\u2192 trigger_phase 4 (delivery) + notify client\\n- phase_complete from phase_4 \\u2192 notify client delivery complete\\n- campaign_alert with fatigue \\u2192 suggest_new_cycle ONLY if project has been delivered before\\n- campaign_alert critical \\u2192 escalate immediately\\n- lead_action with stage Won \\u2192 auto_onboard\\n- sla_breach repeated 3+ times \\u2192 escalate\\n- status_change from onboarding \\u2192 notify client\\n- Reference System Learnings when making suggestions or providing context in messages\\n- SLA thresholds: PM Review > 24h = warning, Script Review > 48h = warning, In Progress > 72h = urgent\\n- Consolidate multiple events for same project into fewer actions\\n- NEVER trigger phase 3 unless phase 2 completed (check project status)\\n- NEVER trigger phase 4 unless phase 3 completed (check project status)\\n- NEVER invent actions outside the allowed list\\n- NEVER generate pre_alert or proactive_trigger for brands already alerted in RECENTLY SENT section\\n- For trigger_phase 3, use webhook: \"/webhook/ugc-scripts\"\\n- For trigger_phase 4, use webhook: \"/webhook/ugc-delivery\"\\n- For scout_creators, infer industry and niches from brand/project data\\n- For pre_alert and proactive_trigger, ALWAYS include the insight_key from the PROACTIVE INSIGHTS section\\n\\n== OUTPUT FORMAT ==\\n{\\n  \"reasoning\": \"Brief 2-3 sentence analysis of the situation\",\\n  \"decisions\": [\\n    { \"type\": \"trigger_phase\", \"eventId\": \"recXXX\", \"phase\": 3, \"project_id\": \"recYYY\", \"client_code\": \"WHE-0217\", \"webhook\": \"/webhook/ugc-scripts\", \"message\": \"...\" },\\n    { \"type\": \"notify_client\", \"eventId\": \"recXXX\", \"project_id\": \"recYYY\", \"brand_name\": \"X\", \"client_code\": \"WHE-0217\", \"message\": \"...\" }\\n  ]\\n}\\n\\nAnalyze the events above and determine the appropriate actions.`;\n\nconst geminiBody = JSON.stringify({\n  systemInstruction: { parts: [{ text: systemMessage }] },\n  contents: [{ role: 'user', parts: [{ text: userPrompt }] }],\n  generationConfig: { temperature: 0.1, maxOutputTokens: 4096, thinkingConfig: { thinkingBudget: 0 } }\n});\n\nreturn [{ json: { geminiBody, eventIds, eventCount: events.length, slaDecisions, _skipGemini: false } }];"
+                },
+                "type": "n8n-nodes-base.code",
+                "typeVersion": 2,
+                "position": [
+                    1350,
                     400
                 ],
                 "id": "orch2-decision-engine",
@@ -1350,7 +1675,7 @@
             },
             {
                 "parameters": {
-                    "jsCode": "// ============================================================\n// Parse Gemini response and validate decisions\n// Merges LLM decisions with hardcoded SLA decisions\n// Falls back gracefully on parse failure\n// ============================================================\n\nconst upstream = $('Build Orchestrator Prompt').first().json;\nconst slaDecisions = upstream.slaDecisions || [];\nconst eventIds = upstream.eventIds || [];\n\n// If Gemini was skipped (0 events), output SLA decisions only\nif (upstream._skipGemini) {\n  return [{ json: {\n    decisions: slaDecisions,\n    eventIds,\n    decisionCount: slaDecisions.length,\n    eventCount: 0\n  } }];\n}\n\n// Allowed action types\nconst allowedTypes = ['trigger_phase', 'notify_client', 'escalate', 'sla_alert', 'suggest_new_cycle', 'auto_onboard', 'scout_creators', 'no_action'];\n\n// Required fields per action type\nconst requiredFields = {\n  trigger_phase: ['phase', 'project_id'],\n  notify_client: ['message', 'brand_name'],\n  escalate: ['severity', 'message'],\n  sla_alert: ['severity', 'message'],\n  suggest_new_cycle: ['brand_name', 'message'],\n  auto_onboard: ['brand_name'],\n  scout_creators: ['brand_name'],\n  no_action: ['reason']\n};\n\nlet llmDecisions = [];\nlet reasoning = '';\n\ntry {\n  const geminiResponse = $input.first().json;\n  let rawText = '';\n  \n  // Extract text from Gemini response\n  if (geminiResponse.candidates && geminiResponse.candidates[0]) {\n    rawText = geminiResponse.candidates[0].content.parts[0].text || '';\n  } else if (geminiResponse.error) {\n    // Gemini returned an error \\u2014 fall back to SLA only\n    return [{ json: {\n      decisions: slaDecisions,\n      eventIds,\n      decisionCount: slaDecisions.length,\n      eventCount: upstream.eventCount,\n      _geminiError: geminiResponse.error.message || 'Unknown Gemini error'\n    } }];\n  }\n\n  // Strip markdown code fences\n  rawText = rawText.replace(/^```json\\s*/i, '').replace(/^```\\s*/m, '').replace(/\\s*```\\s*$/m, '').trim();\n\n  const parsed = JSON.parse(rawText);\n  reasoning = parsed.reasoning || '';\n  const rawDecisions = parsed.decisions || [];\n\n  // Validate each decision\n  for (const d of rawDecisions) {\n    if (!d.type || !allowedTypes.includes(d.type)) continue;\n    if (d.type === 'no_action') continue; // Skip no-action entries\n\n    // Check required fields\n    const required = requiredFields[d.type] || [];\n    const missing = required.filter(f => !d[f] && d[f] !== 0);\n    if (missing.length > 0) continue; // Skip invalid decisions\n\n    // Add event reference and message if missing\n    const decision = {\n      type: d.type,\n      eventId: d.eventId || eventIds[0] || '',\n      ...d,\n      message: d.message || `${d.type} action for ${d.brand_name || 'unknown'}`\n    };\n\n    // For trigger_phase, ensure webhook is set\n    if (d.type === 'trigger_phase') {\n      if (d.phase === 3) decision.webhook = '/webhook/ugc-scripts';\n      if (d.phase === 4) decision.webhook = '/webhook/ugc-delivery';\n    }\n\n    llmDecisions.push(decision);\n  }\n} catch (e) {\n  // JSON parse failed \\u2014 fall back to SLA decisions only\n  return [{ json: {\n    decisions: slaDecisions,\n    eventIds,\n    decisionCount: slaDecisions.length,\n    eventCount: upstream.eventCount,\n    _parseError: e.message\n  } }];\n}\n\n// Merge: LLM decisions + SLA decisions (deduplicate by project_id + type)\nconst seen = new Set();\nconst merged = [];\n\nfor (const d of llmDecisions) {\n  const key = `${d.type}:${d.project_id || d.brand_name || ''}`;\n  if (!seen.has(key)) {\n    seen.add(key);\n    merged.push(d);\n  }\n}\n\nfor (const d of slaDecisions) {\n  const key = `${d.type}:${d.project_id || d.brand_name || ''}`;\n  if (!seen.has(key)) {\n    seen.add(key);\n    merged.push(d);\n  }\n}\n\nreturn [{ json: {\n  decisions: merged,\n  eventIds,\n  decisionCount: merged.length,\n  eventCount: upstream.eventCount,\n  reasoning\n} }];"
+                    "jsCode": "// ============================================================\n// Parse Gemini response and validate decisions\n// Merges LLM decisions with hardcoded SLA decisions\n// Falls back gracefully on parse failure\n// ============================================================\n\nconst upstream = $('Build Orchestrator Prompt').first().json;\nconst slaDecisions = upstream.slaDecisions || [];\nconst eventIds = upstream.eventIds || [];\n\n// If Gemini was skipped (0 events), output SLA decisions only\nif (upstream._skipGemini) {\n  return [{ json: {\n    decisions: slaDecisions,\n    eventIds,\n    decisionCount: slaDecisions.length,\n    eventCount: 0\n  } }];\n}\n\n// Allowed action types\nconst allowedTypes = ['trigger_phase', 'notify_client', 'escalate', 'sla_alert', 'suggest_new_cycle', 'auto_onboard', 'scout_creators', 'no_action', 'pre_alert', 'proactive_trigger'];\n\n// Required fields per action type\nconst requiredFields = {\n  trigger_phase: ['phase', 'project_id'],\n  notify_client: ['message', 'brand_name'],\n  escalate: ['severity', 'message'],\n  sla_alert: ['severity', 'message'],\n  suggest_new_cycle: ['brand_name', 'message'],\n  auto_onboard: ['brand_name'],\n  scout_creators: ['brand_name'],\n  no_action: ['reason'],\n  pre_alert: ['message'],\n  proactive_trigger: ['action', 'message']\n};\n\nlet llmDecisions = [];\nlet reasoning = '';\n\ntry {\n  const geminiResponse = $input.first().json;\n  let rawText = '';\n  \n  // Extract text from Gemini response\n  if (geminiResponse.candidates && geminiResponse.candidates[0]) {\n    rawText = geminiResponse.candidates[0].content.parts[0].text || '';\n  } else if (geminiResponse.error) {\n    // Gemini returned an error \\u2014 fall back to SLA only\n    return [{ json: {\n      decisions: slaDecisions,\n      eventIds,\n      decisionCount: slaDecisions.length,\n      eventCount: upstream.eventCount,\n      _geminiError: geminiResponse.error.message || 'Unknown Gemini error'\n    } }];\n  }\n\n  // Strip markdown code fences\n  rawText = rawText.replace(/^```json\\s*/i, '').replace(/^```\\s*/m, '').replace(/\\s*```\\s*$/m, '').trim();\n\n  const parsed = JSON.parse(rawText);\n  reasoning = parsed.reasoning || '';\n  const rawDecisions = parsed.decisions || [];\n\n  // Validate each decision\n  for (const d of rawDecisions) {\n    if (!d.type || !allowedTypes.includes(d.type)) continue;\n    if (d.type === 'no_action') continue; // Skip no-action entries\n\n    // Check required fields\n    const required = requiredFields[d.type] || [];\n    const missing = required.filter(f => !d[f] && d[f] !== 0);\n    if (missing.length > 0) continue; // Skip invalid decisions\n\n    // Add event reference and message if missing\n    const decision = {\n      type: d.type,\n      eventId: d.eventId || eventIds[0] || '',\n      ...d,\n      message: d.message || `${d.type} action for ${d.brand_name || 'unknown'}`\n    };\n\n    // For trigger_phase, ensure webhook is set\n    if (d.type === 'trigger_phase') {\n      if (d.phase === 3) decision.webhook = '/webhook/ugc-scripts';\n      if (d.phase === 4) decision.webhook = '/webhook/ugc-delivery';\n    }\n\n    llmDecisions.push(decision);\n  }\n} catch (e) {\n  // JSON parse failed \\u2014 fall back to SLA decisions only\n  return [{ json: {\n    decisions: slaDecisions,\n    eventIds,\n    decisionCount: slaDecisions.length,\n    eventCount: upstream.eventCount,\n    _parseError: e.message\n  } }];\n}\n\n// Merge: LLM decisions + SLA decisions (deduplicate by project_id + type)\nconst seen = new Set();\nconst merged = [];\n\nfor (const d of llmDecisions) {\n  const key = `${d.type}:${d.project_id || d.brand_name || ''}`;\n  if (!seen.has(key)) {\n    seen.add(key);\n    merged.push(d);\n  }\n}\n\nfor (const d of slaDecisions) {\n  const key = `${d.type}:${d.project_id || d.brand_name || ''}`;\n  if (!seen.has(key)) {\n    seen.add(key);\n    merged.push(d);\n  }\n}\n\nreturn [{ json: {\n  decisions: merged,\n  eventIds,\n  decisionCount: merged.length,\n  eventCount: upstream.eventCount,\n  reasoning\n} }];"
                 },
                 "type": "n8n-nodes-base.code",
                 "typeVersion": 2,
@@ -1439,6 +1764,14 @@
                             {
                                 "value2": "scout_creators",
                                 "output": 6
+                            },
+                            {
+                                "value2": "pre_alert",
+                                "output": 7
+                            },
+                            {
+                                "value2": "proactive_trigger",
+                                "output": 8
                             }
                         ]
                     }
@@ -1648,7 +1981,7 @@
                     "nodeCredentialType": "airtableTokenApi",
                     "sendBody": true,
                     "specifyBody": "json",
-                    "jsonBody": "={{ JSON.stringify({ records: [{ fields: { agent: 'orchestrator', event_type: 'decision_made', severity: ($json.failedCount > 0 ? 'warning' : 'info'), message: 'Orchestrator processed ' + $('Parse & Validate Decisions').first().json.eventCount + ' events, made ' + $('Parse & Validate Decisions').first().json.decisionCount + ' decisions' + ($json.failedCount > 0 ? ' (' + $json.failedCount + ' action failures)' : '') + ($('Parse & Validate Decisions').first().json.reasoning ? ' | Reasoning: ' + $('Parse & Validate Decisions').first().json.reasoning.substring(0, 200) : ''), payload: JSON.stringify({ decisions_summary: $('Parse & Validate Decisions').first().json.decisions.map(function(d) { return d.type + ': ' + (d.message || '').substring(0, 100); }), failed_actions: $json.failedCount || 0, reasoning: $('Parse & Validate Decisions').first().json.reasoning || '' }), consumed_by: 'orchestrator', created_at: new Date().toISOString() } }] }) }}",
+                    "jsonBody": "={{ JSON.stringify({ records: [{ fields: { agent: 'orchestrator', event_type: 'decision_made', severity: ($json.failedCount > 0 ? 'warning' : 'info'), message: 'Orchestrator processed ' + $('Parse & Validate Decisions').first().json.eventCount + ' events, made ' + $('Parse & Validate Decisions').first().json.decisionCount + ' decisions' + ($json.failedCount > 0 ? ' (' + $json.failedCount + ' action failures)' : '') + ($('Parse & Validate Decisions').first().json.reasoning ? ' | Reasoning: ' + $('Parse & Validate Decisions').first().json.reasoning.substring(0, 200) : ''), payload: JSON.stringify({ decisions_summary: $('Parse & Validate Decisions').first().json.decisions.map(function(d) { return d.type + ':' + (d.insight_key || '') + ':' + (d.message || '').substring(0, 100); }), insight_keys: $('Parse & Validate Decisions').first().json.decisions.filter(function(d) { return d.insight_key; }).map(function(d) { return d.insight_key; }), failed_actions: $json.failedCount || 0, reasoning: $('Parse & Validate Decisions').first().json.reasoning || '' }), consumed_by: 'orchestrator', created_at: new Date().toISOString() } }] }) }}",
                     "options": {}
                 },
                 "type": "n8n-nodes-base.httpRequest",
@@ -1775,6 +2108,207 @@
                 "id": "orch2-scout-creators",
                 "name": "Scout Creators",
                 "onError": "continueRegularOutput"
+            },
+            {
+                "parameters": {
+                    "select": "channel",
+                    "channelId": {
+                        "__rl": true,
+                        "value": "C0AGQ8RH0NP",
+                        "mode": "id"
+                    },
+                    "text": "=:crystal_ball: *Proactive Insight*\n{{ $json.message }}\n\n_Brand:_ {{ $json.brand_name || 'N/A' }}\n_Detected by:_ Orchestrator v2 (pattern analysis)",
+                    "otherOptions": {}
+                },
+                "type": "n8n-nodes-base.slack",
+                "typeVersion": 2.2,
+                "position": [
+                    2850,
+                    1400
+                ],
+                "id": "orch2-pre-alert",
+                "name": "Slack \u2014 Pre-Alert",
+                "credentials": {
+                    "slackApi": {
+                        "id": "5Q37UpOjGx4YsbyC",
+                        "name": "Slack account"
+                    }
+                },
+                "onError": "continueRegularOutput"
+            },
+            {
+                "parameters": {
+                    "jsCode": "// Handle proactive triggers \u2014 format for Slack notification\nconst d = $json;\nconst action = d.action || 'unknown';\nconst emoji = action === 'suggest_rotation' ? ':arrows_counterclockwise:' : action === 'suggest_repurpose' ? ':recycle:' : ':robot_face:';\nconst label = action === 'suggest_rotation' ? 'Creative Rotation Suggested' : action === 'suggest_repurpose' ? 'Content Repurposing Opportunity' : 'Proactive Suggestion';\n\nreturn [{ json: {\n  ...d,\n  _emoji: emoji,\n  _label: label,\n  _slackText: emoji + ' *' + label + '*\\n' + (d.message || 'No details') + '\\n\\n_Brand:_ ' + (d.brand_name || 'N/A') + '\\n_Action:_ `' + action + '`\\n_Detected by:_ Orchestrator v2 (pattern analysis)'\n} }];"
+                },
+                "type": "n8n-nodes-base.code",
+                "typeVersion": 2,
+                "position": [
+                    2850,
+                    1600
+                ],
+                "id": "orch2-handle-proactive",
+                "name": "Handle Proactive Trigger",
+                "onError": "continueRegularOutput"
+            },
+            {
+                "parameters": {
+                    "select": "channel",
+                    "channelId": {
+                        "__rl": true,
+                        "value": "C0AGQ8RH0NP",
+                        "mode": "id"
+                    },
+                    "text": "={{ $json._slackText }}",
+                    "otherOptions": {}
+                },
+                "type": "n8n-nodes-base.slack",
+                "typeVersion": 2.2,
+                "position": [
+                    3050,
+                    1600
+                ],
+                "id": "orch2-slack-proactive",
+                "name": "Slack \u2014 Proactive Trigger",
+                "credentials": {
+                    "slackApi": {
+                        "id": "5Q37UpOjGx4YsbyC",
+                        "name": "Slack account"
+                    }
+                },
+                "onError": "continueRegularOutput"
+            },
+            {
+                "parameters": {
+                    "jsCode": "// ============================================================\n// Curate Learnings \u2014 decay, merge duplicates, promote cross-brand\n// Runs after decision execution to avoid parallel-merge issues\n// ============================================================\n\nlet learnings = [];\ntry {\n  learnings = $('Fetch System Learnings').first().json.records || [];\n} catch(e) { return [{ json: { updates: [], _skip: true } }]; }\n\nif (learnings.length === 0) return [{ json: { updates: [], _skip: true } }];\n\nconst now = new Date();\nconst updates = [];\nconst toRetire = [];\nconst toMerge = [];\n\n// 1. DECAY: Reduce decay_score based on age since last_confirmed_at\nfor (const l of learnings) {\n  const f = l.fields;\n  const lastConfirmed = f.last_confirmed_at ? new Date(f.last_confirmed_at) : new Date(f.created_at);\n  const weeksSinceConfirmed = (now - lastConfirmed) / (7 * 24 * 3600000);\n  const currentDecay = f.decay_score !== undefined ? f.decay_score : (f.confidence || 5);\n  const newDecay = Math.max(0, currentDecay - (weeksSinceConfirmed * 0.1));\n\n  // Retire if below 3.0\n  if (newDecay < 3.0) {\n    toRetire.push({ id: l.id, fields: { active: false, decay_score: newDecay } });\n  } else if (Math.abs(newDecay - currentDecay) > 0.05) {\n    // Only update if decay changed meaningfully\n    updates.push({ id: l.id, fields: { decay_score: Math.round(newDecay * 10) / 10 } });\n  }\n}\n\n// 2. MERGE: Find similar learnings (same brand + >70% word overlap)\nfunction wordSet(text) {\n  return new Set((text || '').toLowerCase().replace(/[^a-z0-9\\s]/g, '').split(/\\s+/).filter(w => w.length > 2));\n}\nfunction overlap(a, b) {\n  const setA = wordSet(a);\n  const setB = wordSet(b);\n  if (setA.size === 0 || setB.size === 0) return 0;\n  let common = 0;\n  for (const w of setA) if (setB.has(w)) common++;\n  return common / Math.max(setA.size, setB.size);\n}\n\nconst merged = new Set();\nfor (let i = 0; i < learnings.length; i++) {\n  if (merged.has(learnings[i].id)) continue;\n  for (let j = i + 1; j < learnings.length; j++) {\n    if (merged.has(learnings[j].id)) continue;\n    const fi = learnings[i].fields;\n    const fj = learnings[j].fields;\n    // Same brand (or both agency-wide)\n    if ((fi.brand_name || '') !== (fj.brand_name || '')) continue;\n    const sim = overlap(fi.insight || fi.learning || '', fj.insight || fj.learning || '');\n    if (sim > 0.7) {\n      // Merge: keep the one with higher confidence, retire the other\n      const keepIdx = (fi.confidence || 0) >= (fj.confidence || 0) ? i : j;\n      const retireIdx = keepIdx === i ? j : i;\n      const keep = learnings[keepIdx];\n      const retire = learnings[retireIdx];\n      toMerge.push({\n        keep: { id: keep.id, fields: {\n          times_confirmed: (keep.fields.times_confirmed || 1) + (retire.fields.times_confirmed || 1),\n          decay_score: Math.max(keep.fields.decay_score || keep.fields.confidence || 5, retire.fields.decay_score || retire.fields.confidence || 5)\n        }},\n        retire: { id: retire.id, fields: { active: false } }\n      });\n      merged.add(retire.id);\n    }\n  }\n}\n\n// 3. PROMOTE: Brand-specific learning appearing in 3+ brands -> create agency-wide\nconst byInsight = {};\nfor (const l of learnings) {\n  const f = l.fields;\n  if (!f.brand_name) continue; // skip agency-wide\n  const key = (f.category || '') + ':' + ((f.insight || f.learning || '').substring(0, 50));\n  if (!byInsight[key]) byInsight[key] = { brands: new Set(), learning: f };\n  byInsight[key].brands.add(f.brand_name);\n}\nconst promotions = [];\nfor (const [key, data] of Object.entries(byInsight)) {\n  if (data.brands.size >= 3) {\n    // Check if agency-wide version already exists\n    const existing = learnings.find(l => !l.fields.brand_name && overlap(l.fields.insight || l.fields.learning || '', data.learning.insight || data.learning.learning || '') > 0.7);\n    if (!existing) {\n      promotions.push({\n        fields: {\n          title: (data.learning.title || 'Promoted learning') + ' (cross-brand)',\n          source_agent: 'orchestrator',\n          category: data.learning.category,\n          insight: data.learning.insight || data.learning.learning,\n          evidence: 'Confirmed across brands: ' + Array.from(data.brands).join(', '),\n          confidence: Math.min(10, (data.learning.confidence || 5) + 1),\n          decay_score: Math.min(10, (data.learning.confidence || 5) + 1),\n          times_confirmed: data.brands.size,\n          last_confirmed_at: now.toISOString(),\n          active: true,\n          brand_name: '',\n          industry: data.learning.industry || '',\n          created_at: now.toISOString()\n        }\n      });\n    }\n  }\n}\n\n// Build batch update records\nconst allUpdates = [...updates];\nfor (const r of toRetire) allUpdates.push(r);\nfor (const m of toMerge) {\n  allUpdates.push(m.keep);\n  allUpdates.push(m.retire);\n}\n\n// Batch into groups of 10\nconst batches = [];\nfor (let i = 0; i < allUpdates.length; i += 10) {\n  batches.push(allUpdates.slice(i, i + 10));\n}\n\nreturn [{ json: {\n  updateBatches: batches,\n  promotions: promotions,\n  stats: {\n    total: learnings.length,\n    decayed: updates.length,\n    retired: toRetire.length,\n    merged: toMerge.length,\n    promoted: promotions.length\n  },\n  _skip: allUpdates.length === 0 && promotions.length === 0\n}}];"
+                },
+                "type": "n8n-nodes-base.code",
+                "typeVersion": 2,
+                "position": [
+                    4050,
+                    400
+                ],
+                "id": "orch2-curate-learnings",
+                "name": "Curate Learnings"
+            },
+            {
+                "parameters": {
+                    "conditions": {
+                        "options": {
+                            "caseSensitive": true,
+                            "leftValue": "",
+                            "typeValidation": "loose"
+                        },
+                        "conditions": [
+                            {
+                                "id": "orch2-if-curation-cond",
+                                "leftValue": "={{ $json._skip }}",
+                                "rightValue": true,
+                                "operator": {
+                                    "type": "boolean",
+                                    "operation": "notEquals"
+                                }
+                            }
+                        ],
+                        "combinator": "and"
+                    },
+                    "options": {}
+                },
+                "type": "n8n-nodes-base.if",
+                "typeVersion": 2.2,
+                "position": [
+                    4250,
+                    400
+                ],
+                "id": "orch2-if-curation",
+                "name": "If Has Curation Updates"
+            },
+            {
+                "parameters": {
+                    "jsCode": "// ============================================================\n// Write Curation Updates \u2014 prepare Airtable API call items\n// Outputs one item per batch (PATCH for updates, POST for promotions)\n// ============================================================\n\nconst { updateBatches, promotions } = $json;\nconst items = [];\n\n// PATCH requests for decay updates, retirements, merges\nif (updateBatches && updateBatches.length > 0) {\n  for (const batch of updateBatches) {\n    items.push({ json: {\n      method: 'PATCH',\n      body: { records: batch }\n    }});\n  }\n}\n\n// POST request for promotions (new records)\nif (promotions && promotions.length > 0) {\n  // Batch promotions into groups of 10 too\n  for (let i = 0; i < promotions.length; i += 10) {\n    const batch = promotions.slice(i, i + 10);\n    items.push({ json: {\n      method: 'POST',\n      body: { records: batch }\n    }});\n  }\n}\n\nif (items.length === 0) return [];\nreturn items;"
+                },
+                "type": "n8n-nodes-base.code",
+                "typeVersion": 2,
+                "position": [
+                    4450,
+                    300
+                ],
+                "id": "orch2-write-curation",
+                "name": "Write Curation Updates"
+            },
+            {
+                "parameters": {
+                    "method": "={{ $json.method }}",
+                    "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblAfe1LYh8kHPVbP",
+                    "authentication": "genericCredentialType",
+                    "genericAuthType": "httpHeaderAuth",
+                    "sendBody": true,
+                    "specifyBody": "json",
+                    "jsonBody": "={{ JSON.stringify($json.body) }}",
+                    "options": {
+                        "batching": {
+                            "batch": {
+                                "batchSize": 1,
+                                "batchInterval": 300
+                            }
+                        }
+                    }
+                },
+                "type": "n8n-nodes-base.httpRequest",
+                "typeVersion": 4.2,
+                "position": [
+                    4650,
+                    300
+                ],
+                "id": "orch2-exec-curation",
+                "name": "Execute Curation",
+                "credentials": {
+                    "httpHeaderAuth": {
+                        "id": "a0TTu3NVsuJUEbct",
+                        "name": "Airtable Personal Access Token account"
+                    }
+                },
+                "onError": "continueRegularOutput"
+            },
+            {
+                "parameters": {
+                    "jsCode": "// Write individual proactive alert event to Agent_Events for dedup\nconst d = $input.first().json;\n// Extract insight_key - it may be in the original decision data\n// or passed through from the Slack node response\nlet insightKey = '';\nlet brandName = '';\nlet eventType = '';\nlet message = '';\n\n// Try to get data from upstream split decisions\ntry {\n  const splitItems = $('Split Decisions').all();\n  for (const item of splitItems) {\n    const ij = item.json;\n    if (ij.type === 'pre_alert' || ij.type === 'proactive_trigger') {\n      insightKey = ij.insight_key || '';\n      brandName = ij.brand_name || '';\n      eventType = ij.type || 'pre_alert';\n      message = ij.message || '';\n      break;  // Take the first proactive decision\n    }\n  }\n} catch(e) {}\n\nif (!insightKey && !brandName) {\n  return [];  // Nothing to log\n}\n\nreturn [{ json: {\n  records: [{\n    fields: {\n      agent: 'orchestrator',\n      event_type: eventType,\n      severity: 'info',\n      brand_name: brandName,\n      message: message.substring(0, 500),\n      payload: JSON.stringify({ insight_key: insightKey, source: 'proactive_analysis' }),\n      consumed_by: 'orchestrator',\n      created_at: new Date().toISOString()\n    }\n  }]\n} }];"
+                },
+                "type": "n8n-nodes-base.code",
+                "typeVersion": 2,
+                "position": [
+                    3050,
+                    1400
+                ],
+                "id": "orch2-log-proactive-event",
+                "name": "Log Proactive Event",
+                "onError": "continueRegularOutput"
+            },
+            {
+                "parameters": {
+                    "method": "POST",
+                    "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Agent_Events",
+                    "authentication": "genericCredentialType",
+                    "genericAuthType": "httpHeaderAuth",
+                    "sendBody": true,
+                    "specifyBody": "json",
+                    "jsonBody": "={{ JSON.stringify($json) }}",
+                    "options": {}
+                },
+                "type": "n8n-nodes-base.httpRequest",
+                "typeVersion": 4.2,
+                "position": [
+                    3250,
+                    1400
+                ],
+                "id": "orch2-write-proactive-event",
+                "name": "Write Proactive Event",
+                "credentials": {
+                    "httpHeaderAuth": {
+                        "id": "a0TTu3NVsuJUEbct",
+                        "name": "Airtable Personal Access Token account"
+                    }
+                },
+                "onError": "continueRegularOutput"
             }
         ],
         "connections": {
@@ -1823,6 +2357,17 @@
                 ]
             },
             "Fetch System Learnings": {
+                "main": [
+                    [
+                        {
+                            "node": "Fetch Recent Proactive Events",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Proactive Analysis": {
                 "main": [
                     [
                         {
@@ -1950,6 +2495,20 @@
                             "type": "main",
                             "index": 0
                         }
+                    ],
+                    [
+                        {
+                            "node": "Slack \u2014 Pre-Alert",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ],
+                    [
+                        {
+                            "node": "Handle Proactive Trigger",
+                            "type": "main",
+                            "index": 0
+                        }
                     ]
                 ]
             },
@@ -2073,6 +2632,116 @@
                         }
                     ]
                 ]
+            },
+            "Slack \u2014 Pre-Alert": {
+                "main": [
+                    [
+                        {
+                            "node": "Mark Events Consumed",
+                            "type": "main",
+                            "index": 0
+                        },
+                        {
+                            "node": "Log Proactive Event",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Handle Proactive Trigger": {
+                "main": [
+                    [
+                        {
+                            "node": "Slack \u2014 Proactive Trigger",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Slack \u2014 Proactive Trigger": {
+                "main": [
+                    [
+                        {
+                            "node": "Mark Events Consumed",
+                            "type": "main",
+                            "index": 0
+                        },
+                        {
+                            "node": "Log Proactive Event",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Log Orchestrator Decision": {
+                "main": [
+                    [
+                        {
+                            "node": "Curate Learnings",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Curate Learnings": {
+                "main": [
+                    [
+                        {
+                            "node": "If Has Curation Updates",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "If Has Curation Updates": {
+                "main": [
+                    [
+                        {
+                            "node": "Write Curation Updates",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ],
+                    []
+                ]
+            },
+            "Write Curation Updates": {
+                "main": [
+                    [
+                        {
+                            "node": "Execute Curation",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Fetch Recent Proactive Events": {
+                "main": [
+                    [
+                        {
+                            "node": "Proactive Analysis",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Log Proactive Event": {
+                "main": [
+                    [
+                        {
+                            "node": "Write Proactive Event",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
             }
         },
         "authors": "SenseInfo Tech",
@@ -2081,10 +2750,10 @@
         "autosaved": false,
         "workflowPublishHistory": [
             {
-                "createdAt": "2026-02-25T07:38:10.030Z",
-                "id": 487,
+                "createdAt": "2026-03-01T08:12:31.799Z",
+                "id": 719,
                 "workflowId": "DUfrRerxOinES9Cf",
-                "versionId": "5f89f86d-a52a-41f7-a5ca-0a3298fbbdd1",
+                "versionId": "23fd4fc9-eaf5-42f1-b659-e4e07b54cb18",
                 "event": "activated",
                 "userId": "ed50a507-d93d-45c3-9412-d80babb81dd0"
             }

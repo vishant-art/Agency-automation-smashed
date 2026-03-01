@@ -108,6 +108,30 @@
     },
     {
       "parameters": {
+        "method": "GET",
+        "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/tblGhzSJ5RXWDS8h8?filterByFormula=DATETIME_DIFF(NOW()%2C%20CREATED_TIME()%2C%20'hours')%20%3C%2024&sort%5B0%5D%5Bfield%5D=created_at&sort%5B0%5D%5Bdirection%5D=desc&maxRecords=30",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "cc-fetch-agent-events",
+      "name": "Fetch Recent Agent Events",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        580,
+        160
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "a0TTu3NVsuJUEbct",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
         "jsCode": "// ============================================================\n// Filter projects whose status has changed since last notification\n// Compare status vs last_notified_status field\n// Also check if updated_at is within the last 12 hours as fallback\n// ============================================================\nconst records = $input.first().json.records || [];\nif (records.length === 0) return [];\n\nconst now = new Date();\nconst twelveHoursAgo = new Date(now.getTime() - 12 * 60 * 60 * 1000);\n\nconst changed = [];\nfor (const r of records) {\n  const f = r.fields || {};\n  const currentStatus = (f.status || '').trim();\n  const lastNotified = (f.last_notified_status || '').trim();\n  const updatedAt = f.updated_at ? new Date(f.updated_at) : null;\n\n  // Include if status differs from last notified status\n  const statusChanged = currentStatus && currentStatus !== lastNotified;\n  // Fallback: include if updated recently and no last_notified_status tracked yet\n  const recentlyUpdated = !lastNotified && updatedAt && updatedAt > twelveHoursAgo;\n\n  if (statusChanged || recentlyUpdated) {\n    changed.push({\n      id: r.id,\n      brand_name: f.brand_name || 'Unknown Brand',\n      client_code: f.client_code || '',\n      client_name: f.client_name || '',\n      status: currentStatus,\n      last_notified_status: lastNotified,\n      num_scripts: f.num_scripts || 0,\n      deck_link: f.deck_link || '',\n      delivery_folder: f.delivery_folder || ''\n    });\n  }\n}\n\nif (changed.length === 0) return [];\n\n// Group by brand\nconst byBrand = {};\nfor (const p of changed) {\n  if (!byBrand[p.brand_name]) byBrand[p.brand_name] = [];\n  byBrand[p.brand_name].push(p);\n}\n\n// Build a summary object for Gemini\nconst brandSummaries = Object.entries(byBrand).map(([brand, projects]) => ({\n  brand,\n  projects: projects.map(p => ({\n    client_code: p.client_code,\n    previous_status: p.last_notified_status || 'New',\n    current_status: p.status,\n    num_scripts: p.num_scripts,\n    deck_link: p.deck_link,\n    delivery_folder: p.delivery_folder\n  }))\n}));\n\nreturn [{ json: {\n  changed_projects: changed,\n  brand_summaries: brandSummaries,\n  total_changed: changed.length\n}}];"
       },
       "id": "cc-filter-changed",
@@ -127,7 +151,7 @@
         "nodeCredentialType": "googlePalmApi",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ systemInstruction: { parts: [{ text: \"You are the client communication assistant for Smashed Agency, a UGC (User-Generated Content) creative agency. Your job is to write concise, professional but warm Slack status digests that tell the team exactly what changed and what's next for each client. Be specific — mention numbers, brand names, and concrete next steps. Never be vague like 'your project is progressing'. Instead say things like '5 UGC concepts researched for Wheelwash. Concept deck is being prepared.' or 'Scripts approved for Dhan — delivery docs are being finalized.' Group updates by brand. Use emoji sparingly (one per brand header). Format for Slack markdown (bold with *, lists with •).\" }] }, contents: [{ role: \"user\", parts: [{ text: \"Generate a Slack status digest for the following project updates. Group by brand. For each project, explain what changed (previous status → current status) in client-friendly language. Include actionable next steps.\\n\\nProject Updates:\\n\" + JSON.stringify($json.brand_summaries, null, 2) }] }], generationConfig: { temperature: 0.4, maxOutputTokens: 2048 } }) }}",
+        "jsonBody": "={{ JSON.stringify({ systemInstruction: { parts: [{ text: \"You are the client communication assistant for Smashed Agency, a UGC (User-Generated Content) creative agency. Your job is to write concise, professional but warm Slack status digests that tell the team exactly what changed and what's next for each client. Be specific — mention numbers, brand names, and concrete next steps. Never be vague like 'your project is progressing'. Instead say things like '5 UGC concepts researched for Wheelwash. Concept deck is being prepared.' or 'Scripts approved for Dhan — delivery docs are being finalized.' Group updates by brand. Use emoji sparingly (one per brand header). Format for Slack markdown (bold with *, lists with •).\" }] }, contents: [{ role: \"user\", parts: [{ text: \"Generate a Slack status digest for the following project updates. Group by brand. For each project, explain what changed (previous status → current status) in client-friendly language. Include actionable next steps.\\n\\nProject Updates:\\n\" + JSON.stringify($json.brand_summaries, null, 2) + \"\\n\\n== OVERNIGHT AGENT ACTIVITY ==\\n\" + (function() { try { var evts = $('Fetch Recent Agent Events').first().json.records || []; if (evts.length === 0) return 'No notable agent activity in last 24h.'; return evts.slice(0, 15).map(function(r) { var f = r.fields; return (f.event_type || 'unknown') + ' | ' + (f.agent || 'unknown') + ' | ' + (f.brand_name || '') + ' | ' + (f.message || '').substring(0, 150); }).join('\\n'); } catch(e) { return 'Agent events unavailable.'; } })() + \"\\n\\nInclude a brief 'Agent Activity' section at the end of the digest summarizing what agents did overnight.\" }] }], generationConfig: { temperature: 0.4, maxOutputTokens: 2048 } }) }}",
         "options": {}
       },
       "id": "cc-gemini-digest",
@@ -570,6 +594,11 @@
         [
           {
             "node": "Filter Changed Projects",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Recent Agent Events",
             "type": "main",
             "index": 0
           }
