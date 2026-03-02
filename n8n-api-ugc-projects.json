@@ -17,7 +17,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const authHeader = $input.first().json.headers?.authorization || '';\nif (!authHeader.startsWith('Bearer ')) {\n  return [{ json: { _unauthorized: true } }];\n}\nconst token = authHeader.replace('Bearer ', '');\ntry {\n  const decoded = JSON.parse(Buffer.from(token, 'base64').toString());\n  if (decoded.exp && Date.now() > decoded.exp) {\n    return [{ json: { _unauthorized: true } }];\n  }\n  return [{ json: { ...$input.first().json, _user: decoded } }];\n} catch(e) {\n  return [{ json: { _unauthorized: true } }];\n}"
+        "jsCode": "function sha256B(d){const K=new Uint32Array([0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2]);let H=new Uint32Array([0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19]);const bl=d.length*8;const pl=Math.ceil((d.length+9)/64)*64;const p=new Uint8Array(pl);p.set(d);p[d.length]=0x80;const dv=new DataView(p.buffer);dv.setUint32(pl-4,bl,false);const W=new Uint32Array(64);for(let o=0;o<pl;o+=64){for(let i=0;i<16;i++)W[i]=dv.getUint32(o+i*4,false);for(let i=16;i<64;i++){const s0=((W[i-15]>>>7)|(W[i-15]<<25))^((W[i-15]>>>18)|(W[i-15]<<14))^(W[i-15]>>>3);const s1=((W[i-2]>>>17)|(W[i-2]<<15))^((W[i-2]>>>19)|(W[i-2]<<13))^(W[i-2]>>>10);W[i]=(W[i-16]+s0+W[i-7]+s1)>>>0;}let[a,b,c,dd,e,f,g,h]=H;for(let i=0;i<64;i++){const S1=((e>>>6)|(e<<26))^((e>>>11)|(e<<21))^((e>>>25)|(e<<7));const ch=(e&f)^(~e&g);const t1=(h+S1+ch+K[i]+W[i])>>>0;const S0=((a>>>2)|(a<<30))^((a>>>13)|(a<<19))^((a>>>22)|(a<<10));const maj=(a&b)^(a&c)^(b&c);const t2=(S0+maj)>>>0;h=g;g=f;f=e;e=(dd+t1)>>>0;dd=c;c=b;b=a;a=(t1+t2)>>>0;}H[0]=(H[0]+a)>>>0;H[1]=(H[1]+b)>>>0;H[2]=(H[2]+c)>>>0;H[3]=(H[3]+dd)>>>0;H[4]=(H[4]+e)>>>0;H[5]=(H[5]+f)>>>0;H[6]=(H[6]+g)>>>0;H[7]=(H[7]+h)>>>0;}const r=new Uint8Array(32);const rv=new DataView(r.buffer);for(let i=0;i<8;i++)rv.setUint32(i*4,H[i],false);return r;}\nfunction hmacSHA256(key,msg){const bs=64;let kb=key;if(kb.length>bs)kb=sha256B(kb);const pk=new Uint8Array(bs);pk.set(kb);const ip=new Uint8Array(bs),op=new Uint8Array(bs);for(let i=0;i<bs;i++){ip[i]=pk[i]^0x36;op[i]=pk[i]^0x5c;}const inn=new Uint8Array(bs+msg.length);inn.set(ip);inn.set(msg,bs);const ih=sha256B(inn);const out=new Uint8Array(bs+32);out.set(op);out.set(ih,bs);return sha256B(out);}\nfunction b64url(u8){let b=\"\";for(let i=0;i<u8.length;i++)b+=String.fromCharCode(u8[i]);return btoa(b).replace(/\\+/g,\"-\").replace(/\\//g,\"_\").replace(/=/g,\"\");}\nfunction sha256Hex(str){const h=sha256B(new TextEncoder().encode(str));return Array.from(h).map(b=>b.toString(16).padStart(2,\"0\")).join(\"\");}\nconst _enc=new TextEncoder();\nconst JWT_SECRET = 'cosmisk-jwt-secret-2026-v1';\nconst authHeader = $input.first().json.headers?.authorization || '';\nif (!authHeader.startsWith('Bearer ')) {\n  return [{ json: { _unauthorized: true } }];\n}\nconst token = authHeader.replace('Bearer ', '');\ntry {\n  const parts = token.split('.');\n  if (parts.length !== 3) throw new Error('invalid');\n  const sig = b64url(hmacSHA256(_enc.encode(JWT_SECRET), _enc.encode(parts[0] + '.' + parts[1])));\n  if (sig !== parts[2]) throw new Error('bad sig');\n  const decoded = JSON.parse(Buffer.from(parts[1], 'base64url').toString());\n  if (decoded.exp && Math.floor(Date.now() / 1000) > decoded.exp) {\n    return [{ json: { _unauthorized: true } }];\n  }\n  return [{ json: { ...$input.first().json, _user: decoded } }];\n} catch(e) {\n  return [{ json: { _unauthorized: true } }];\n}"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -66,8 +66,8 @@
       "parameters": {
         "method": "GET",
         "url": "https://api.airtable.com/v0/appvFxwZc9yU8o8pK/Projects?pageSize=100",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "airtableTokenApi",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
@@ -76,9 +76,9 @@
       "id": "api-proj-fetch",
       "name": "Fetch Projects",
       "credentials": {
-        "airtableTokenApi": {
-          "id": "WelvlJEjoHaI3l9G",
-          "name": "Airtable Personal Access Token account"
+        "httpHeaderAuth": {
+          "id": "a0TTu3NVsuJUEbct",
+          "name": "Airtable PAT Header"
         }
       }
     },
