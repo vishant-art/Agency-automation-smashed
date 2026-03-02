@@ -27,7 +27,7 @@
             "parameters": {
                 "httpMethod": "POST",
                 "path": "ugc-onboarding",
-                "responseMode": "lastNode",
+                "responseMode": "responseNode",
                 "options": {}
             },
             "id": "1c8bebc5-6a7d-4e11-b830-6bebd0f67192",
@@ -1094,6 +1094,11 @@
                         "node": "Add to Client Database",
                         "type": "main",
                         "index": 0
+                    },
+                    {
+                        "node": "Respond to Webhook",
+                        "type": "main",
+                        "index": 0
                     }
                 ]
             ]
@@ -1240,13 +1245,7 @@
         },
         "Log to Onboarding Log": {
             "main": [
-                [
-                    {
-                        "node": "Respond to Webhook",
-                        "type": "main",
-                        "index": 0
-                    }
-                ]
+                []
             ]
         },
         "Handle Error": {
@@ -1273,13 +1272,7 @@
         },
         "Log Error to Sheet": {
             "main": [
-                [
-                    {
-                        "node": "Respond 200 on Error",
-                        "type": "main",
-                        "index": 0
-                    }
-                ]
+                []
             ]
         },
         "Find Letter Folder in Drive": {
@@ -1541,7 +1534,7 @@
                 "parameters": {
                     "httpMethod": "POST",
                     "path": "ugc-onboarding",
-                    "responseMode": "lastNode",
+                    "responseMode": "responseNode",
                     "options": {}
                 },
                 "id": "1c8bebc5-6a7d-4e11-b830-6bebd0f67192",
@@ -2608,6 +2601,11 @@
                             "node": "Add to Client Database",
                             "type": "main",
                             "index": 0
+                        },
+                        {
+                            "node": "Respond to Webhook",
+                            "type": "main",
+                            "index": 0
                         }
                     ]
                 ]
@@ -2754,13 +2752,7 @@
             },
             "Log to Onboarding Log": {
                 "main": [
-                    [
-                        {
-                            "node": "Respond to Webhook",
-                            "type": "main",
-                            "index": 0
-                        }
-                    ]
+                    []
                 ]
             },
             "Handle Error": {
@@ -2787,13 +2779,7 @@
             },
             "Log Error to Sheet": {
                 "main": [
-                    [
-                        {
-                            "node": "Respond 200 on Error",
-                            "type": "main",
-                            "index": 0
-                        }
-                    ]
+                    []
                 ]
             },
             "Find Letter Folder in Drive": {
